@@ -1,5 +1,6 @@
 # === UNIVERSAL ===
 .DS_Store
+tmp/
 report_*.txt
 output*/
 _temp*.?*
@@ -9,6 +10,7 @@ OTHER_REPOS/
 # === PYTHON ===
 build/
 dist/
+artifacts/
 sdist/
 *.egg
 *.egg-info/
@@ -27,5 +29,3 @@ blob-report/
 coverage/
 meta.json
 stats.html
-
-
