@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="theme-color" content="#172334" />
+		<title>Super Bowling simulation benchmark</title>
+		<link rel="icon" href="data:," />
+		<link rel="stylesheet" href="./style.css" />
+	</head>
+	<body>
+		<main class="benchmark_shell" aria-labelledby="benchmark_title">
+			<header>
+				<p class="mode_label">Production worker and Canvas proof</p>
+				<h1 id="benchmark_title">Simulation benchmark</h1>
+			</header>
+			<canvas aria-label="Live bowling simulation benchmark" height="1000" id="benchmark_canvas" width="1600"></canvas>
+			<p aria-live="polite" id="benchmark_status" role="status">Preparing simulation...</p>
+			<dl class="benchmark_metrics" id="benchmark_metrics"></dl>
+		</main>
+		<script type="module" src="./benchmark_main.js"></script>
+	</body>
+</html>

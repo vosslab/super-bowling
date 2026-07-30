@@ -1,5 +1,6 @@
 # === UNIVERSAL ===
 .DS_Store
+# Keep the complete repo-local temporary workspace out of version control.
 tmp/
 report_*.txt
 output*/

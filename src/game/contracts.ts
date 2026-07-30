@@ -1,0 +1,74 @@
+import type { PlayerId } from "../brands";
+import type { PinCount, RackPinCount } from "../config/pin_counts";
+import type { BallDesign } from "../designer/ball_design";
+
+export type FrameScore = {
+  frame_index: number;
+  rolls: readonly number[];
+  score?: number;
+};
+
+export type PlayerSetup = {
+  player_id: PlayerId;
+  name: string;
+  ball_design: BallDesign;
+};
+
+export type MatchSetup = {
+  pin_count: PinCount;
+  players: readonly PlayerSetup[];
+};
+
+export type HandoffState = {
+  completed_player_id: PlayerId;
+  next_player_id: PlayerId;
+  frame_index: number;
+};
+
+export type MatchPhase =
+  "setup" | "rack_resetting" | "aiming" | "rolling" | "result" | "handoff" | "final" | "fatal";
+
+export type AimState = {
+  lateral_offset: number;
+  power: number;
+  steer_direction: -1 | 0 | 1;
+};
+
+export type PlayerScoreCard = {
+  player_id: PlayerId;
+  frames: readonly FrameScore[];
+};
+
+export type MatchState = {
+  active_player_id: PlayerId;
+  aim: AimState;
+  current_frame_index: number;
+  current_roll_index: number;
+  phase: MatchPhase;
+  pin_count: RackPinCount;
+  players: readonly PlayerSetup[];
+  score_cards: Readonly<Record<number, PlayerScoreCard>>;
+  standing_pin_count: number;
+  standing_pin_count_at_launch?: number;
+  result_message?: string;
+  handoff?: HandoffState;
+  fatal_message?: string;
+};
+
+export type MatchEffect =
+  | { type: "reset_rack"; pin_count: RackPinCount }
+  | { type: "launch"; power: number; lateral_offset: number }
+  | { type: "steer"; direction: -1 | 0 | 1 }
+  | { type: "match_complete"; best_scores: Readonly<Record<number, number>> };
+
+export type MatchTransition = {
+  state: MatchState;
+  effects: readonly MatchEffect[];
+};
+
+export type SettledRoll = {
+  pin_count: RackPinCount;
+  standing_pin_count: number;
+  fallen_pin_count: number;
+  timed_out: boolean;
+};

@@ -1,23 +1,30 @@
 # Super Bowling
 
 An original browser bowling game for friends sharing one keyboard, with
-front-facing arcade lanes and racks that grow from ten real pins to one thousand.
+front-facing arcade lanes and complete triangular racks that grow from ten real pins to 990.
 
-> **Playable now:** choose 10, 20, 50, 100, 500, or 1,000 pins for a complete one-to-four-player
-> keyboard match with worker physics, Canvas rendering, generalized scoring, and custom balls.
+> **Playable now:** choose the 10, 20, 50, 100, 500, or 1,000 scale label for a complete
+> one-to-four-player keyboard match with worker physics, Canvas rendering, generalized scoring,
+> and custom balls.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
-![1,000-pin deck camera view after the ball crosses the lane trigger](docs/screenshots/thousand_pin_deck.png)
+
+![1,000 mode aiming state with a circular ball, dotted path, full controls, and complete 990-pin triangle](docs/screenshots/thousand_pin_deck.png)
 ![Four-player pass-the-keyboard handoff focused on Bea's next turn](docs/screenshots/pass_the_keyboard.png)
 <!-- screenshots:end -->
 
 ## One keyboard, giant rack
 
 This is bowling for the moment when ten pins feel a little too sensible. Pick an exact
-rack size, pass the keyboard between up to four people, and send a custom rolling
-cylinder-looking ball toward a deck that can hold 1,000 individually countable pins.
+rack scale, pass the keyboard between up to four people, and send a custom rolling
+ball toward a deck with hundreds of individually countable pins. Its circular
+silhouette stays familiar while the selected surface pattern visibly rolls.
 
-- Choose exact racks of 10, 20, 50, 100, 500, or 1,000 pins.
+- Choose the convenient 10, 20, 50, 100, 500, or 1,000 scale label; setup and the HUD show the
+  actual complete-triangle total used for play and scoring.
+- Every rack forms one centered triangular deck with a head pin and complete rows 1, 2, 3, and onward.
+- The super lane and deck widen with the selected rack so its ball and pins remain recognizable
+  at every count.
 - Play a familiar ten-frame bowling match whose strike, spare, and bonus values scale
   with the selected rack.
 - Share one browser and keyboard with one to four local hot-seat players.
@@ -28,12 +35,22 @@ cylinder-looking ball toward a deck that can hold 1,000 individually countable p
 - Keep the next local session ready with recent-player restore, per-rack best scores, mute,
   and reduced-motion preferences.
 
+| Scale label | Actual pins |
+| ----------: | ----------: |
+|          10 |          10 |
+|          20 |          21 |
+|          50 |          45 |
+|         100 |         105 |
+|         500 |         496 |
+|       1,000 |         990 |
+
 ## Current playable lane
 
-The shipped game starts an exact selected-rack match with one to four named players. Setup keeps
+The shipped game starts a complete-triangle match with one to four named players. Setup keeps
 each player's colors, pattern, and optional monogram in the same production ball renderer used on
 the lane. A focused pass-the-keyboard card advances each hot-seat turn, while the full score strip,
-original pin and cylinder-ball art, worker-backed rolls, and phase feedback stay visible.
+original pin and circular-ball art, projected aim path, worker-backed rolls, and
+phase feedback stay visible.
 
 ## Quick start
 
@@ -42,7 +59,7 @@ toolchain, and the web server builds then serves the same `dist/` artifact inten
 GitHub Pages.
 
 ```bash
-devel/setup_typescript.sh
+./devel/setup_typescript.sh
 ./run_web_server.sh
 ```
 
@@ -51,6 +68,8 @@ their balls before starting the match.
 Use arrow keys to set aim and power, press Space to bowl, and use Left/Right while rolling to
 guide the ball. The setup and in-game controls keep Mute and Reduced motion choices visible.
 Stop the server with `Ctrl-C`.
+The preview session expires after 600 seconds; set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a
+positive whole-second value when a shorter or longer local session is useful.
 
 ## Controls and play
 
@@ -65,6 +84,7 @@ Every rack uses the same deliberately simple keyboard control scheme:
 The completed match follows classic strikes, spares, and tenth-frame bonus rolls.
 The shared [docs/GAME_RULES.md](docs/GAME_RULES.md) contract generalizes the same rules to
 every supported rack: a perfect game scores `30 * pin_count`.
+Here `pin_count` is the displayed actual total, rather than the convenient scale label.
 
 ## Verify and build
 
@@ -80,13 +100,13 @@ npm run benchmark
 
 `./build_github_pages.sh` writes the deployable site to `dist/`. The Playwright suite uses
 a 1600 x 1000 headless viewport, matching the game's 16:10 desktop target.
-`npm run benchmark` writes the retained 30-shot rack report to
-`artifacts/benchmark/simulation_benchmark.json`.
+`npm run benchmark` generates a local 30-shot rack report at
+`artifacts/benchmark/simulation_benchmark.json`; `artifacts/` stays ignored.
 
 ## GitHub Pages setup
 
-The repository includes [deploy-pages.yml](deploy-pages.yml), a copy-ready GitHub Actions
-workflow seed. Copy it to `.github/workflows/deploy-pages.yml` in GitHub, enable Pages for
+The repository includes [deploy-pages.yml](deploy-pages.yml), a user-copyable root GitHub Actions
+workflow. Copy it to `.github/workflows/deploy-pages.yml` in GitHub, enable Pages for
 the repository, and use the resulting deployment URL. The workflow sets up dependencies,
 checks the codebase, builds `dist/`, and deploys the uploaded Pages artifact. A public demo
 URL is not confirmed yet.
@@ -106,10 +126,13 @@ URL is not confirmed yet.
 
 ## Roadmap status
 
-M1 establishes the Solid shell, strict TypeScript contracts, worker entry, static build, and
-headless browser proof. M2 adds the retained simulation benchmark for every supported rack.
-M3 through M5 deliver complete six-rack, local hot-seat, and custom-ball play. M6 now adds bounded
-synthesized audio, recent-match and per-rack score persistence, stable lane/deck camera framing,
-and reduced-motion controls before release validation.
+M1 through M8 are delivered: the Solid shell and worker contracts, complete-triangle simulation
+benchmark, full scoring match, generalized rack modes, hot-seat custom balls, and the audio,
+save, camera, reduced-motion presentation, and the playability/geometry revision are all part
+of the playable build. The final retained front doors pass 76 Node tests, the static Pages build,
+all 22 headless browser journeys, and the 30-shot simulation benchmark across 10->10, 20->21,
+50->45, 100->105, 500->496, and 1000->990. The benchmark release gate requires every sample to
+settle without timeout while conserving pins and reporting finite measurements. The README
+screenshots were visually inspected at the 1600 x 1000 target viewport.
 
-The active plan is the source of truth for the exact milestone sequence and evidence.
+The active plan is the source of truth for milestone status and evidence.

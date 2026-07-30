@@ -20,6 +20,8 @@ is the whole interface: drive the repo through them and you never need to open
 
 Run `./check_codebase.sh --help` for usage. `./run_web_server.sh` picks a
 random port each run so the browser cache stays fresh; set `PORT` to override.
+Its 600-second session bound releases the port after an interrupted local run;
+set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a positive whole-second override.
 `./run_playwright_tests.sh` lets Playwright's own `webServer` config start the
 test server, and accepts `--build` to force a rebuild first.
 

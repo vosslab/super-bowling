@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 180" role="img" aria-label="Upright bowling pin">
+  <defs>
+    <linearGradient id="body" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fffdf2"/>
+      <stop offset="0.55" stop-color="#f2eadb"/>
+      <stop offset="1" stop-color="#cfc1aa"/>
+    </linearGradient>
+    <linearGradient id="stripe" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#e85842"/>
+      <stop offset="1" stop-color="#a72e2c"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 8c0-5 16-5 16 0 0 17-3 25 7 42 14 24 19 48 19 78 0 27-14 44-34 44S6 155 6 128c0-30 5-54 19-78 10-17 7-25 7-42Z" fill="url(#body)" stroke="#4a3a2e" stroke-width="4"/>
+  <path d="M25 47h30c3 8 6 16 9 24H16c3-8 6-16 9-24Z" fill="url(#stripe)" stroke="#7f2928" stroke-width="2"/>
+  <path d="M20 76h40" stroke="#f7d9ba" stroke-width="3" opacity="0.85"/>
+  <ellipse cx="28" cy="114" rx="10" ry="29" fill="#fff" opacity="0.4"/>
+  <ellipse cx="40" cy="165" rx="23" ry="5" fill="#9c8d78" opacity="0.45"/>
+</svg>
