@@ -10,11 +10,27 @@ import {
   type BallDesign,
   type BallPattern,
 } from "../designer/ball_design";
-import type { RecentMatchSetup, RecentPlayerSetup, SaveFileV2 } from "./contracts";
+import {
+  default_bowls_per_frame,
+  maximum_bowls_per_frame,
+  minimum_bowls_per_frame,
+  normalize_bowls_per_frame,
+} from "../game/bowls_per_frame";
+import type { BestScoreKey, RecentMatchSetup, RecentPlayerSetup, SaveFileV3 } from "./contracts";
 
 export const save_storage_key = "super_bowling.save";
 
 const max_player_name_length = 20;
+export { normalize_bowls_per_frame } from "../game/bowls_per_frame";
+
+export function best_score_key(pin_count: PinCount, bowls_per_frame: number): BestScoreKey {
+  return `${pin_count}:${normalize_bowls_per_frame(bowls_per_frame)}`;
+}
+
+function maximum_score(pin_count: PinCount, bowls_per_frame: number): number {
+  const rack_pin_count = get_rack_pin_count(pin_count);
+  return (bowls_per_frame === 2 ? 30 : 10 + bowls_per_frame) * rack_pin_count;
+}
 
 function is_record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -42,6 +58,7 @@ function read_design(value: unknown): BallDesign {
 
 function create_default_recent_setup(): RecentMatchSetup {
   return {
+    bowls_per_frame: default_bowls_per_frame,
     pin_count: 10,
     players: [{ name: "Player 1", ball_design: normalize_ball_design({}) }],
   };
@@ -68,30 +85,45 @@ function normalize_recent_setup(value: unknown): RecentMatchSetup {
     typeof value.pin_count === "number" && is_supported_pin_count(value.pin_count)
       ? value.pin_count
       : defaults.pin_count;
-  return { pin_count, players: normalize_players(value.players) };
+  return {
+    bowls_per_frame: normalize_bowls_per_frame(value.bowls_per_frame),
+    pin_count,
+    players: normalize_players(value.players),
+  };
 }
 
-function normalize_best_scores(value: unknown): Partial<Record<PinCount, number>> {
+function normalize_best_scores(value: unknown): Partial<Record<BestScoreKey, number>> {
   if (!is_record(value)) return {};
-  const best_scores: Partial<Record<PinCount, number>> = {};
+  const best_scores: Partial<Record<BestScoreKey, number>> = {};
   for (const pin_count of supported_pin_counts) {
-    const score = value[String(pin_count)];
-    if (
-      typeof score === "number" &&
-      Number.isFinite(score) &&
-      Number.isInteger(score) &&
-      score >= 0 &&
-      score <= 30 * get_rack_pin_count(pin_count)
+    for (
+      let bowls_per_frame = minimum_bowls_per_frame;
+      bowls_per_frame <= maximum_bowls_per_frame;
+      bowls_per_frame += 1
     ) {
-      best_scores[pin_count] = score;
+      const key = best_score_key(pin_count, bowls_per_frame);
+      const score = value[key];
+      if (is_valid_score(score, pin_count, bowls_per_frame)) {
+        best_scores[key] = score;
+      }
     }
   }
   return best_scores;
 }
 
-export function create_default_save(): SaveFileV2 {
+function migrate_v2_best_scores(value: unknown): Partial<Record<BestScoreKey, number>> {
+  if (!is_record(value)) return {};
+  const best_scores: Partial<Record<BestScoreKey, number>> = {};
+  for (const pin_count of supported_pin_counts) {
+    const score = value[String(pin_count)];
+    if (is_valid_score(score, pin_count, 2)) best_scores[best_score_key(pin_count, 2)] = score;
+  }
+  return best_scores;
+}
+
+export function create_default_save(): SaveFileV3 {
   return {
-    version: 2,
+    version: 3,
     mute_enabled: false,
     reduced_motion: false,
     recent_setup: create_default_recent_setup(),
@@ -99,20 +131,29 @@ export function create_default_save(): SaveFileV2 {
   };
 }
 
-export function normalize_save_file(value: unknown): SaveFileV2 {
+export function normalize_save_file(value: unknown): SaveFileV3 {
   if (!is_record(value)) return create_default_save();
   if (value.version === 1) {
     return {
-      version: 2,
+      version: 3,
       mute_enabled: value.mute_enabled === true,
       reduced_motion: value.reduced_motion === true,
-      recent_setup: normalize_recent_setup(value.recent_setup),
+      recent_setup: { ...normalize_recent_setup(value.recent_setup), bowls_per_frame: 2 },
       best_scores: {},
     };
   }
-  if (value.version !== 2) return create_default_save();
+  if (value.version === 2) {
+    return {
+      version: 3,
+      mute_enabled: value.mute_enabled === true,
+      reduced_motion: value.reduced_motion === true,
+      recent_setup: { ...normalize_recent_setup(value.recent_setup), bowls_per_frame: 2 },
+      best_scores: migrate_v2_best_scores(value.best_scores),
+    };
+  }
+  if (value.version !== 3) return create_default_save();
   return {
-    version: 2,
+    version: 3,
     mute_enabled: value.mute_enabled === true,
     reduced_motion: value.reduced_motion === true,
     recent_setup: normalize_recent_setup(value.recent_setup),
@@ -120,26 +161,34 @@ export function normalize_save_file(value: unknown): SaveFileV2 {
   };
 }
 
-function is_valid_score(score: number, pin_count: PinCount): boolean {
+function is_valid_score(
+  score: unknown,
+  pin_count: PinCount,
+  bowls_per_frame: number,
+): score is number {
   return (
+    typeof score === "number" &&
     Number.isFinite(score) &&
     Number.isInteger(score) &&
     score >= 0 &&
-    score <= 30 * get_rack_pin_count(pin_count)
+    score <= maximum_score(pin_count, bowls_per_frame)
   );
 }
 
 export function update_best_score(
-  save: SaveFileV2,
+  save: SaveFileV3,
   pin_count: PinCount,
+  bowls_per_frame: number,
   score: number,
-): SaveFileV2 {
+): SaveFileV3 {
   const normalized_save = normalize_save_file(save);
-  if (!is_valid_score(score, pin_count)) return normalized_save;
-  const current_score = normalized_save.best_scores[pin_count];
+  const normalized_bowls_per_frame = normalize_bowls_per_frame(bowls_per_frame);
+  if (!is_valid_score(score, pin_count, normalized_bowls_per_frame)) return normalized_save;
+  const key = best_score_key(pin_count, normalized_bowls_per_frame);
+  const current_score = normalized_save.best_scores[key];
   if (current_score !== undefined && current_score >= score) return normalized_save;
   return {
     ...normalized_save,
-    best_scores: { ...normalized_save.best_scores, [pin_count]: score },
+    best_scores: { ...normalized_save.best_scores, [key]: score },
   };
 }

@@ -3,6 +3,8 @@ import type { BallDesign, BallPattern } from "../designer/ball_design";
 export type BallDrawState = {
   x: number;
   y: number;
+  /** Camera-space base depth used to paint farther bodies first. */
+  base_depth?: number;
   width: number;
   height: number;
   roll_angle: number;

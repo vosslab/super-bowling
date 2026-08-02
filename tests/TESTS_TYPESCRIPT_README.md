@@ -78,6 +78,30 @@ A typical edit loop runs the tiers in this order:
 - Run `./run_web_server.sh` and eyeball the app in a browser.
 - Run `./run_playwright_tests.sh` to confirm browser behavior.
 
+## Visual capture and review
+
+Use the maintained capture wrapper for browser evidence. It builds the shipped
+app and writes ignored artifacts rather than treating an ad hoc screenshot as
+proof:
+
+```bash
+./devel/capture_screenshots.sh --camera-bakeoff
+./devel/capture_screenshots.sh --milestone
+```
+
+`--camera-bakeoff` captures the `dense`, `balanced`, and `open` 105-pin
+compositions. Their 3%, 6%, and 10% row-reveal PNGs and JSON diagnostics make
+the projection choice measurable. `--milestone` captures the maintained
+1600 x 1000 mode/state set and writes its manifest and diagnostics under
+`artifacts/milestone/`.
+
+Review nine states: 10-, 105-, and 990-pin aiming, mid-roll, and partial-rack
+or settled play. Capture completion proves that the production path emitted the
+named evidence; independent original-resolution visual judgment decides whether
+the composition, containment, scale, and pin orientation are acceptable. Run
+`./run_playwright_tests.sh` after a visual or layout change as the required
+browser regression gate.
+
 ## Ship to GitHub Pages
 
 - Run `./build_github_pages.sh` to emit `dist/`, including `dist/.nojekyll` so

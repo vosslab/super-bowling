@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { normalize_ball_design } from "../src/designer/ball_design.ts";
-import { lane_width } from "../src/config/lane.ts";
+import { ball_radius, pin_radius } from "../src/config/lane.ts";
 import { draw_ball, get_ball_pattern_commands } from "../src/render/ball.ts";
 import { get_game_asset_urls } from "../src/render/game_assets.ts";
 import { advance_camera_for_ball, create_camera_state } from "../src/render/camera.ts";
@@ -13,7 +13,7 @@ import {
   create_game_draw_commands,
 } from "../src/render/game_renderer.ts";
 import { create_rack } from "../src/simulation/rack.ts";
-import { choose_pin_sprite } from "../src/render/pins.ts";
+import { canonical_fallen_pin_angle, choose_pin_sprite, draw_pin } from "../src/render/pins.ts";
 import {
   ball_snapshot_stride,
   pin_snapshot_stride,
@@ -61,6 +61,36 @@ function create_rack_snapshot(pin_count) {
 }
 
 const geometry_tolerance = 0.001;
+
+function point_is_inside_projected_lane(point, lane) {
+  const corners = [
+    lane.geometry.lane_near[0],
+    lane.geometry.lane_near[1],
+    lane.geometry.lane_far[1],
+    lane.geometry.lane_far[0],
+  ];
+  let inside = false;
+  for (let index = 0; index < corners.length; index += 1) {
+    const current = corners[index];
+    const next = corners[(index + 1) % corners.length];
+    assert.ok(current && next);
+    const crosses_y = current.y > point.y !== next.y > point.y;
+    const edge_x =
+      ((next.x - current.x) * (point.y - current.y)) / (next.y - current.y) + current.x;
+    if (crosses_y && point.x < edge_x) inside = !inside;
+  }
+  return inside;
+}
+
+function line_reaches_horizon(first, second, horizon) {
+  const line_x = second.x - first.x;
+  const line_y = second.y - first.y;
+  const horizon_x = horizon.x - first.x;
+  const horizon_y = horizon.y - first.y;
+  const cross_product = line_x * horizon_y - line_y * horizon_x;
+  const scale = Math.max(1, Math.hypot(line_x, line_y) * Math.hypot(horizon_x, horizon_y));
+  return Math.abs(cross_product) <= geometry_tolerance * scale;
+}
 
 function get_tag_attributes(markup, tag_name) {
   const match = markup.match(new RegExp(`<${tag_name}\\b([^>]*)>`));
@@ -239,7 +269,6 @@ test("keeps the opening ball foreground and the complete rack distant at 16:10",
   assert.ok(pins.every((pin) => opening_ball.y > pin.y));
   assert.ok(opening_ball.width > Math.max(...pins.map((pin) => pin.width)));
   assert.equal(opening_ball.width, opening_ball.height);
-  assert.ok(pins.every((pin) => pin.width >= 7 && pin.height >= 16));
 
   const rolling = new Float32Array(snapshot);
   rolling[ball_offset + snapshot_y_offset] = 2;
@@ -250,6 +279,25 @@ test("keeps the opening ball foreground and the complete rack distant at 16:10",
   assert.ok(rolling_ball.y < opening_ball.y);
   const projection = create_camera_projection(create_camera_state(10, false));
   assert.ok(projection.near_y < rack.bounds.min_y && projection.far_y > rack.bounds.max_y);
+});
+
+test("projects standing pin bodies monotonically smaller with depth", () => {
+  for (const pin_count of [10, 105, 990]) {
+    const snapshot = create_rack_snapshot(pin_count);
+    const pins = create_game_draw_commands(snapshot, snapshot, pin_count, 1, 1600, 1000)
+      .filter((command) => command.kind === "standing_pin")
+      .sort((first, second) => first.base_depth - second.base_depth);
+    assert.equal(pins.length, pin_count);
+    for (let index = 1; index < pins.length; index += 1) {
+      const previous = pins[index - 1];
+      const current = pins[index];
+      assert.ok(previous && current);
+      if (current.base_depth > previous.base_depth + geometry_tolerance) {
+        assert.ok(current.width < previous.width, `${pin_count}-pin width decreases with depth`);
+        assert.ok(current.height < previous.height, `${pin_count}-pin height decreases with depth`);
+      }
+    }
+  }
 });
 
 test("rolls patterned spherical artwork from forward travel with constrained physics rotation", () => {
@@ -297,49 +345,75 @@ test("frames each immutable initial rack completely inside the 16:10 lane", () =
   }
 });
 
-test("paints seven board-based chevron arrows inside a lane with fixed gutters", () => {
+test("projects board arrows and lane marks inside the painted lane", () => {
   for (const pin_count of [10, 105, 990]) {
     const snapshot = create_rack_snapshot(pin_count);
     const lane = get_lane_command(
       create_game_draw_commands(snapshot, snapshot, pin_count, 1, 1600, 1000),
     );
-    const convergence_ratio = lane.geometry.top_half_width / lane.geometry.bottom_half_width;
-    assert.ok(convergence_ratio >= 0.6 && convergence_ratio < 1);
-    assert.equal(lane.geometry.arrows.length, 7);
+    assert.ok(lane.geometry.arrows.length > 0);
     assert.ok(lane.geometry.gutter_world_width > 0);
+    const marks = lane.geometry.guide_dots;
+    assert.ok(marks.length > 0);
+    for (const mark of marks) {
+      assert.ok(Number.isFinite(mark.x) && Number.isFinite(mark.y));
+      assert.ok(point_is_inside_projected_lane(mark, lane));
+    }
     for (const arrow of lane.geometry.arrows) {
-      assert.ok(arrow.x - arrow.size >= 0);
-      assert.ok(arrow.x + arrow.size <= 1600);
-      assert.ok(arrow.tip_y < arrow.base_y);
-      assert.ok(arrow.tip_y >= lane.geometry.horizon_y);
-      assert.ok(arrow.base_y <= 1000);
+      assert.ok([arrow.x, arrow.y, arrow.size, arrow.tip_y, arrow.base_y].every(Number.isFinite));
+      assert.ok(arrow.size > 0);
+      for (const point of [
+        { x: arrow.x - arrow.size, y: arrow.base_y },
+        { x: arrow.x + arrow.size, y: arrow.base_y },
+        { x: arrow.x, y: arrow.tip_y },
+        { x: arrow.x, y: arrow.base_y },
+      ]) {
+        assert.ok(point_is_inside_projected_lane(point, lane));
+      }
     }
   }
 });
 
-test("projects every initial rack strictly inside the painted lane silhouette", () => {
-  for (const pin_count of [45, 105, 990]) {
-    const rack = create_rack(pin_count);
+test("keeps every initial rack inside the painted projected composition", () => {
+  for (const pin_count of [10, 105, 990]) {
     const snapshot = create_rack_snapshot(pin_count);
     const commands = create_game_draw_commands(snapshot, snapshot, pin_count, 1, 1600, 1000);
     const lane = get_lane_command(commands);
-    const tolerance = 1;
-    for (const slot of rack.slots) {
-      const pin = get_pin_command(commands, Number(slot.pin_id));
-      const depth =
-        (pin.y - lane.geometry.horizon_y) / (lane.geometry.foreground_y - lane.geometry.horizon_y);
-      const half_width =
-        lane.geometry.top_half_width +
-        (lane.geometry.bottom_half_width - lane.geometry.top_half_width) * depth;
-      assert.ok(Math.abs(pin.x - 800) <= half_width + tolerance);
+    const pins = commands.filter((command) => command.kind === "standing_pin");
+    assert.equal(pins.length, pin_count);
+    for (const pin of pins) {
+      assert.ok(
+        point_is_inside_projected_lane({ x: pin.x, y: pin.y + pin.height / 2 }, lane),
+        `${pin_count}-pin base remains inside the painted lane`,
+      );
+      assert.ok(
+        pin.x - pin.width / 2 >= 0 &&
+          pin.x + pin.width / 2 <= 1600 &&
+          pin.y - pin.height / 2 >= 0 &&
+          pin.y + pin.height / 2 <= 1000,
+      );
     }
   }
 });
 
-test("keeps proportional painted lane silhouettes across rack sizes and shot progress", () => {
+test("anchors each upright sprite foot to its projected physical lane base", () => {
+  for (const pin_count of [10, 105, 990]) {
+    const snapshot = create_rack_snapshot(pin_count);
+    const pins = create_game_draw_commands(snapshot, snapshot, pin_count, 1, 1600, 1000).filter(
+      (command) => command.kind === "standing_pin",
+    );
+    assert.equal(pins.length, pin_count);
+    for (const pin of pins) {
+      assert.ok(Math.abs(pin.x - pin.ground_x) < geometry_tolerance);
+      assert.ok(Math.abs(pin.y + pin.height / 2 - pin.ground_y) < geometry_tolerance);
+    }
+  }
+});
+
+test("keeps physical ball and pin scale invariant across mode-specific cameras", () => {
   for (const at_result of [false, true]) {
-    const lane_commands = [10, 105, 990].map((pin_count) => {
-      const snapshot = create_rack_snapshot(pin_count);
+    for (const pin_count of [10, 105, 990]) {
+      const snapshot = create_snapshot(pin_count);
       const lane_camera = create_camera_state(pin_count, false);
       const camera = at_result
         ? advance_camera_for_ball(lane_camera, lane_camera.rack_bounds.front, false)
@@ -354,36 +428,15 @@ test("keeps proportional painted lane silhouettes across rack sizes and shot pro
         undefined,
         camera,
       );
-      const lane = get_lane_command(commands);
       const ball = commands.find((command) => command.kind === "ball");
+      const pin = get_pin_command(commands, 0);
       assert.ok(ball);
-      return { lane, ball };
-    });
-
-    const [ten_pin, one_hundred_mode, one_thousand_mode] = lane_commands;
-    assert.ok(ten_pin);
-    assert.ok(one_hundred_mode);
-    assert.ok(one_thousand_mode);
-    assert.equal(
-      ten_pin.lane.geometry.top_half_width,
-      one_hundred_mode.lane.geometry.top_half_width,
-    );
-    assert.equal(
-      one_hundred_mode.lane.geometry.top_half_width,
-      one_thousand_mode.lane.geometry.top_half_width,
-    );
-    assert.equal(
-      ten_pin.lane.geometry.bottom_half_width,
-      one_hundred_mode.lane.geometry.bottom_half_width,
-    );
-    assert.equal(
-      one_hundred_mode.lane.geometry.bottom_half_width,
-      one_thousand_mode.lane.geometry.bottom_half_width,
-    );
-    assert.equal(ten_pin.ball.width, one_hundred_mode.ball.width);
-    assert.equal(one_hundred_mode.ball.width, one_thousand_mode.ball.width);
-    assert.equal(ten_pin.ball.height, one_hundred_mode.ball.height);
-    assert.equal(one_hundred_mode.ball.height, one_thousand_mode.ball.height);
+      assert.ok(
+        Math.abs(ball.width / pin.width - ball_radius / pin_radius) <= geometry_tolerance,
+        `${pin_count}-pin camera retains the world-space ball-to-pin width ratio`,
+      );
+      assert.equal(ball.width, ball.height);
+    }
   }
 });
 
@@ -435,6 +488,49 @@ test("uses the published capsule axis for fallen pin art", () => {
   assert.ok(Math.abs(pin.angle - Math.PI / 2) < 0.001);
   assert.equal(choose_pin_sprite(false), "standing_pin");
   assert.equal(choose_pin_sprite(true), "fallen_pin");
+});
+
+test("draws fallen pins crown-up while retaining their undirected capsule axis", () => {
+  const fixture_angles = [-2.8, -Math.PI / 2, -0.15, 0, 0.15, Math.PI / 2, 2.8];
+  for (const physical_axis_angle of fixture_angles) {
+    const canonical_angle = canonical_fallen_pin_angle(physical_axis_angle);
+    // The fallen SVG's crown is at its positive local x end. After rotation,
+    // this is the sign of its screen-space vertical offset from the base.
+    assert.ok(
+      Math.sin(canonical_angle) <= 0.000001,
+      `crown must remain at or above base for ${physical_axis_angle}`,
+    );
+    assert.ok(
+      Math.abs(Math.sin(physical_axis_angle - canonical_angle)) < 0.000001,
+      `canonical angle must preserve the same undirected capsule axis for ${physical_axis_angle}`,
+    );
+
+    let rendered_angle;
+    const context = {
+      save() {},
+      restore() {},
+      translate() {},
+      rotate(angle) {
+        rendered_angle = angle;
+      },
+      drawImage() {},
+    };
+    draw_pin(
+      context,
+      { upright: {}, fallen: {} },
+      {
+        kind: "fallen_pin",
+        x: 400,
+        y: 300,
+        ground_x: 400,
+        ground_y: 300,
+        width: 60,
+        height: 18,
+        angle: physical_axis_angle,
+      },
+    );
+    assert.equal(rendered_angle, canonical_angle);
+  }
 });
 
 test("interpolates a fallen pin axis across the PI boundary by its short arc", () => {
@@ -547,9 +643,7 @@ test("builds the ball surface from a seam-safe repeated tile", () => {
   assert.ok(path_extent.max + half_stroke_width < tile_width);
 });
 
-test("projects authoritative lane edges onto the painted silhouette", () => {
-  const render_width = 1600;
-  const render_height = 1000;
+test("projects lane edges toward the shared forward vanishing point", () => {
   const fixtures = [
     { pin_count: 10, at_result: false },
     { pin_count: 10, at_result: true },
@@ -563,36 +657,26 @@ test("projects authoritative lane edges onto the painted silhouette", () => {
     const camera = fixture.at_result
       ? advance_camera_for_ball(lane_camera, lane_camera.rack_bounds.front, false)
       : lane_camera;
-    const projection = create_camera_projection(camera);
-    for (const depth_fraction of [0.2, 0.5, 0.8]) {
-      const world_y = projection.far_y - (projection.far_y - projection.near_y) * depth_fraction;
-      for (const sign of [-1, 1]) {
-        const snapshot = create_snapshot(fixture.pin_count);
-        snapshot[snapshot_x_offset] = sign * (lane_width(fixture.pin_count) / 2);
-        snapshot[snapshot_y_offset] = world_y;
-        const commands = create_game_draw_commands(
-          snapshot,
-          snapshot,
-          fixture.pin_count,
-          1,
-          render_width,
-          render_height,
-          undefined,
-          camera,
-        );
-        const lane = get_lane_command(commands);
-        const pin = get_pin_command(commands, 0);
-        const screen_depth =
-          (pin.y - lane.geometry.horizon_y) /
-          (lane.geometry.foreground_y - lane.geometry.horizon_y);
-        const painted_half_width =
-          lane.geometry.top_half_width +
-          (lane.geometry.bottom_half_width - lane.geometry.top_half_width) * screen_depth;
-        assert.ok(
-          Math.abs(Math.abs(pin.x - render_width / 2) - painted_half_width) <= geometry_tolerance,
-          "lane-edge pin center should meet the painted lane silhouette",
-        );
-      }
+    const lane = get_lane_command(
+      create_game_draw_commands(
+        create_snapshot(fixture.pin_count),
+        create_snapshot(fixture.pin_count),
+        fixture.pin_count,
+        1,
+        1600,
+        1000,
+        undefined,
+        camera,
+      ),
+    );
+    for (const [near, far] of [
+      [lane.geometry.lane_near[0], lane.geometry.lane_far[0]],
+      [lane.geometry.lane_near[1], lane.geometry.lane_far[1]],
+      [lane.geometry.rail_near[0], lane.geometry.rail_far[0]],
+      [lane.geometry.rail_near[1], lane.geometry.rail_far[1]],
+    ]) {
+      assert.ok(near && far);
+      assert.ok(line_reaches_horizon(near, far, lane.geometry.horizon));
     }
   }
 });

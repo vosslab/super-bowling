@@ -7,6 +7,7 @@ export type RecentPlayerSetup = {
 };
 
 export type RecentMatchSetup = {
+  bowls_per_frame: number;
   pin_count: PinCount;
   players: RecentPlayerSetup[];
 };
@@ -27,7 +28,18 @@ export type SaveFileV2 = {
   best_scores: Partial<Record<PinCount, number>>;
 };
 
-export type SaveFile = SaveFileV2;
+export type BestScoreKey = `${PinCount}:${number}`;
+
+export type SaveFileV3 = {
+  version: 3;
+  mute_enabled: boolean;
+  reduced_motion: boolean;
+  recent_setup: RecentMatchSetup;
+  /** Scores are deliberately partitioned by rack mode and bowls-per-frame rule. */
+  best_scores: Partial<Record<BestScoreKey, number>>;
+};
+
+export type SaveFile = SaveFileV3;
 
 export type SaveSettings = {
   mute_enabled: boolean;

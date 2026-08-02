@@ -1,3 +1,46 @@
+## 2026-08-02
+
+### Additions and New Features
+
+- Added configurable bowls per frame for `B = 1` through `B = 5`, with Super
+  frame ten-frame play set to exactly `B + 1` bowls and Classic `B = 2`
+  retaining its conditional fill ball.
+- Added maintained camera-bakeoff and milestone capture diagnostics, including
+  3%, 6%, and 10% row-reveal artifacts and JSON measurements.
+
+### Behavior or Interface Changes
+
+- Reclaimed the 1600 x 1000 play surface with a 116 px top chrome, a 352 px
+  side control panel, and a 1248 x 884 lane canvas instead of a bottom control
+  deck. The compact score and player chrome leave the lane at least 75% of the
+  viewport width.
+- Selected the open 10%-showing (90%-overlap) pin-row composition after
+  independent original-resolution visual review. The complete-rack camera now
+  anchors the rear crown at 4%, the aiming-ball bottom at 95%, and occupies
+  91% of the actual lane canvas for every rack and game state.
+- Made the 990-pin mode deliberately superhuman with a 40 lb ball, expanded
+  power and spin, and a bounded post-contact through-pin drive so the ball can
+  reach the backstop without changing ordinary ten-pin play.
+- Canonicalized fallen-pin art to crown-up orientation while preserving the raw
+  physics capsule axis.
+
+### Decisions and Failures
+
+- Rejected the earlier tiny centered lane-and-rack island and the later
+  empty-space-heavy composition as visual evidence: both consumed the 16:10
+  play area without making the deep rack more readable. The side panel and
+  two-anchor complete-rack solve replace those attempts.
+- Accepted the nine-state visual review across 10-, 105-, and 990-pin aiming,
+  mid-roll, and partial or settled states. Capture generation and independent
+  screenshot judgment remain separate checks.
+
+### Developer Tests and Notes
+
+- Verified focused camera tests (39/39), settled-orientation tests (33/33),
+  and physics tests (21/21). The Playwright suite reached 31 tests with no
+  reported failures, and maintained captures completed. `./check_codebase.sh`
+  remains a required final rerun and is not claimed as complete here.
+
 ## 2026-08-01
 
 ### Additions and New Features

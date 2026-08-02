@@ -1,3 +1,5 @@
+import type { RackPinCount } from "../config/pin_counts";
+
 export type HookTuning = {
   skid_speed: number;
   hook_speed: number;
@@ -13,6 +15,23 @@ export const default_hook_tuning: HookTuning = {
   roll_speed: 2,
   gain: 0.7,
 };
+
+/**
+ * The 1,000-mode ball can launch at 60 ft/s. Scale the speed phases with that
+ * envelope so it starts to bend while it still has useful lane left. The 1x
+ * gain candidate did not exceed the old full-spin head-plane displacement;
+ * this smallest succeeding 2x candidate does, while zero spin stays exact.
+ */
+export const superhuman_990_hook_tuning: HookTuning = {
+  skid_speed: 65,
+  hook_speed: 42,
+  roll_speed: 2,
+  gain: default_hook_tuning.gain * 2,
+};
+
+export function hook_tuning_for_rack(pin_count: RackPinCount): HookTuning {
+  return pin_count === 990 ? superhuman_990_hook_tuning : default_hook_tuning;
+}
 
 export function hook_lateral_acceleration(
   spin: number,

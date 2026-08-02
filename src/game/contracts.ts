@@ -16,6 +16,8 @@ export type PlayerSetup = {
 };
 
 export type MatchSetup = {
+  /** Omitted only by legacy callers; the match state always records the resolved value. */
+  bowls_per_frame?: number;
   pin_count: PinCount;
   players: readonly PlayerSetup[];
 };
@@ -47,6 +49,7 @@ export type PlayerScoreCard = {
 export type MatchState = {
   active_player_id: PlayerId;
   aim: AimState;
+  bowls_per_frame: number;
   current_frame_index: number;
   current_roll_index: number;
   phase: MatchPhase;

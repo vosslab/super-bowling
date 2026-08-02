@@ -24,18 +24,28 @@ export const maximum_power = 24;
 export const minimum_spin = -1;
 export const maximum_spin = 1;
 
+/**
+ * Regulation controls remain deliberately modest. The 1,000-mode rack is a
+ * fantasy endurance challenge, so it exposes its own clearly bounded
+ * superhuman envelope rather than silently changing ten-pin bowling.
+ */
+export const superhuman_990_maximum_power = 60;
+export const superhuman_990_minimum_spin = -4;
+export const superhuman_990_maximum_spin = 4;
+
 export function aim_limits(pin_count: RackPinCount): AimLimits {
   const half_width = lane_width(pin_count) / 2;
   const maximum_angle = Math.atan((half_width * 0.35) / foul_to_head_pin);
+  const is_superhuman_rack = pin_count === 990;
   return {
     minimum_power,
-    maximum_power,
+    maximum_power: is_superhuman_rack ? superhuman_990_maximum_power : maximum_power,
     minimum_start_position: -half_width + ball_radius,
     maximum_start_position: half_width - ball_radius,
     minimum_angle: -maximum_angle,
     maximum_angle,
-    minimum_spin,
-    maximum_spin,
+    minimum_spin: is_superhuman_rack ? superhuman_990_minimum_spin : minimum_spin,
+    maximum_spin: is_superhuman_rack ? superhuman_990_maximum_spin : maximum_spin,
   };
 }
 

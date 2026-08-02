@@ -4,7 +4,12 @@ import test from "node:test";
 import { create_pin_id } from "../src/brands.ts";
 import { benchmark_fixtures } from "../src/config/benchmark_fixtures.ts";
 import { get_rack_pin_count, supported_pin_counts } from "../src/config/pin_counts.ts";
-import { get_mode_tuning, physics_config } from "../src/config/physics.ts";
+import {
+  get_ball_mass_lb,
+  get_mode_tuning,
+  physics_config,
+  rack_ball_mass_lb,
+} from "../src/config/physics.ts";
 import { fallen_pin_length } from "../src/config/lane.ts";
 import { find_nearby_pin_ids, create_activation_index } from "../src/simulation/activation.ts";
 import { get_benchmark_validation_failures } from "../src/simulation/benchmark.ts";
@@ -261,6 +266,46 @@ test("a fallen pin replaces its base circle with a mass-preserving outward capsu
   }
 });
 
+test("uses the rack-aware declared pound mass and preserves standing mass through a fall", async () => {
+  for (const mode of supported_pin_counts) {
+    const rack_pin_count = get_rack_pin_count(mode);
+    const candidate = await create_simulation_world(rack_pin_count);
+    try {
+      assert.equal(candidate.get_ball_collision_profile().mass, get_ball_mass_lb(rack_pin_count));
+      assert.equal(candidate.get_ball_collision_profile().mass, rack_ball_mass_lb[rack_pin_count]);
+    } finally {
+      candidate.dispose();
+    }
+  }
+
+  const world = await create_simulation_world(10);
+  const head_pin = world.rack.slots[0];
+  assert.ok(head_pin);
+
+  try {
+    const ball = world.get_ball_collision_profile();
+    const standing = world.get_pin_collision_profile(head_pin.pin_id);
+    assert.equal(ball.mass, physics_config.ball_mass_lb);
+    assert.equal(standing.mass, physics_config.pin_mass_lb);
+    assert.equal(
+      ball.mass / standing.mass,
+      physics_config.ball_mass_lb / physics_config.pin_mass_lb,
+    );
+
+    world.launch(16, 0, 0, 0);
+    for (let step = 0; step < 1_200; step += 1) {
+      world.step_fixed();
+      if (world.get_counts().fallen_pin_count > 0) break;
+    }
+
+    const fallen = world.get_pin_collision_profile(head_pin.pin_id);
+    assert.equal(fallen.shape, "fallen_capsule");
+    assert.equal(fallen.mass, standing.mass);
+  } finally {
+    world.dispose();
+  }
+});
+
 test("fallen snapshots publish the collider center and long axis", async () => {
   const world = await create_simulation_world(10);
   const head_pin = world.rack.slots[0];
@@ -295,7 +340,7 @@ test("fallen snapshots publish the collider center and long axis", async () => {
   }
 });
 
-test("at least one legal centered ten-pin roll can strike", async () => {
+test("exact centered ten-pin controls do not strike", async () => {
   const legal_powers = [8, 10, 12, 14, 16, 18, 20, 22, 24];
   let strike_power;
 
@@ -316,7 +361,7 @@ test("at least one legal centered ten-pin roll can strike", async () => {
     }
   }
 
-  assert.notEqual(strike_power, undefined, "one legal centered roll should produce a strike");
+  assert.equal(strike_power, undefined, "exact centered rolls should not produce a strike");
 });
 
 test("fallen capsule axes settle without windmill-scale rotation", async () => {
@@ -354,7 +399,7 @@ test("fallen capsule axes settle without windmill-scale rotation", async () => {
       }
     }
 
-    assert.equal(terminal, true, "representative centered strike roll settles without a timeout");
+    assert.equal(terminal, true, "representative centered roll settles without a timeout");
     assert.ok(accumulated_turn_by_pin.size > 0, "fixture creates fallen capsules");
     const maximum_accumulated_rotation = Math.max(...accumulated_turn_by_pin.values());
     assert.ok(

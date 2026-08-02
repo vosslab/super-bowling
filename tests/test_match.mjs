@@ -16,6 +16,16 @@ function ready_match() {
   return reduce_match(reduce_match(initial, { type: "start" }).state, { type: "rack_ready" }).state;
 }
 
+function ready_super_match(bowls_per_frame = 3, player_count = 1) {
+  const players = Array.from({ length: player_count }, (_, index) => ({
+    player_id: create_player_id(index),
+    name: `Player ${index + 1}`,
+    ball_design,
+  }));
+  const initial = create_match_state({ pin_count: 10, bowls_per_frame, players });
+  return reduce_match(reduce_match(initial, { type: "start" }).state, { type: "rack_ready" }).state;
+}
+
 function ready_tenth_frame_match() {
   let state = ready_match();
   for (let frame_index = 0; frame_index < 9; frame_index += 1) {
@@ -262,5 +272,119 @@ test("carries every selected rack size through reset and settlement conservation
     assert.deepEqual(advance_result(settled.state).effects, [
       { type: "reset_rack", pin_count: rack_pin_count },
     ]);
+  }
+});
+
+test("keeps a super frame on its rack until its configured third bowl", () => {
+  let state = ready_super_match();
+  for (const standing_pin_count of [6, 3]) {
+    const advanced = advance_result(settle_roll(state, standing_pin_count).state);
+    assert.equal(advanced.state.phase, "sweeping");
+    assert.deepEqual(advanced.effects, [{ type: "prepare_next_roll" }]);
+    state = complete_sweep(advanced.state);
+  }
+  const completed = advance_result(settle_roll(state, 0).state);
+  assert.equal(completed.state.phase, "rack_resetting");
+  assert.deepEqual(completed.effects, [{ type: "reset_rack", pin_count: 10 }]);
+  assert.equal(completed.state.score_cards[create_player_id(0)]?.frames[0]?.score, 10);
+});
+
+test("ends a super frame immediately when it clears the rack", () => {
+  const completed = advance_result(settle_roll(ready_super_match(), 0).state);
+  assert.equal(completed.state.phase, "rack_resetting");
+  assert.deepEqual(completed.effects, [{ type: "reset_rack", pin_count: 10 }]);
+  assert.equal(completed.state.result_message, undefined);
+});
+
+test("uses a super-frame tenth fresh rack after clears and never grants a fifth bowl", () => {
+  let state = ready_super_match();
+  for (let frame_index = 0; frame_index < 9; frame_index += 1) {
+    for (const standing_pin_count of [8, 5, 0]) {
+      const advanced = advance_result(settle_roll(state, standing_pin_count).state);
+      if (standing_pin_count === 0) {
+        state = reduce_match(advanced.state, { type: "rack_ready" }).state;
+      } else {
+        state = complete_sweep(advanced.state);
+      }
+    }
+  }
+  for (let bowl_index = 0; bowl_index < 3; bowl_index += 1) {
+    const advanced = advance_result(settle_roll(state, 0).state);
+    assert.equal(advanced.state.phase, "rack_resetting");
+    state = reduce_match(advanced.state, { type: "rack_ready" }).state;
+  }
+  const final = advance_result(settle_roll(state, 0).state);
+  assert.equal(final.state.phase, "final");
+  assert.deepEqual(final.effects, [{ type: "match_complete", best_scores: { 0: 130 } }]);
+});
+
+test("keeps a super-frame tenth on its partial rack through its fourth bowl", () => {
+  let state = ready_super_match();
+  for (let frame_index = 0; frame_index < 9; frame_index += 1) {
+    for (const standing_pin_count of [8, 5, 0]) {
+      const advanced = advance_result(settle_roll(state, standing_pin_count).state);
+      state =
+        standing_pin_count === 0
+          ? reduce_match(advanced.state, { type: "rack_ready" }).state
+          : complete_sweep(advanced.state);
+    }
+  }
+  for (const standing_pin_count of [8, 5]) {
+    state = complete_sweep(advance_result(settle_roll(state, standing_pin_count).state).state);
+  }
+  const third = advance_result(settle_roll(state, 1).state);
+  assert.equal(third.state.phase, "sweeping");
+  assert.deepEqual(third.effects, [{ type: "prepare_next_roll" }]);
+  const final = advance_result(settle_roll(complete_sweep(third.state), 1).state);
+  assert.equal(final.state.phase, "final");
+  assert.deepEqual(final.effects, [{ type: "match_complete", best_scores: { 0: 99 } }]);
+});
+
+test("does not hand off a super frame before a clear or its final bowl", () => {
+  let state = ready_super_match(3, 2);
+  for (const standing_pin_count of [8, 5]) {
+    state = complete_sweep(advance_result(settle_roll(state, standing_pin_count).state).state);
+    assert.equal(state.active_player_id, create_player_id(0));
+  }
+  const handoff = advance_result(settle_roll(state, 0).state);
+  assert.equal(handoff.state.phase, "handoff");
+  assert.equal(handoff.state.active_player_id, create_player_id(1));
+});
+
+test("runs endpoint bowl rules through every opening frame and fixed tenth total", () => {
+  for (const bowls_per_frame of [1, 5]) {
+    let state = ready_super_match(bowls_per_frame);
+    for (let frame_index = 0; frame_index < 9; frame_index += 1) {
+      for (let bowl_index = 0; bowl_index < bowls_per_frame; bowl_index += 1) {
+        const advanced = advance_result(settle_roll(state, 10).state);
+        state =
+          advanced.state.phase === "sweeping"
+            ? complete_sweep(advanced.state)
+            : reduce_match(advanced.state, { type: "rack_ready" }).state;
+      }
+      assert.equal(state.current_frame_index, frame_index + 1);
+      assert.equal(state.phase, "aiming");
+    }
+    for (let bowl_index = 0; bowl_index < bowls_per_frame + 1; bowl_index += 1) {
+      const advanced = advance_result(settle_roll(state, 10).state);
+      if (bowl_index === bowls_per_frame) {
+        assert.equal(advanced.state.phase, "final");
+      } else {
+        state = complete_sweep(advanced.state);
+        assert.equal(state.phase, "aiming");
+      }
+    }
+  }
+});
+
+test("rejects invalid bowls-per-frame setup values", () => {
+  for (const bowls_per_frame of [0, 6, 1.5]) {
+    assert.throws(() =>
+      create_match_state({
+        pin_count: 10,
+        bowls_per_frame,
+        players: [{ player_id: create_player_id(0), name: "Ari", ball_design }],
+      }),
+    );
   }
 });

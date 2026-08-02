@@ -19,7 +19,7 @@ function create_memory_storage(initial_value = null) {
 test("loads defaults from missing, malformed, and obsolete storage values", () => {
   for (const value of [null, "not json", JSON.stringify({ version: 9 })]) {
     const save = load_save(create_memory_storage(value));
-    assert.equal(save.version, 2);
+    assert.equal(save.version, 3);
     assert.equal(save.recent_setup.pin_count, 10);
   }
 });
@@ -27,10 +27,11 @@ test("loads defaults from missing, malformed, and obsolete storage values", () =
 test("stores one normalized versioned schema and reads it back", () => {
   const storage = create_memory_storage();
   store_save(storage, {
-    version: 2,
+    version: 3,
     mute_enabled: true,
     reduced_motion: true,
     recent_setup: {
+      bowls_per_frame: 3,
       pin_count: 50,
       players: [
         {
@@ -39,15 +40,16 @@ test("stores one normalized versioned schema and reads it back", () => {
         },
       ],
     },
-    best_scores: { 50: 1350 },
+    best_scores: { "50:3": 500 },
   });
 
-  assert.equal(JSON.parse(storage.value())["version"], 2);
+  assert.equal(JSON.parse(storage.value())["version"], 3);
   assert.deepEqual(load_save(storage), {
-    version: 2,
+    version: 3,
     mute_enabled: true,
     reduced_motion: true,
     recent_setup: {
+      bowls_per_frame: 3,
       pin_count: 50,
       players: [
         {
@@ -56,7 +58,7 @@ test("stores one normalized versioned schema and reads it back", () => {
         },
       ],
     },
-    best_scores: { 50: 1350 },
+    best_scores: { "50:3": 500 },
   });
 });
 
@@ -72,10 +74,10 @@ test("keeps in-memory settings usable when browser storage throws", () => {
   const settings = create_save_settings(throwing_storage);
   settings.set_mute_enabled(true);
   settings.set_reduced_motion(true);
-  settings.record_completed_score(20, 600);
+  settings.record_completed_score(20, 2, 600);
 
   assert.deepEqual(settings.get_settings(), { mute_enabled: true, reduced_motion: true });
-  assert.equal(settings.get_save().best_scores[20], 600);
+  assert.equal(settings.get_save().best_scores["20:2"], 600);
 });
 
 test("uses the single named storage key", () => {

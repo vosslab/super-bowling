@@ -13,6 +13,7 @@ import {
   score_card,
   total_score,
 } from "./scoring";
+import { default_bowls_per_frame, is_valid_bowls_per_frame } from "./bowls_per_frame";
 import { default_aim, normalize_aim, type AimValues } from "./aim";
 
 export type MatchAction =
@@ -70,7 +71,11 @@ function current_player_index(state: MatchState): number {
 function complete_match(state: MatchState): MatchTransition {
   const best_scores: Record<number, number> = {};
   for (const player of state.players) {
-    const score = total_score(state.score_cards[player.player_id]?.frames ?? [], state.pin_count);
+    const score = total_score(
+      state.score_cards[player.player_id]?.frames ?? [],
+      state.pin_count,
+      state.bowls_per_frame,
+    );
     best_scores[player.player_id] = score ?? 0;
   }
   return {
@@ -129,7 +134,7 @@ function advance_after_frame(state: MatchState): MatchTransition {
 function update_active_score_card(state: MatchState, rolls: PlayerScoreCard["frames"]): MatchState {
   const active_score_card: PlayerScoreCard = {
     player_id: state.active_player_id,
-    frames: score_card(rolls, state.pin_count),
+    frames: score_card(rolls, state.pin_count, state.bowls_per_frame),
   };
   return {
     ...state,
@@ -154,10 +159,44 @@ function tenth_roll_requires_fresh_rack(
   );
 }
 
+function super_tenth_roll_clears_rack(
+  frame: PlayerScoreCard["frames"][number],
+  pin_count: RackPinCount,
+): boolean {
+  let rack_total = 0;
+  for (const [roll_index, roll] of frame.rolls.entries()) {
+    rack_total += roll;
+    if (rack_total === pin_count) {
+      if (roll_index === frame.rolls.length - 1) return true;
+      rack_total = 0;
+    }
+  }
+  return false;
+}
+
 function transition_after_roll(state: MatchState): MatchTransition {
   const frame = current_frame(state);
   if (frame === undefined) throw new Error("A settled roll creates a current frame.");
-  if (is_frame_complete(frame, state.pin_count)) return advance_after_frame(state);
+  if (is_frame_complete(frame, state.pin_count, state.bowls_per_frame)) {
+    return advance_after_frame(state);
+  }
+  const super_tenth_fresh_rack =
+    state.bowls_per_frame !== default_bowls_per_frame &&
+    state.current_frame_index === 9 &&
+    super_tenth_roll_clears_rack(frame, state.pin_count);
+  if (super_tenth_fresh_rack) {
+    return effects_for_new_rack({
+      ...state,
+      current_roll_index: state.current_roll_index + 1,
+      standing_pin_count: state.pin_count,
+    });
+  }
+  if (state.bowls_per_frame !== default_bowls_per_frame) {
+    return {
+      state: { ...state, phase: "sweeping", current_roll_index: state.current_roll_index + 1 },
+      effects: [],
+    };
+  }
   const tenth_frame = state.current_frame_index === 9;
   if (tenth_frame && tenth_roll_requires_fresh_rack(frame, state.pin_count)) {
     return effects_for_new_rack({
@@ -173,8 +212,13 @@ function transition_after_roll(state: MatchState): MatchTransition {
   return transition;
 }
 
-function result_message(knocked_pin_count: number, pin_count: RackPinCount): string {
-  if (knocked_pin_count === pin_count) return "Strike!";
+function result_message(
+  knocked_pin_count: number,
+  pin_count: RackPinCount,
+  bowls_per_frame: number,
+): string {
+  if (knocked_pin_count === pin_count && bowls_per_frame === default_bowls_per_frame)
+    return "Strike!";
   return `${knocked_pin_count} pin${knocked_pin_count === 1 ? "" : "s"} down`;
 }
 
@@ -187,9 +231,14 @@ export function create_match_state(setup: MatchSetup): MatchState {
     throw new Error("Every player uses a unique PlayerId.");
   const first_player = setup.players[0];
   if (first_player === undefined) throw new Error("A match needs its first player.");
+  const bowls_per_frame = setup.bowls_per_frame ?? default_bowls_per_frame;
+  if (!is_valid_bowls_per_frame(bowls_per_frame)) {
+    throw new Error("Bowls per frame must be an integer from one through five.");
+  }
   return {
     active_player_id: first_player.player_id,
     aim: default_aim(get_rack_pin_count(setup.pin_count)),
+    bowls_per_frame,
     current_frame_index: 0,
     current_roll_index: 0,
     phase: "setup",
@@ -269,6 +318,7 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
           player_score_card(state).frames,
           state.pin_count,
           knocked_pin_count,
+          state.bowls_per_frame,
         );
       } catch (error) {
         return {
@@ -284,7 +334,7 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
         {
           ...state,
           phase: "result",
-          result_message: result_message(knocked_pin_count, state.pin_count),
+          result_message: result_message(knocked_pin_count, state.pin_count, state.bowls_per_frame),
           standing_pin_count: settled.standing_pin_count,
           standing_pin_count_at_launch: undefined,
         },

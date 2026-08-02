@@ -26,6 +26,7 @@ import {
 } from "../render/camera";
 import type { CameraState } from "../render/contracts";
 import { format_frame_roll_marks } from "../game/score_display";
+import { bowls_per_frame_rule_text } from "../game/bowls_per_frame";
 import { create_game_renderer, type GameRenderer } from "../render/game_renderer";
 import {
   pin_snapshot_stride,
@@ -51,6 +52,7 @@ export type GameProps = {
   on_set_reduced_motion(reduced_motion: boolean): void;
   on_match_complete(
     pin_count: MatchSetup["pin_count"],
+    bowls_per_frame: number,
     scores: Readonly<Record<number, number>>,
   ): void;
   on_exit(): void;
@@ -95,7 +97,6 @@ export function Game(props: GameProps): JSX.Element {
   const [drawn_aim_guide_first_screen_x, set_drawn_aim_guide_first_screen_x] = createSignal<
     number | undefined
   >();
-  const [camera_zoom, set_camera_zoom] = createSignal(0);
   const [camera_progress, set_camera_progress] = createSignal(0);
   const [ball_in_pit, set_ball_in_pit] = createSignal(false);
   const [preview_path, set_preview_path] = createSignal<Float32Array | undefined>();
@@ -121,7 +122,6 @@ export function Game(props: GameProps): JSX.Element {
   function apply_camera(next_camera: CameraState): void {
     camera = next_camera;
     renderer?.set_camera(camera);
-    if (camera_zoom() !== camera.zoom) set_camera_zoom(camera.zoom);
     if (camera_progress() !== camera.shot_progress) set_camera_progress(camera.shot_progress);
   }
 
@@ -156,7 +156,11 @@ export function Game(props: GameProps): JSX.Element {
     // M1 removes rolling-ball steering from the worker protocol. M2 replaces this
     // transitional local input state with the four pre-roll controls.
     if (effect.type === "match_complete")
-      props.on_match_complete(props.setup.pin_count, effect.best_scores);
+      props.on_match_complete(
+        props.setup.pin_count,
+        match_state().bowls_per_frame,
+        effect.best_scores,
+      );
   }
 
   function dispatch(action: MatchAction): MatchState {
@@ -461,7 +465,7 @@ export function Game(props: GameProps): JSX.Element {
       data-drawn-aim-guide-first-screen-x={drawn_aim_guide_first_screen_x()?.toFixed(2) ?? ""}
       data-camera-mode="centered-shot"
       data-camera-progress={camera_progress().toFixed(4)}
-      data-camera-zoom={camera_zoom().toFixed(4)}
+      data-camera-zoom="0.0000"
       data-ball-in-pit={ball_in_pit() ? "true" : "false"}
       data-reduced-motion={props.reduced_motion() ? "true" : "false"}
       data-aim-guide={
@@ -480,28 +484,30 @@ export function Game(props: GameProps): JSX.Element {
         <button class="back_button" type="button" onClick={() => props.on_exit()}>
           New match
         </button>
-        <div>
+        <div class="play_title">
           <p class="eyebrow">
             {props.setup.pin_count.toLocaleString()} mode -{" "}
             {match_state().pin_count.toLocaleString()} pins
           </p>
           <h1>Super Bowling</h1>
+          <p class="live_rule" data-bowls-per-frame={match_state().bowls_per_frame}>
+            {bowls_per_frame_rule_text(match_state().bowls_per_frame)}
+          </p>
         </div>
-        <p class="player_name">{active_player().name}</p>
+        <section class="match_roster" aria-label="Player roster">
+          <For each={match_state().players}>
+            {(player) => (
+              <p classList={{ active_player: player.player_id === match_state().active_player_id }}>
+                <span class="roster_ball" style={{ background: player.ball_design.base_color }} />
+                <span class="roster_name">{player.name}</span>
+                <strong>
+                  {score_text(match_state().score_cards[player.player_id]?.frames[9]?.score)}
+                </strong>
+              </p>
+            )}
+          </For>
+        </section>
       </header>
-      <section class="match_roster" aria-label="Player roster">
-        <For each={match_state().players}>
-          {(player) => (
-            <p classList={{ active_player: player.player_id === match_state().active_player_id }}>
-              <span class="roster_ball" style={{ background: player.ball_design.base_color }} />
-              {player.name}{" "}
-              <strong>
-                {score_text(match_state().score_cards[player.player_id]?.frames[9]?.score)}
-              </strong>
-            </p>
-          )}
-        </For>
-      </section>
       <section
         class="score_strip"
         aria-label={`Ten-frame ${match_state().pin_count.toLocaleString()}-pin score card for ${active_player().name}`}
@@ -522,7 +528,11 @@ export function Game(props: GameProps): JSX.Element {
                     each={
                       frame() === undefined
                         ? []
-                        : format_frame_roll_marks(frame()!, match_state().pin_count)
+                        : format_frame_roll_marks(
+                            frame()!,
+                            match_state().pin_count,
+                            match_state().bowls_per_frame,
+                          )
                     }
                   >
                     {(mark) => (

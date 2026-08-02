@@ -10,7 +10,12 @@ import {
   rack_row_count,
 } from "../src/config/lane.ts";
 import { mode_to_rack_pin_count } from "../src/config/pin_counts.ts";
-import { default_hook_tuning, hook_lateral_acceleration } from "../src/simulation/hook.ts";
+import { aim_limits } from "../src/game/aim.ts";
+import {
+  default_hook_tuning,
+  hook_lateral_acceleration,
+  superhuman_990_hook_tuning,
+} from "../src/simulation/hook.ts";
 import {
   ball_snapshot_stride,
   pin_snapshot_stride,
@@ -20,7 +25,14 @@ import {
   write_snapshot_pin,
 } from "../src/simulation/protocol.ts";
 import { create_preview_path } from "../src/simulation/preview.ts";
-import { apply_ball_force } from "../src/simulation/ball_force.ts";
+import {
+  apply_ball_force,
+  get_deck_assist_force_units,
+  get_deck_assist_geometry,
+  standard_deck_stall_guard,
+  superhuman_990_deck_assist,
+} from "../src/simulation/ball_force.ts";
+import { create_simulation_world } from "../src/simulation/world.ts";
 
 test("derives regulation lane geometry from complete triangular racks", () => {
   assert.equal(rack_row_count(10), 4);
@@ -83,6 +95,249 @@ test("hook preserves its spin and speed-phase behavioral contract", () => {
   assert.ok(Math.abs(hook_lateral_acceleration(1, roll_speed / 2)) < peak);
 });
 
+test("1,000 mode exposes a bounded superhuman envelope without changing 10-pin controls", async () => {
+  assert.deepEqual(
+    {
+      power: aim_limits(10).maximum_power,
+      spin: [aim_limits(10).minimum_spin, aim_limits(10).maximum_spin],
+    },
+    { power: 24, spin: [-1, 1] },
+  );
+  assert.deepEqual(
+    {
+      power: aim_limits(990).maximum_power,
+      spin: [aim_limits(990).minimum_spin, aim_limits(990).maximum_spin],
+    },
+    { power: 60, spin: [-4, 4] },
+  );
+  assert.ok(superhuman_990_hook_tuning.skid_speed > 60);
+  assert.equal(hook_lateral_acceleration(0, 50, superhuman_990_hook_tuning), 0);
+  const old_full_spin = hook_lateral_acceleration(1, 24, default_hook_tuning);
+  const superhuman_full_spin = hook_lateral_acceleration(4, 50, superhuman_990_hook_tuning);
+  assert.ok(
+    superhuman_full_spin > old_full_spin,
+    "full superhuman spin bends more than the old limit",
+  );
+  assert.equal(
+    hook_lateral_acceleration(-4, 50, superhuman_990_hook_tuning),
+    -superhuman_full_spin,
+  );
+  const crossing_x = (path) => {
+    for (let index = 2; index < path.length; index += 2) {
+      const previous_y = path[index - 1];
+      const next_y = path[index + 1];
+      if (previous_y <= 60 && next_y >= 60) {
+        const fraction = (60 - previous_y) / (next_y - previous_y);
+        return path[index - 2] + (path[index] - path[index - 2]) * fraction;
+      }
+    }
+    throw new Error("preview did not cross the head-pin plane");
+  };
+  const old_full = crossing_x(
+    await create_preview_path(10, { power: 24, start_position: 0, angle: 0, spin: 1 }),
+  );
+  const right = crossing_x(
+    await create_preview_path(990, { power: 60, start_position: 0, angle: 0, spin: 4 }),
+  );
+  const left = crossing_x(
+    await create_preview_path(990, { power: 60, start_position: 0, angle: 0, spin: -4 }),
+  );
+  assert.ok(Math.abs(right) > Math.abs(old_full));
+  assert.ok(Math.abs(Math.abs(right) - Math.abs(left)) < 0.00001);
+});
+
+test("world launch honors the rack-aware player power and spin limits", async () => {
+  const superhuman = await create_simulation_world(990);
+  superhuman.launch(999, 0, 0, 999);
+  let snapshot = superhuman.create_snapshot();
+  assert.equal(snapshot.data[990 * pin_snapshot_stride + 3], 60);
+  superhuman.dispose();
+
+  const regulation = await create_simulation_world(10);
+  regulation.launch(999, 0, 0, 999);
+  snapshot = regulation.create_snapshot();
+  assert.equal(snapshot.data[10 * pin_snapshot_stride + 3], 24);
+  regulation.dispose();
+});
+
+test("990 through-pin drive starts only after a real pin contact and resets for the next roll", async () => {
+  const world = await create_simulation_world(990);
+  // This deck-impact fixture starts inside the superhuman envelope, then
+  // falls below the target through a dense rack and exercises anti-stall.
+  world.launch(48, 0, 0, 0);
+  assert.deepEqual(world.get_ball_drive_diagnostics(), {
+    has_hit_pin: false,
+    deck_assist_acceleration: 0,
+    deck_assist_force_lbf: 0,
+    deck_assist_force_world: 0,
+    deck_assist_geometry_scale: 0,
+    deck_assist_geometry_factor: 0,
+    deck_assist_force: 0,
+    deck_assist_fade: 0,
+    deck_assist_active: false,
+    forward_progress_speed: 0,
+  });
+  let saw_contact = false;
+  let saw_assist = false;
+  for (let step = 0; step < 2_000; step += 1) {
+    world.step_fixed();
+    const diagnostic = world.get_ball_drive_diagnostics();
+    saw_contact ||= diagnostic.has_hit_pin;
+    saw_assist ||= diagnostic.deck_assist_active;
+    if (saw_assist) {
+      const geometry = get_deck_assist_geometry(990);
+      const force_units = get_deck_assist_force_units(990);
+      assert.ok(diagnostic.deck_assist_acceleration <= geometry.maximum_acceleration);
+      assert.ok(Number.isFinite(force_units.world_units_per_foot));
+      assert.ok(Number.isFinite(force_units.geometry_factor));
+      assert.ok(force_units.world_units_per_foot > 0);
+      assert.ok(force_units.geometry_factor > 0);
+      assert.equal(diagnostic.deck_assist_geometry_scale, force_units.world_units_per_foot);
+      assert.equal(diagnostic.deck_assist_geometry_factor, force_units.geometry_factor);
+      assert.ok(Number.isFinite(diagnostic.deck_assist_force_lbf));
+      assert.ok(Number.isFinite(diagnostic.deck_assist_force_world));
+      assert.ok(diagnostic.deck_assist_force_lbf > 0);
+      assert.ok(diagnostic.deck_assist_force_world > 0);
+      assert.ok(diagnostic.deck_assist_force > 0);
+      assert.ok(
+        Math.abs(
+          diagnostic.deck_assist_force_world -
+            diagnostic.deck_assist_force_lbf *
+              32.174 *
+              diagnostic.deck_assist_geometry_scale *
+              diagnostic.deck_assist_geometry_factor *
+              diagnostic.deck_assist_fade,
+        ) < 0.000001,
+      );
+      assert.ok(
+        Math.abs(
+          diagnostic.deck_assist_force_world -
+            world.get_ball_collision_profile().mass * diagnostic.deck_assist_acceleration,
+        ) < 0.000001,
+      );
+      assert.ok(diagnostic.deck_assist_fade > 0 && diagnostic.deck_assist_fade <= 1);
+      assert.ok(diagnostic.forward_progress_speed < geometry.target_progress_speed);
+      break;
+    }
+  }
+  assert.equal(saw_contact, true);
+  assert.equal(saw_assist, true);
+  let reached_pit = false;
+  for (let step = 0; step < 2_000; step += 1) {
+    world.step_fixed();
+    const snapshot = world.create_snapshot();
+    if (snapshot.data[990 * pin_snapshot_stride + 5] === 1) {
+      reached_pit = true;
+      break;
+    }
+  }
+  assert.equal(reached_pit, true, "deck assist carries the ball through to the pit");
+  world.prepare_next_roll();
+  assert.deepEqual(world.get_ball_drive_diagnostics(), {
+    has_hit_pin: false,
+    deck_assist_acceleration: 0,
+    deck_assist_force_lbf: 0,
+    deck_assist_force_world: 0,
+    deck_assist_geometry_scale: 0,
+    deck_assist_geometry_factor: 0,
+    deck_assist_force: 0,
+    deck_assist_fade: 0,
+    deck_assist_active: false,
+    forward_progress_speed: 0,
+  });
+  world.dispose();
+});
+
+test("deck-assist unit conversion fades the reconstructed world force to zero at the backstop", () => {
+  const geometry = get_deck_assist_geometry(990);
+  const force_units = get_deck_assist_force_units(990);
+  assert.equal(force_units.world_units_per_foot, 1);
+  assert.ok(force_units.geometry_factor > 1);
+  let applied_force = null;
+  const body = {
+    mass: () => 40,
+    linvel: () => ({ x: 0, y: 0 }),
+    setLinvel: () => {},
+    translation: () => ({ x: 0, y: geometry.pin_field_backstop_y }),
+    addForce: (force) => {
+      applied_force = force;
+    },
+  };
+  const state = apply_ball_force(
+    body,
+    {
+      spin: 0,
+      in_gutter: false,
+      in_pit: false,
+      has_hit_pin: true,
+      deck_assist_acceleration: 0,
+      deck_assist_force: 0,
+      deck_assist_fade: 0,
+      deck_assist_active: false,
+      forward_progress_speed: 0,
+      last_y: geometry.pin_field_backstop_y,
+      launch_direction: { x: 0, y: 1 },
+    },
+    { pin_count: 990, timestep_seconds: 1 / 120, damping: 0, spin_decay: 0 },
+  );
+  assert.equal(state.deck_assist_fade, 0);
+  assert.equal(state.deck_assist_force_lbf, 0);
+  assert.equal(state.deck_assist_force_world, 0);
+  assert.equal(state.deck_assist_force, 0);
+  assert.equal(applied_force, null);
+});
+
+test("standard recovery remains bounded and a normal ten-pin roll never activates it", async () => {
+  assert.deepEqual(standard_deck_stall_guard, {
+    minimum_progress_speed: 1,
+    response_seconds: 0.12,
+    maximum_acceleration: 20,
+  });
+  assert.deepEqual(superhuman_990_deck_assist, {
+    minimum_progress_speed: 24,
+    response_seconds: 0.16,
+    maximum_acceleration: 24,
+  });
+  const world = await create_simulation_world(10);
+  world.launch(24, 0, 0, 0);
+  let reached_pit = false;
+  let maximum_assist = 0;
+  for (let step = 0; step < 3_000; step += 1) {
+    world.step_fixed();
+    maximum_assist = Math.max(
+      maximum_assist,
+      world.get_ball_drive_diagnostics().deck_assist_acceleration,
+    );
+    if (world.create_snapshot().data[10 * pin_snapshot_stride + 5] === 1) {
+      reached_pit = true;
+      break;
+    }
+  }
+  assert.equal(reached_pit, true);
+  assert.equal(maximum_assist, 0, "unobstructed ten-pin path retains native travel");
+  world.dispose();
+});
+
+test("990 through-pin drive is absent from pins-free preview and disabled diagnostic runs", async () => {
+  const disabled = await create_simulation_world(990, { deck_assist_enabled: false });
+  try {
+    disabled.launch(60, 0, 0, 4);
+    for (let step = 0; step < 2_000; step += 1) {
+      disabled.step_fixed();
+      assert.equal(disabled.get_ball_drive_diagnostics().deck_assist_active, false);
+    }
+  } finally {
+    disabled.dispose();
+  }
+  const preview = await create_preview_path(990, {
+    power: 60,
+    start_position: 0,
+    angle: 0,
+    spin: 4,
+  });
+  assert.ok([...preview].every(Number.isFinite));
+});
+
 test("pins-free preview curves with spin direction in the shared physics world", async () => {
   const zero_spin = await create_preview_path(10, {
     power: 16,
@@ -134,7 +389,15 @@ test("gutter entry disables hook and captures only at the pit", () => {
   const options = { pin_count: 10, timestep_seconds: 1 / 120, damping: 0, spin_decay: 0 };
   const entered_gutter = apply_ball_force(
     body,
-    { spin: 1, in_gutter: false, in_pit: false },
+    {
+      spin: 1,
+      in_gutter: false,
+      in_pit: false,
+      has_hit_pin: true,
+      deck_assist_acceleration: 0,
+      forward_progress_speed: 0,
+      last_y: 0,
+    },
     options,
   );
   assert.equal(entered_gutter.in_gutter, true);
@@ -151,7 +414,15 @@ test("gutter entry disables hook and captures only at the pit", () => {
   position.y = 0;
   const before_pit = apply_ball_force(
     body,
-    { spin: 0, in_gutter: false, in_pit: false },
+    {
+      spin: 0,
+      in_gutter: false,
+      in_pit: false,
+      has_hit_pin: false,
+      deck_assist_acceleration: 0,
+      forward_progress_speed: 0,
+      last_y: 0,
+    },
     {
       ...options,
       capture_ball: () => {

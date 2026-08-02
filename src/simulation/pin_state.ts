@@ -14,13 +14,14 @@ export const sweep_angle_tolerance_radians = (5 * Math.PI) / 180;
 export function update_pin_state(
   current_state: PinState,
   displacement: number,
-  contact_impulse: number,
+  contact_velocity_change: number,
 ): PinState {
   if (current_state === "fallen") {
     return "fallen";
   }
   const is_fallen =
-    displacement >= physics_config.fall_distance || contact_impulse >= physics_config.fall_impulse;
+    displacement >= physics_config.fall_distance ||
+    contact_velocity_change >= physics_config.fall_velocity_change_ft_per_second;
   return is_fallen ? "fallen" : "standing";
 }
 

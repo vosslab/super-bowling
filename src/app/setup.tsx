@@ -4,6 +4,11 @@ import { create_player_id } from "../brands";
 import { get_mode_label, supported_pin_counts, type PinCount } from "../config/pin_counts";
 import { normalize_ball_design, type BallDesign } from "../designer/ball_design";
 import { BallDesigner } from "../designer/ball_designer";
+import {
+  bowls_per_frame_rule_text,
+  is_valid_bowls_per_frame,
+  supported_bowls_per_frame,
+} from "../game/bowls_per_frame";
 import type { MatchSetup } from "../game/contracts";
 import type { RecentMatchSetup } from "../save/contracts";
 
@@ -13,6 +18,7 @@ type PlayerDraft = {
 };
 
 export type SetupDraft = {
+  bowls_per_frame: number;
   pin_count: PinCount;
   players: readonly PlayerDraft[];
 };
@@ -51,6 +57,9 @@ function default_player_draft(index: number): PlayerDraft {
 }
 
 export function create_match_setup(draft: SetupDraft): MatchSetup {
+  if (!is_valid_bowls_per_frame(draft.bowls_per_frame)) {
+    throw new Error("Bowls per frame must be an integer from one through five.");
+  }
   const players = draft.players.map((player, index) => {
     const trimmed_name = player.name.trim();
     return {
@@ -60,7 +69,7 @@ export function create_match_setup(draft: SetupDraft): MatchSetup {
     };
   });
   if (players.length < 1 || players.length > 4) throw new Error("Choose one through four players.");
-  return { pin_count: draft.pin_count, players };
+  return { bowls_per_frame: draft.bowls_per_frame, pin_count: draft.pin_count, players };
 }
 
 export type SetupProps = {
@@ -68,7 +77,7 @@ export type SetupProps = {
   initial_setup(): RecentMatchSetup;
   mute_enabled(): boolean;
   reduced_motion(): boolean;
-  best_score(pin_count: PinCount): number | undefined;
+  best_score(pin_count: PinCount, bowls_per_frame: number): number | undefined;
   on_set_mute(mute_enabled: boolean): void;
   on_set_reduced_motion(reduced_motion: boolean): void;
   fixture_mode?: "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | "preview_stale";
@@ -76,6 +85,7 @@ export type SetupProps = {
 
 export function Setup(props: SetupProps): JSX.Element {
   const [draft, set_draft] = createSignal<SetupDraft>({
+    bowls_per_frame: props.initial_setup().bowls_per_frame,
     pin_count: props.initial_setup().pin_count,
     players: props.initial_setup().players.map((player) => ({
       name: player.name,
@@ -158,8 +168,28 @@ export function Setup(props: SetupProps): JSX.Element {
             </fieldset>
             <p class="best_score" aria-live="polite">
               Best for {get_mode_label(draft().pin_count)}:{" "}
-              {props.best_score(draft().pin_count) ?? "-"}
+              {props.best_score(draft().pin_count, draft().bowls_per_frame) ?? "-"}
             </p>
+            <fieldset class="bowls_per_frame_picker">
+              <legend>Bowls per frame</legend>
+              <div class="bowls_per_frame_row" aria-label="Bowls per frame">
+                <For each={supported_bowls_per_frame}>
+                  {(bowls_per_frame) => (
+                    <button
+                      class="bowls_per_frame_button"
+                      type="button"
+                      aria-pressed={draft().bowls_per_frame === bowls_per_frame}
+                      onClick={() => set_draft({ ...draft(), bowls_per_frame })}
+                    >
+                      {bowls_per_frame}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <p class="bowls_rule" aria-live="polite">
+                {bowls_per_frame_rule_text(draft().bowls_per_frame)}
+              </p>
+            </fieldset>
             <section class="player_roster" aria-label="Players">
               <header class="roster_heading">
                 <div>

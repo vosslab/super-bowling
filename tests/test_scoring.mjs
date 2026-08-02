@@ -10,9 +10,9 @@ import {
   validate_score_card,
 } from "../src/game/scoring.ts";
 
-function score_rolls(pin_count, rolls) {
+function score_rolls(pin_count, rolls, bowls_per_frame = 2) {
   return rolls.reduce(
-    (card, roll) => append_roll(card, pin_count, roll),
+    (card, roll) => append_roll(card, pin_count, roll, bowls_per_frame),
     create_empty_score_card(),
   );
 }
@@ -103,4 +103,57 @@ test("rejects roll sequences that exceed a standing rack", () => {
   const invalid_card = [{ frame_index: 0, rolls: [7, 4] }];
   assert.equal(validate_score_card(invalid_card, 10).valid, false);
   assert.throws(() => append_roll(score_rolls(10, [7]), 10, 4));
+});
+
+test("scores super frames by actual pinfall with no bonus scoring", () => {
+  const card = score_rolls(10, [4, 3, 3, 10], 3);
+  assert.deepEqual(card, [
+    { frame_index: 0, rolls: [4, 3, 3] },
+    { frame_index: 1, rolls: [10] },
+  ]);
+  assert.equal(score_card(card, 10, 3)[0]?.score, 10);
+  assert.equal(score_card(card, 10, 3)[1]?.score, 20);
+});
+
+test("uses the configured super-frame bowl limit and rejects rack overflow", () => {
+  const partial = score_rolls(10, [2, 3, 4], 3);
+  assert.equal(partial[0]?.rolls.length, 3);
+  assert.deepEqual(append_roll(partial, 10, 1, 3)[1], { frame_index: 1, rolls: [1] });
+  assert.throws(() => append_roll(score_rolls(10, [7], 3), 10, 4, 3));
+  assert.equal(validate_score_card([{ frame_index: 0, rolls: [5, 5] }], 10, 3).valid, true);
+});
+
+test("gives a super-frame tenth its unconditional extra bowl", () => {
+  const opening_rolls = Array.from({ length: 9 }, () => [4, 3, 3]).flat();
+  const card = score_rolls(10, [...opening_rolls, 4, 3, 2, 0], 3);
+  assert.equal(card.length, 10);
+  assert.equal(total_score(card, 10, 3), 99);
+  assert.throws(() => append_roll(card, 10, 0, 3));
+
+  const early_clear = score_rolls(10, [...opening_rolls, 10, 10, 10, 10], 3);
+  assert.equal(early_clear[9]?.rolls.length, 4);
+  assert.equal(total_score(early_clear, 10, 3), 130);
+  assert.throws(() => append_roll(early_clear, 10, 0, 3));
+});
+
+test("scores both endpoint super-frame bowl rules through their fixed tenth-frame total", () => {
+  for (const bowls_per_frame of [1, 5]) {
+    const total_rolls = 9 * bowls_per_frame + bowls_per_frame + 1;
+    const card = score_rolls(
+      10,
+      Array.from({ length: total_rolls }, () => 0),
+      bowls_per_frame,
+    );
+
+    assert.equal(card.length, 10);
+    assert.equal(card[0]?.rolls.length, bowls_per_frame);
+    assert.equal(card[9]?.rolls.length, bowls_per_frame + 1);
+    assert.equal(total_score(card, 10, bowls_per_frame), 0);
+  }
+});
+
+test("rejects invalid bowls-per-frame values", () => {
+  assert.equal(validate_score_card([], 10, 0).valid, false);
+  assert.equal(validate_score_card([], 10, 6).valid, false);
+  assert.equal(validate_score_card([], 10, 2.5).valid, false);
 });

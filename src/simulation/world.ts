@@ -12,7 +12,15 @@ import {
   pin_radius,
 } from "../config/lane";
 import { get_mode_for_rack_pin_count, type RackPinCount } from "../config/pin_counts";
-import { get_mode_tuning, get_settle_max_seconds, physics_config } from "../config/physics";
+import { aim_limits, clamp } from "../game/aim";
+import {
+  get_ball_mass_lb,
+  get_pin_contact_force_event_threshold,
+  get_pin_velocity_change_from_contact_force,
+  get_mode_tuning,
+  get_settle_max_seconds,
+  physics_config,
+} from "../config/physics";
 import { create_activation_index, find_nearby_pin_ids } from "./activation";
 import { apply_ball_force, type BallForceState } from "./ball_force";
 import { get_pin_state_flag, type PinState, update_pin_state } from "./pin_state";
@@ -42,6 +50,7 @@ type PinRecord = {
   removed: boolean;
   in_pit: boolean;
   fallen_collider: boolean;
+  last_physical_position: { x: number; y: number } | undefined;
   nearby_activation_requested: boolean;
 };
 
@@ -75,6 +84,61 @@ export type PinCollisionProfile = {
   footprint_length: number;
 };
 
+export type BallCollisionProfile = {
+  mass: number;
+};
+
+export type BallDriveDiagnostics = {
+  has_hit_pin: boolean;
+  deck_assist_acceleration: number;
+  deck_assist_force_lbf: number;
+  deck_assist_force_world: number;
+  deck_assist_geometry_scale: number;
+  deck_assist_geometry_factor: number;
+  deck_assist_force: number;
+  deck_assist_fade: number;
+  deck_assist_active: boolean;
+  forward_progress_speed: number;
+};
+
+export type CollisionPath = "ball_pin" | "pin_pin";
+
+export type CollisionPathDiagnostics = {
+  contact_occurrences: number;
+  contact_force_events: number;
+  // Rapier reports this manifold impulse for a newly-started collider pair.
+  total_impulse: number;
+  maximum_impulse: number;
+  // This is the pair endpoints' net pre/post-step delta, so simultaneous
+  // contacts in that fixed step can contribute to it as well.
+  total_endpoint_velocity_change: number;
+  maximum_endpoint_velocity_change: number;
+  contacts_after_fallen_collider_replacement: number;
+  deepest_propagation_depth: number;
+  deepest_contact_row: number | undefined;
+};
+
+export type PinImpactDiagnostic = {
+  step: number;
+  active: boolean;
+  sleeping: boolean;
+  collider_shape: "standing_circle" | "fallen_capsule";
+};
+
+function create_collision_path_diagnostics(): CollisionPathDiagnostics {
+  return {
+    contact_occurrences: 0,
+    contact_force_events: 0,
+    total_impulse: 0,
+    maximum_impulse: 0,
+    total_endpoint_velocity_change: 0,
+    maximum_endpoint_velocity_change: 0,
+    contacts_after_fallen_collider_replacement: 0,
+    deepest_propagation_depth: 0,
+    deepest_contact_row: undefined,
+  };
+}
+
 export type SimulationWorld = {
   readonly pin_count: RackPinCount;
   readonly rack: Rack;
@@ -90,9 +154,16 @@ export type SimulationWorld = {
   get_total_body_count(): number;
   get_pin_velocity(pin_id: PinId): { x: number; y: number };
   get_pin_position(pin_id: PinId): { x: number; y: number; rotation: number };
+  get_pin_final_position(pin_id: PinId): { x: number; y: number };
   get_pin_fallen_axis_angle(pin_id: PinId): number | undefined;
   get_pin_first_contact(pin_id: PinId): PinFirstContact | undefined;
   get_pin_collision_profile(pin_id: PinId): PinCollisionProfile;
+  get_ball_collision_profile(): BallCollisionProfile;
+  get_ball_drive_diagnostics(): BallDriveDiagnostics;
+  get_pin_impact_diagnostic(pin_id: PinId): PinImpactDiagnostic | undefined;
+  get_collision_path_diagnostics(): Record<CollisionPath, CollisionPathDiagnostics>;
+  is_pin_fallen(pin_id: PinId): boolean;
+  get_pin_final_distance_from_rack_slot(pin_id: PinId): number | undefined;
   is_pin_active(pin_id: PinId): boolean;
   activate_pin(pin_id: PinId): boolean;
   activate_nearby(x: number, y: number): number;
@@ -118,14 +189,14 @@ function create_pin_body(world: RAPIER.World, x: number, y: number): RAPIER.Rigi
 
 function create_pin_collider(world: RAPIER.World, body: RAPIER.RigidBody): RAPIER.Collider {
   const collider_description = RAPIER.ColliderDesc.ball(physics_config.pin_radius)
-    .setDensity(physics_config.pin_mass)
+    .setMass(physics_config.pin_mass_lb)
     .setFriction(physics_config.pin_friction)
     .setRestitution(physics_config.restitution)
+    .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Max)
     .setActiveEvents(
       RAPIER.ActiveEvents.COLLISION_EVENTS | RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS,
     )
-    // Rapier's threshold is force; the game fall rule is an impulse per fixed step.
-    .setContactForceEventThreshold(physics_config.fall_impulse / physics_config.fixed_step_seconds);
+    .setContactForceEventThreshold(get_pin_contact_force_event_threshold());
   return world.createCollider(collider_description, body);
 }
 
@@ -147,10 +218,11 @@ function create_fallen_pin_collider(
     .setMass(mass)
     .setFriction(physics_config.pin_friction)
     .setRestitution(physics_config.restitution)
+    .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Max)
     .setActiveEvents(
       RAPIER.ActiveEvents.COLLISION_EVENTS | RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS,
     )
-    .setContactForceEventThreshold(physics_config.fall_impulse / physics_config.fixed_step_seconds);
+    .setContactForceEventThreshold(get_pin_contact_force_event_threshold());
   return world.createCollider(collider_description, body);
 }
 
@@ -167,7 +239,7 @@ type BallSnapshot = {
   rotation: number;
 };
 
-function create_ball_body(world: RAPIER.World): BallRecord {
+function create_ball_body(world: RAPIER.World, pin_count: RackPinCount): BallRecord {
   const body_description = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(0, 0)
     .setLinearDamping(0)
@@ -175,14 +247,14 @@ function create_ball_body(world: RAPIER.World): BallRecord {
     .lockRotations();
   const body = world.createRigidBody(body_description);
   const collider_description = RAPIER.ColliderDesc.ball(physics_config.ball_radius)
-    .setDensity(physics_config.ball_mass)
+    .setMass(get_ball_mass_lb(pin_count))
     .setFriction(physics_config.lane_friction)
     .setRestitution(physics_config.restitution)
+    .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Max)
     .setActiveEvents(
       RAPIER.ActiveEvents.COLLISION_EVENTS | RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS,
     )
-    // Rapier's threshold is force; the game fall rule is an impulse per fixed step.
-    .setContactForceEventThreshold(physics_config.fall_impulse / physics_config.fixed_step_seconds);
+    .setContactForceEventThreshold(get_pin_contact_force_event_threshold());
   const collider = world.createCollider(collider_description, body);
   body.sleep();
   return { body, collider_handle: collider.handle };
@@ -207,7 +279,10 @@ function get_speed(body: RAPIER.RigidBody): number {
   return Math.hypot(velocity.x, velocity.y);
 }
 
-export async function create_simulation_world(pin_count: RackPinCount): Promise<SimulationWorld> {
+export async function create_simulation_world(
+  pin_count: RackPinCount,
+  { deck_assist_enabled = true }: { deck_assist_enabled?: boolean } = {},
+): Promise<SimulationWorld> {
   await initialize_rapier();
   const tuning = get_mode_tuning(get_mode_for_rack_pin_count(pin_count));
   const rack = create_rack(pin_count);
@@ -288,6 +363,14 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
   const pins_by_id = new Map<PinId, PinRecord>();
   const pin_id_by_collider_handle = new Map<number, PinId>();
   const first_pin_contact_by_id = new Map<PinId, PinContactRecord>();
+  const first_pin_impact_by_id = new Map<PinId, PinImpactDiagnostic>();
+  const pin_contact_depth_by_id = new Map<PinId, number>();
+  let pre_step_velocity_by_collider_handle = new Map<number, { x: number; y: number }>();
+  let pre_step_pin_impact_by_id = new Map<PinId, PinImpactDiagnostic>();
+  const collision_path_diagnostics: Record<CollisionPath, CollisionPathDiagnostics> = {
+    ball_pin: create_collision_path_diagnostics(),
+    pin_pin: create_collision_path_diagnostics(),
+  };
 
   for (const slot of rack.slots) {
     const body = create_pin_body(rapier_world, slot.x, slot.y);
@@ -304,13 +387,14 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
       removed: false,
       in_pit: false,
       fallen_collider: false,
+      last_physical_position: undefined,
       nearby_activation_requested: false,
     };
     pins_by_id.set(slot.pin_id, record);
     pin_id_by_collider_handle.set(collider.handle, slot.pin_id);
   }
 
-  let ball: BallRecord | undefined = create_ball_body(rapier_world);
+  let ball: BallRecord | undefined = create_ball_body(rapier_world, pin_count);
   let retained_ball_snapshot: BallSnapshot = {
     x: 0,
     y: 0,
@@ -318,7 +402,23 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
     velocity_y: 0,
     rotation: 0,
   };
-  let ball_force_state: BallForceState = { spin: 0, in_gutter: false, in_pit: false };
+  let ball_force_state: BallForceState = {
+    spin: 0,
+    in_gutter: false,
+    in_pit: false,
+    has_hit_pin: false,
+    deck_assist_acceleration: 0,
+    deck_assist_force_lbf: 0,
+    deck_assist_force_world: 0,
+    deck_assist_geometry_scale: 0,
+    deck_assist_geometry_factor: 0,
+    deck_assist_force: 0,
+    deck_assist_fade: 0,
+    deck_assist_active: false,
+    forward_progress_speed: 0,
+    last_y: 0,
+    launch_direction: { x: 0, y: 1 },
+  };
   let launched = false;
   let roll_elapsed_seconds = 0;
   let quiet_time = 0;
@@ -331,6 +431,178 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
     const record = pins_by_id.get(pin_id);
     if (record === undefined) throw new Error(`Unknown pin id: ${pin_id}`);
     return record;
+  }
+
+  function get_collision_path(
+    first_handle: number,
+    second_handle: number,
+  ): CollisionPath | undefined {
+    const first_pin = pin_id_by_collider_handle.get(first_handle);
+    const second_pin = pin_id_by_collider_handle.get(second_handle);
+    if (first_pin !== undefined && second_pin !== undefined) return "pin_pin";
+    if (
+      (first_pin !== undefined && second_handle === ball?.collider_handle) ||
+      (second_pin !== undefined && first_handle === ball?.collider_handle)
+    ) {
+      return "ball_pin";
+    }
+    return undefined;
+  }
+
+  function get_pre_step_impact(record: PinRecord): PinImpactDiagnostic {
+    return (
+      pre_step_pin_impact_by_id.get(record.pin_id) ?? {
+        step: roll_step,
+        active: record.active,
+        sleeping: record.body.isSleeping(),
+        collider_shape: record.fallen_collider ? "fallen_capsule" : "standing_circle",
+      }
+    );
+  }
+
+  function record_pin_impact(record: PinRecord): void {
+    if (!first_pin_impact_by_id.has(record.pin_id)) {
+      first_pin_impact_by_id.set(record.pin_id, get_pre_step_impact(record));
+    }
+  }
+
+  function record_collision_occurrence(
+    path: CollisionPath,
+    first_handle: number,
+    second_handle: number,
+    first_pin_id: PinId | undefined,
+    second_pin_id: PinId | undefined,
+  ): void {
+    const diagnostics = collision_path_diagnostics[path];
+    diagnostics.contact_occurrences += 1;
+    const first_collider = rapier_world.getCollider(first_handle);
+    const second_collider = rapier_world.getCollider(second_handle);
+    if (first_collider !== null && second_collider !== null) {
+      let impulse = 0;
+      rapier_world.contactPair(first_collider, second_collider, (manifold) => {
+        for (let index = 0; index < manifold.numContacts(); index += 1) {
+          impulse += Math.hypot(
+            manifold.contactImpulse(index),
+            manifold.contactTangentImpulse(index),
+          );
+        }
+      });
+      diagnostics.total_impulse += impulse;
+      diagnostics.maximum_impulse = Math.max(diagnostics.maximum_impulse, impulse);
+    }
+    const velocity_change = [first_handle, second_handle].reduce((total, handle) => {
+      const previous = pre_step_velocity_by_collider_handle.get(handle);
+      if (previous === undefined) return total;
+      const pin_id = pin_id_by_collider_handle.get(handle);
+      const body =
+        pin_id === undefined
+          ? handle === ball?.collider_handle
+            ? ball.body
+            : undefined
+          : require_pin(pin_id).body;
+      if (body === undefined) return total;
+      const current = body.linvel();
+      return total + Math.hypot(current.x - previous.x, current.y - previous.y);
+    }, 0);
+    diagnostics.total_endpoint_velocity_change += velocity_change;
+    diagnostics.maximum_endpoint_velocity_change = Math.max(
+      diagnostics.maximum_endpoint_velocity_change,
+      velocity_change,
+    );
+    const pin_ids = [first_pin_id, second_pin_id].filter(
+      (pin_id): pin_id is PinId => pin_id !== undefined,
+    );
+    const records = pin_ids.map(require_pin);
+    if (records.some((record) => record.fallen_collider)) {
+      diagnostics.contacts_after_fallen_collider_replacement += 1;
+    }
+    for (const record of records) record_pin_impact(record);
+  }
+
+  function update_propagation_depth(
+    direct_ball_contacts: Set<PinId>,
+    pin_pin_edges: Array<[PinId, PinId]>,
+  ): void {
+    const depths = new Map(pin_contact_depth_by_id);
+    for (const pin_id of direct_ball_contacts) depths.set(pin_id, 0);
+    const edges = [...pin_pin_edges].sort(
+      ([first_a, second_a], [first_b, second_b]) =>
+        Number(first_a) - Number(first_b) || Number(second_a) - Number(second_b),
+    );
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [first_pin, second_pin] of edges) {
+        const first_depth = depths.get(first_pin);
+        const second_depth = depths.get(second_pin);
+        if (first_depth !== undefined && first_depth + 1 < (second_depth ?? Infinity)) {
+          depths.set(second_pin, first_depth + 1);
+          changed = true;
+        }
+        if (second_depth !== undefined && second_depth + 1 < (first_depth ?? Infinity)) {
+          depths.set(first_pin, second_depth + 1);
+          changed = true;
+        }
+      }
+    }
+    pin_contact_depth_by_id.clear();
+    for (const [pin_id, depth] of depths) pin_contact_depth_by_id.set(pin_id, depth);
+    const diagnostics = collision_path_diagnostics.pin_pin;
+    for (const [pin_id, depth] of depths) {
+      if (depth === 0) continue;
+      diagnostics.deepest_propagation_depth = Math.max(
+        diagnostics.deepest_propagation_depth,
+        depth,
+      );
+      const slot = rack.slots.find((candidate) => candidate.pin_id === pin_id);
+      if (slot !== undefined) {
+        diagnostics.deepest_contact_row = Math.max(
+          diagnostics.deepest_contact_row ?? 0,
+          slot.row_index,
+        );
+      }
+    }
+  }
+
+  function record_contact_force(path: CollisionPath): void {
+    const diagnostics = collision_path_diagnostics[path];
+    diagnostics.contact_force_events += 1;
+  }
+
+  function capture_pre_step_collision_state(): void {
+    pre_step_velocity_by_collider_handle = new Map();
+    pre_step_pin_impact_by_id = new Map();
+    if (ball !== undefined) {
+      const velocity = ball.body.linvel();
+      pre_step_velocity_by_collider_handle.set(ball.collider_handle, {
+        x: velocity.x,
+        y: velocity.y,
+      });
+    }
+    for (const record of pins_by_id.values()) {
+      if (record.removed) continue;
+      const velocity = record.body.linvel();
+      pre_step_velocity_by_collider_handle.set(record.collider_handle, {
+        x: velocity.x,
+        y: velocity.y,
+      });
+      pre_step_pin_impact_by_id.set(record.pin_id, {
+        step: roll_step + 1,
+        active: record.active,
+        sleeping: record.body.isSleeping(),
+        collider_shape: record.fallen_collider ? "fallen_capsule" : "standing_circle",
+      });
+    }
+  }
+
+  function reset_collision_diagnostics(): void {
+    first_pin_impact_by_id.clear();
+    pin_contact_depth_by_id.clear();
+    pre_step_velocity_by_collider_handle = new Map();
+    pre_step_pin_impact_by_id = new Map();
+    for (const path of ["ball_pin", "pin_pin"] as const) {
+      Object.assign(collision_path_diagnostics[path], create_collision_path_diagnostics());
+    }
   }
 
   function activate_pin(pin_id: PinId): boolean {
@@ -430,6 +702,8 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
 
   function process_collision_events(): void {
     const pin_ids_to_capture = new Set<PinId>();
+    const direct_ball_contacts = new Set<PinId>();
+    const pin_pin_edges: Array<[PinId, PinId]> = [];
     let ball_entered_pit = false;
     event_queue.drainCollisionEvents((first_handle, second_handle, started) => {
       if (!started) return;
@@ -448,29 +722,51 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
       const first_pin = pin_id_by_collider_handle.get(first_handle);
       const second_pin = pin_id_by_collider_handle.get(second_handle);
       if (first_pin !== undefined && second_pin !== undefined) {
+        record_collision_occurrence("pin_pin", first_handle, second_handle, first_pin, second_pin);
+        pin_pin_edges.push(
+          Number(first_pin) < Number(second_pin)
+            ? [first_pin, second_pin]
+            : [second_pin, first_pin],
+        );
         record_pin_contact(first_pin, "pin_pin");
         record_pin_contact(second_pin, "pin_pin");
       } else if (first_pin !== undefined && second_handle === ball?.collider_handle) {
+        record_collision_occurrence("ball_pin", first_handle, second_handle, first_pin, undefined);
+        direct_ball_contacts.add(first_pin);
+        ball_force_state = { ...ball_force_state, has_hit_pin: true };
         record_pin_contact(first_pin, "ball_pin");
       } else if (second_pin !== undefined && first_handle === ball?.collider_handle) {
+        record_collision_occurrence("ball_pin", first_handle, second_handle, second_pin, undefined);
+        direct_ball_contacts.add(second_pin);
+        ball_force_state = { ...ball_force_state, has_hit_pin: true };
         record_pin_contact(second_pin, "ball_pin");
       }
       if (first_pin !== undefined) activate_pin(first_pin);
       if (second_pin !== undefined) activate_pin(second_pin);
     });
+    update_propagation_depth(direct_ball_contacts, pin_pin_edges);
     if (ball_entered_pit) capture_ball_in_pit();
     for (const pin_id of pin_ids_to_capture) capture_pin_in_pit(require_pin(pin_id));
   }
 
   function process_contact_force_events(fall_events: PinId[]): void {
     event_queue.drainContactForceEvents((event) => {
-      // Convert the per-step contact force back into the centralized impulse threshold unit.
-      const impulse = event.totalForceMagnitude() * physics_config.fixed_step_seconds;
+      const contact_force = event.totalForceMagnitude();
+      const path = get_collision_path(event.collider1(), event.collider2());
+      if (path !== undefined) {
+        record_contact_force(path);
+      }
       for (const handle of [event.collider1(), event.collider2()]) {
         const pin_id = pin_id_by_collider_handle.get(handle);
         if (pin_id === undefined) continue;
         const record = require_pin(pin_id);
-        const next_state = update_pin_state(record.state, 0, impulse);
+        const collider = rapier_world.getCollider(handle);
+        if (collider === null) continue;
+        const velocity_change = get_pin_velocity_change_from_contact_force(
+          contact_force,
+          collider.mass(),
+        );
+        const next_state = update_pin_state(record.state, 0, velocity_change);
         if (next_state === "fallen") mark_pin_fallen(record, fall_events);
       }
     });
@@ -531,6 +827,8 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
 
   function capture_pin_in_pit(record: PinRecord): void {
     if (record.removed) return;
+    const position = record.body.translation();
+    record.last_physical_position = { x: position.x, y: position.y };
     pin_id_by_collider_handle.delete(record.collider_handle);
     rapier_world.removeRigidBody(record.body);
     record.removed = true;
@@ -550,6 +848,7 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
         timestep_seconds: physics_config.fixed_step_seconds,
         damping: physics_config.ball_linear_damping,
         spin_decay: physics_config.ball_spin_decay,
+        deck_assist_enabled,
         capture_ball(): void {
           force_requested_capture = true;
         },
@@ -561,6 +860,7 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
         request_ball_nearby_activation(ball_position.x, ball_position.y);
       }
     }
+    capture_pre_step_collision_state();
     rapier_world.step(event_queue);
     roll_step += 1;
     roll_elapsed_seconds += physics_config.fixed_step_seconds;
@@ -634,27 +934,62 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
   }
 
   function launch(power: number, start_position: number, angle: number, spin: number): void {
-    const bounded_power = Math.max(0.1, Math.min(power, 24));
-    ball ??= create_ball_body(rapier_world);
-    ball.body.setTranslation({ x: start_position, y: 0 }, true);
+    const limits = aim_limits(pin_count);
+    // The worker receives a position/angle that has already been normalized by
+    // the game state. Keep direct simulation fixtures free to model gutters
+    // and deliberate misses, while making the player-facing power and spin
+    // envelope authoritative here as well.
+    const normalized_aim = {
+      power: Math.max(0.1, Math.min(power, limits.maximum_power)),
+      start_position,
+      angle,
+      spin: clamp(spin, limits.minimum_spin, limits.maximum_spin),
+    };
+    ball ??= create_ball_body(rapier_world, pin_count);
+    ball.body.setTranslation({ x: normalized_aim.start_position, y: 0 }, true);
     ball.body.setLinvel(
-      { x: Math.sin(angle) * bounded_power, y: Math.cos(angle) * bounded_power },
+      {
+        x: Math.sin(normalized_aim.angle) * normalized_aim.power,
+        y: Math.cos(normalized_aim.angle) * normalized_aim.power,
+      },
       true,
     );
     ball.body.wakeUp();
     launched = true;
     first_pin_contact_by_id.clear();
+    reset_collision_diagnostics();
     roll_step = 0;
     last_ball_activation_cell = undefined;
     roll_elapsed_seconds = 0;
     quiet_time = 0;
     accumulator = 0;
-    ball_force_state = { spin, in_gutter: false, in_pit: false };
+    ball_force_state = {
+      spin: normalized_aim.spin,
+      in_gutter: false,
+      in_pit: false,
+      has_hit_pin: false,
+      deck_assist_acceleration: 0,
+      deck_assist_force_lbf: 0,
+      deck_assist_force_world: 0,
+      deck_assist_geometry_scale: 0,
+      deck_assist_geometry_factor: 0,
+      deck_assist_force: 0,
+      deck_assist_fade: 0,
+      deck_assist_active: false,
+      forward_progress_speed: 0,
+      last_y: 0,
+      launch_direction: {
+        x: Math.sin(normalized_aim.angle),
+        y: Math.cos(normalized_aim.angle),
+      },
+    };
   }
 
   function sweep_deadwood(): void {
     for (const record of pins_by_id.values()) {
       if (record.state !== "fallen" || record.removed) continue;
+      const position = record.body.translation();
+      record.last_physical_position = { x: position.x, y: position.y };
       pin_id_by_collider_handle.delete(record.collider_handle);
       rapier_world.removeRigidBody(record.body);
       record.removed = true;
@@ -664,15 +999,32 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
 
   function prepare_next_roll(): void {
     sweep_deadwood();
-    ball ??= create_ball_body(rapier_world);
+    ball ??= create_ball_body(rapier_world, pin_count);
     ball.body.setTranslation({ x: 0, y: 0 }, true);
     ball.body.setLinvel({ x: 0, y: 0 }, true);
     ball.body.setAngvel(0, true);
     ball.body.sleep();
     retained_ball_snapshot = { x: 0, y: 0, velocity_x: 0, velocity_y: 0, rotation: 0 };
-    ball_force_state = { spin: 0, in_gutter: false, in_pit: false };
+    ball_force_state = {
+      spin: 0,
+      in_gutter: false,
+      in_pit: false,
+      has_hit_pin: false,
+      deck_assist_acceleration: 0,
+      deck_assist_force_lbf: 0,
+      deck_assist_force_world: 0,
+      deck_assist_geometry_scale: 0,
+      deck_assist_geometry_factor: 0,
+      deck_assist_force: 0,
+      deck_assist_fade: 0,
+      deck_assist_active: false,
+      forward_progress_speed: 0,
+      last_y: 0,
+      launch_direction: { x: 0, y: 1 },
+    };
     launched = false;
     first_pin_contact_by_id.clear();
+    reset_collision_diagnostics();
     roll_step = 0;
     last_ball_activation_cell = undefined;
     roll_elapsed_seconds = 0;
@@ -732,6 +1084,14 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
     return { x: position.x, y: position.y, rotation: record.body.rotation() };
   }
 
+  function get_pin_final_position(pin_id: PinId): { x: number; y: number } {
+    const record = require_pin(pin_id);
+    if (record.removed)
+      return record.last_physical_position ?? { x: record.initial_x, y: record.initial_y };
+    const position = record.body.translation();
+    return { x: position.x, y: position.y };
+  }
+
   /**
    * Narrow test diagnostic for the world-space long axis used by a fallen
    * capsule. It stays out of snapshots and the production worker protocol.
@@ -771,6 +1131,53 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
     };
   }
 
+  function get_ball_collision_profile(): BallCollisionProfile {
+    if (ball === undefined) return { mass: 0 };
+    const collider = rapier_world.getCollider(ball.collider_handle);
+    if (collider === null) throw new Error("The ball is missing its collider.");
+    return { mass: collider.mass() };
+  }
+
+  function get_ball_drive_diagnostics(): BallDriveDiagnostics {
+    return {
+      has_hit_pin: ball_force_state.has_hit_pin,
+      deck_assist_acceleration: ball_force_state.deck_assist_acceleration,
+      deck_assist_force_lbf: ball_force_state.deck_assist_force_lbf ?? 0,
+      deck_assist_force_world: ball_force_state.deck_assist_force_world ?? 0,
+      deck_assist_geometry_scale: ball_force_state.deck_assist_geometry_scale ?? 0,
+      deck_assist_geometry_factor: ball_force_state.deck_assist_geometry_factor ?? 0,
+      deck_assist_force: ball_force_state.deck_assist_force,
+      deck_assist_fade: ball_force_state.deck_assist_fade,
+      deck_assist_active: ball_force_state.deck_assist_active,
+      forward_progress_speed: ball_force_state.forward_progress_speed,
+    };
+  }
+
+  function get_pin_impact_diagnostic(pin_id: PinId): PinImpactDiagnostic | undefined {
+    require_pin(pin_id);
+    const diagnostic = first_pin_impact_by_id.get(pin_id);
+    return diagnostic === undefined ? undefined : { ...diagnostic };
+  }
+
+  function get_collision_path_diagnostics(): Record<CollisionPath, CollisionPathDiagnostics> {
+    return {
+      ball_pin: { ...collision_path_diagnostics.ball_pin },
+      pin_pin: { ...collision_path_diagnostics.pin_pin },
+    };
+  }
+
+  function is_pin_fallen(pin_id: PinId): boolean {
+    return require_pin(pin_id).state === "fallen";
+  }
+
+  function get_pin_final_distance_from_rack_slot(pin_id: PinId): number | undefined {
+    const record = require_pin(pin_id);
+    if (record.state !== "fallen") return undefined;
+    const position = record.removed ? record.last_physical_position : record.body.translation();
+    if (position === undefined) return undefined;
+    return Math.hypot(position.x - record.initial_x, position.y - record.initial_y);
+  }
+
   function is_pin_active(pin_id: PinId): boolean {
     return require_pin(pin_id).active;
   }
@@ -797,9 +1204,16 @@ export async function create_simulation_world(pin_count: RackPinCount): Promise<
     get_total_body_count,
     get_pin_velocity,
     get_pin_position,
+    get_pin_final_position,
     get_pin_fallen_axis_angle,
     get_pin_first_contact,
     get_pin_collision_profile,
+    get_ball_collision_profile,
+    get_ball_drive_diagnostics,
+    get_pin_impact_diagnostic,
+    get_collision_path_diagnostics,
+    is_pin_fallen,
+    get_pin_final_distance_from_rack_slot,
     is_pin_active,
     activate_pin,
     activate_nearby,

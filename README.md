@@ -115,8 +115,6 @@ The workflow checks the codebase, builds `dist/`, and deploys the uploaded Pages
 
 ## Documentation
 
-- [docs/active_plans/active/super_bowling_v1.md](docs/active_plans/active/super_bowling_v1.md)
-  - Product decisions, milestone ownership, and acceptance evidence.
 - [docs/SOLID_MODEL.md](docs/SOLID_MODEL.md)
   - Solid reactivity boundaries for the UI, Canvas renderer, and simulation worker.
 - [docs/PLAYWRIGHT_USAGE.md](docs/PLAYWRIGHT_USAGE.md)

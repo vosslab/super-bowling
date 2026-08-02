@@ -4,7 +4,8 @@ import type { PinCount } from "../config/pin_counts";
 import type { MatchSetup } from "../game/contracts";
 import { create_save_settings, type SaveSettingsController } from "../save/settings";
 import { save_storage_key } from "../save/save_file";
-import type { SaveFileV2, StorageLike } from "../save/contracts";
+import type { SaveFileV3, StorageLike } from "../save/contracts";
+import { best_score_key } from "../save/save_file";
 import { Game } from "./game";
 import { create_simulation_client, type SimulationClient } from "./simulation_client";
 import {
@@ -62,13 +63,14 @@ function read_fixture_mode(): FixtureMode {
 export function App(): JSX.Element {
   const fixture_mode = read_fixture_mode();
   const settings = create_app_settings(get_browser_storage());
-  const [saved, set_saved] = createSignal<SaveFileV2>(settings.get_save());
+  const [saved, set_saved] = createSignal<SaveFileV3>(settings.get_save());
   const [setup, set_setup] = createSignal<MatchSetup>();
   const [client, set_client] = createSignal<SimulationClient>();
 
   function on_start(next_setup: MatchSetup): void {
     set_saved(
       settings.set_recent_setup({
+        bowls_per_frame: next_setup.bowls_per_frame ?? 2,
         pin_count: next_setup.pin_count,
         players: next_setup.players.map((player) => ({
           name: player.name,
@@ -102,10 +104,11 @@ export function App(): JSX.Element {
 
   function record_completed_scores(
     pin_count: PinCount,
+    bowls_per_frame: number,
     scores: Readonly<Record<number, number>>,
   ): void {
     const best_score = Math.max(...Object.values(scores));
-    set_saved(settings.record_completed_score(pin_count, best_score));
+    set_saved(settings.record_completed_score(pin_count, bowls_per_frame, best_score));
   }
 
   function exit_game(): void {
@@ -123,7 +126,9 @@ export function App(): JSX.Element {
           initial_setup={() => saved().recent_setup}
           mute_enabled={() => saved().mute_enabled}
           reduced_motion={() => saved().reduced_motion}
-          best_score={(pin_count) => saved().best_scores[pin_count]}
+          best_score={(pin_count, bowls_per_frame) =>
+            saved().best_scores[best_score_key(pin_count, bowls_per_frame)]
+          }
           on_set_mute={set_mute_enabled}
           on_set_reduced_motion={set_reduced_motion}
         />

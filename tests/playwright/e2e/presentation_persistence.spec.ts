@@ -36,6 +36,29 @@ test("saved setup and preferences restore across a reload", async ({ page }) => 
   );
 });
 
+test("custom bowls-per-frame reaches the live rule and restores after reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "3", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Super 3 bowls per frame; frames 1-9 end after a clear or 3 bowls; frame 10 always has 4 bowls.",
+    ),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Start 10 mode - 10 pins for 1 player", exact: true })
+    .click();
+  await expect(page.locator("[data-bowls-per-frame]")).toHaveAttribute("data-bowls-per-frame", "3");
+  await expect(page.locator("[data-bowls-per-frame]")).toContainText(
+    "frames 1-9 end after a clear or 3 bowls; frame 10 always has 4 bowls.",
+  );
+  await page.getByRole("button", { name: "New match" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "3", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 test("malformed saved data falls back to a playable setup", async ({ page }) => {
   await page.addInitScript(({ key, value }) => window.localStorage.setItem(key, value), {
     key: save_key,

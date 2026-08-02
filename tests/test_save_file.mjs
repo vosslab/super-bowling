@@ -13,6 +13,7 @@ test("migrates a literal version-one save and clears incomparable best scores", 
     mute_enabled: true,
     reduced_motion: "yes",
     recent_setup: {
+      bowls_per_frame: 4,
       pin_count: 1000,
       players: [
         {
@@ -35,6 +36,7 @@ test("migrates a literal version-one save and clears incomparable best scores", 
   });
 
   assert.deepEqual(save.recent_setup, {
+    bowls_per_frame: 2,
     pin_count: 1000,
     players: [
       {
@@ -60,7 +62,7 @@ test("migrates a literal version-one save and clears incomparable best scores", 
       },
     ],
   });
-  assert.equal(save.version, 2);
+  assert.equal(save.version, 3);
   assert.deepEqual(save.best_scores, {});
 });
 
@@ -69,12 +71,49 @@ test("returns useful defaults for missing or obsolete save schemas", () => {
   assert.deepEqual(normalize_save_file({ version: 9 }), create_default_save());
 });
 
-test("records only monotonic legal best scores for each rack", () => {
-  const saved_200 = update_best_score(create_default_save(), 10, 200);
-  const kept_200 = update_best_score(saved_200, 10, 150);
-  const saved_300 = update_best_score(kept_200, 10, 300);
-  const rejected = update_best_score(saved_300, 10, 301);
+test("migrates version-two best scores to the classic rule partition", () => {
+  const save = normalize_save_file({
+    version: 2,
+    mute_enabled: false,
+    reduced_motion: false,
+    recent_setup: { pin_count: 10, players: [] },
+    best_scores: { 10: 300 },
+  });
+  assert.equal(save.best_scores["10:2"], 300);
+  assert.equal(save.recent_setup.bowls_per_frame, 2);
+});
 
-  assert.equal(rejected.best_scores[10], 300);
-  assert.deepEqual(rejected.best_scores, { 10: 300 });
+test("records legal best scores independently for every bowls rule", () => {
+  const saved_200 = update_best_score(create_default_save(), 10, 2, 200);
+  const kept_200 = update_best_score(saved_200, 10, 2, 150);
+  const saved_300 = update_best_score(kept_200, 10, 2, 300);
+  const custom = update_best_score(saved_300, 10, 3, 130);
+  const rejected = update_best_score(custom, 10, 3, 131);
+
+  assert.equal(rejected.best_scores["10:2"], 300);
+  assert.equal(rejected.best_scores["10:3"], 130);
+  assert.deepEqual(rejected.best_scores, { "10:2": 300, "10:3": 130 });
+});
+
+test("falls back to two bowls and rejects custom scores over their real ceiling", () => {
+  const malformed = normalize_save_file({
+    version: 3,
+    recent_setup: { bowls_per_frame: 9, pin_count: 10, players: [] },
+    best_scores: { "10:5": 151 },
+  });
+  assert.equal(malformed.recent_setup.bowls_per_frame, 2);
+  assert.deepEqual(malformed.best_scores, {});
+});
+
+test("keeps endpoint bowl-rule setup and best-score partitions independent", () => {
+  const normalized = normalize_save_file({
+    version: 3,
+    recent_setup: { bowls_per_frame: 1, pin_count: 10, players: [] },
+    best_scores: { "10:1": 110, "10:5": 150 },
+  });
+  const with_five_bowls = update_best_score(normalized, 10, 5, 151);
+
+  assert.equal(normalized.recent_setup.bowls_per_frame, 1);
+  assert.equal(with_five_bowls.best_scores["10:1"], 110);
+  assert.equal(with_five_bowls.best_scores["10:5"], 150);
 });

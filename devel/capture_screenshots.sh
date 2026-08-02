@@ -8,6 +8,7 @@
 # Usage:
 #   ./capture_screenshots.sh
 #   ./capture_screenshots.sh --milestone
+#   ./capture_screenshots.sh --camera-bakeoff
 #   ./capture_screenshots.sh --all
 
 set -euo pipefail
@@ -21,11 +22,12 @@ capture_timeout_seconds="90"
 
 usage() {
 	cat <<'USAGE'
-Usage: capture_screenshots.sh [--documentation|--milestone|--all] [--port PORT]
+Usage: capture_screenshots.sh [--documentation|--milestone|--camera-bakeoff|--all] [--port PORT]
                              [--capture-timeout SECONDS]
 
   --documentation  Refresh the managed README PNGs (default).
   --milestone      Write temporary 10, 105, and 990 evidence under artifacts/.
+  --camera-bakeoff Write temporary camera-comparison evidence under artifacts/.
   --all            Run both documentation and milestone capture modes.
   --port PORT      Local server port (default: 4199).
   --capture-timeout SECONDS  Browser capture deadline (default: 90 seconds).
@@ -58,6 +60,9 @@ while [ "$#" -gt 0 ]; do
 			;;
 		--milestone)
 			mode="milestone"
+			;;
+		--camera-bakeoff)
+			mode="camera-bakeoff"
 			;;
 		--all)
 			mode="all"

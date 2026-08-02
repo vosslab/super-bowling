@@ -10,6 +10,7 @@
     "serve": "./run_web_server.sh",
     "check": "./check_codebase.sh",
     "benchmark": "tsx devel/run_simulation_benchmark.mjs",
+    "backstop-probe": "tsx devel/probe_990_backstop.mjs",
     "strike-matrix": "tsx devel/probe_strike_matrix.mjs",
     "clean": "./dist_clean.sh",
     "format:write": "npx prettier --write '**/*.{ts,tsx,mts,cts,js,mjs,cjs}'",

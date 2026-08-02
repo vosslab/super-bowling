@@ -61,7 +61,7 @@ The retained validation front doors are `./check_codebase.sh`,
 - Owner: foundation implementer.
 - Files: `package.json`, `pipeline/build.mjs`, `src/main.ts`, `src/app/app.tsx`,
   `src/simulation/protocol.ts`, `src/simulation/worker.ts`, feature contract files,
-  [SOLID_MODEL.md](../../SOLID_MODEL.md), and this plan.
+  [SOLID_MODEL.md](../SOLID_MODEL.md), and this plan.
 - Behavior: build a strict Solid shell, worker entry, feature-owned contracts,
   static GitHub Pages artifact, and a 16:10 original lane preview.
 - Validation: strict TypeScript compilation, `./check_codebase.sh`, and static build.

@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1600, height: 1000 } });
 
-test("real worker: untouched default Space launch reaches and knocks down the head-pin rack", async ({
+test("real worker: untouched default Space launch reaches the rack and settles an eight-pin roll", async ({
   page,
 }) => {
   const page_errors: string[] = [];
@@ -22,11 +22,11 @@ test("real worker: untouched default Space launch reaches and knocks down the he
   await page.keyboard.press("Space");
   await expect(play_shell).toHaveAttribute("data-phase", "rolling");
   await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 20_000 });
-  await expect(standing_count).toHaveText("0 of 10 pins standing");
-  await expect(page.getByRole("status").filter({ hasText: "Strike!" })).toBeVisible();
+  await expect(standing_count).toHaveText("2 of 10 pins standing");
+  await expect(page.getByRole("status").filter({ hasText: "8 pins down" })).toBeVisible();
   await expect(
-    page.locator("[data-frame-cell]").first().locator('[data-roll-mark="strike"]'),
-  ).toHaveText("X");
+    page.locator("[data-frame-cell]").first().locator('[data-roll-mark="roll"]'),
+  ).toHaveText("8");
   await page.screenshot({ path: "test-results/03_real_worker_roll.png", fullPage: true });
   await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   expect(page_errors).toEqual([]);

@@ -12,17 +12,25 @@ import {
 } from "../src/config/lane.ts";
 import { supported_pin_counts, get_rack_pin_count } from "../src/config/pin_counts.ts";
 import {
+  get_pin_contact_force_event_threshold,
+  get_pin_velocity_change_from_contact_force,
+  physics_config,
+} from "../src/config/physics.ts";
+import {
   sweep_angle_tolerance_radians,
   sweep_position_tolerance,
+  update_pin_state,
 } from "../src/simulation/pin_state.ts";
 import {
   ball_snapshot_in_pit_flag_offset,
   pin_snapshot_stride,
   read_snapshot_ball,
+  snapshot_fallen_axis_angle_offset,
   snapshot_in_pit_flag_offset,
   snapshot_removed_flag_offset,
   snapshot_state_flag_offset,
 } from "../src/simulation/protocol.ts";
+import { canonical_fallen_pin_angle } from "../src/render/pins.ts";
 import { create_simulation_world } from "../src/simulation/world.ts";
 
 function ball_is_in_pit(world) {
@@ -47,6 +55,25 @@ function run_until_settled(world, maximum_steps = 4_800) {
   }
   return false;
 }
+
+test("fall response and Rapier event gate share one mass-invariant delta-v rule", () => {
+  const threshold = physics_config.fall_velocity_change_ft_per_second;
+  const standard_pin_mass = physics_config.pin_mass_lb;
+  const doubled_pin_mass = standard_pin_mass * 2;
+  const standard_force = get_pin_contact_force_event_threshold(standard_pin_mass);
+  const doubled_force = get_pin_contact_force_event_threshold(doubled_pin_mass);
+
+  assert.equal(
+    get_pin_velocity_change_from_contact_force(standard_force, standard_pin_mass),
+    threshold,
+  );
+  assert.equal(
+    get_pin_velocity_change_from_contact_force(doubled_force, doubled_pin_mass),
+    threshold,
+  );
+  assert.equal(update_pin_state("standing", 0, threshold), "fallen");
+  assert.equal(update_pin_state("standing", 0, threshold - 0.001), "standing");
+});
 
 test("minimum-power center and gutter paths reach the pit for every rack and spin direction", async () => {
   for (const mode of supported_pin_counts) {
@@ -89,6 +116,43 @@ test("a settled-roll sweep removes deadwood without moving standing pins", async
   assert.ok(
     before_sweep.fallen_pin_count > 0,
     "settled roll leaves deadwood for the next-roll sweep",
+  );
+  const settled_snapshot_data = new Float32Array(before_sweep.data);
+  let checked_fallen_pin_count = 0;
+  for (let index = 0; index < before_sweep.pin_count; index += 1) {
+    const offset = index * pin_snapshot_stride;
+    const is_visible_fallen_pin =
+      before_sweep.data[offset + snapshot_state_flag_offset] !== 0 &&
+      before_sweep.data[offset + snapshot_removed_flag_offset] === 0;
+    if (!is_visible_fallen_pin) continue;
+
+    const raw_angle = before_sweep.data[offset + snapshot_fallen_axis_angle_offset];
+    const canonical_angle = canonical_fallen_pin_angle(raw_angle);
+    assert.ok(Number.isFinite(raw_angle), `fallen pin ${index} publishes a finite axis angle`);
+    assert.ok(
+      Number.isFinite(canonical_angle),
+      `fallen pin ${index} produces a finite presentation angle`,
+    );
+    assert.ok(
+      Math.sin(canonical_angle) <= 0.000001,
+      `fallen pin ${index} crown remains at or above its base`,
+    );
+    assert.ok(
+      Math.abs(Math.sin(raw_angle - canonical_angle)) <= 0.000001,
+      `fallen pin ${index} preserves its undirected physical axis`,
+    );
+    assert.equal(
+      before_sweep.data[offset + snapshot_fallen_axis_angle_offset],
+      raw_angle,
+      `fallen pin ${index} presentation does not alter the published axis`,
+    );
+    checked_fallen_pin_count += 1;
+  }
+  assert.ok(checked_fallen_pin_count > 0, "settled roll exposes at least one fallen pin");
+  assert.deepEqual(
+    before_sweep.data,
+    settled_snapshot_data,
+    "reading and canonicalizing fallen pin axes does not mutate the settled snapshot",
   );
   const bodies_before = world.get_total_body_count();
   const standing_before = [];

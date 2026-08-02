@@ -1,120 +1,86 @@
 # Super Bowling rules
 
-Super Bowling uses classic ten-frame bowling with the actual complete-triangle
-pin total as the rack size. Players select a convenient scale label; setup and
-the game interface display the actual total N used for every roll and score.
+Super Bowling scales bowling from a familiar ten-pin match to a deliberately
+superhuman 1,000-pin challenge. Choose a rack scale and bowls per frame before
+starting. The game always scores the pins actually in the physical rack.
 
-| Scale label | Actual rack total N |
-| ----------: | ------------------: |
-|          10 |                  10 |
-|          20 |                  21 |
-|          50 |                  45 |
-|         100 |                 105 |
-|         500 |                 496 |
-|        1000 |                 990 |
+## Rack scales
 
-Every rack is a centered triangle with one head pin and complete rows 1, 2, 3,
-and onward. The scale labels are convenient choices; scoring always uses N.
+The setup labels are friendly scale names, not the physics rack totals. Each
+rack is a complete centered triangle with one head pin and rows of 1, 2, 3,
+and onward.
 
-## Pre-roll technique
+| Setup label | Physics rack total | Ball mass |
+| ----------: | -----------------: | --------: |
+|          10 |                 10 |     16 lb |
+|          20 |                 21 |     16 lb |
+|          50 |                 45 |     40 lb |
+|         100 |                105 |     80 lb |
+|         500 |                496 |    320 lb |
+|        1000 |                990 |     40 lb |
 
-Set all four controls while the ball is aiming, by slider or keyboard:
+For example, the 1,000 label means a 990-pin triangle. A strike in that mode
+knocks down all 990 pins, and every score and record uses 990 rather than the
+display label.
 
-| Control        | Keyboard     | What it changes                          |
-| -------------- | ------------ | ---------------------------------------- |
-| Power          | Up / Down    | Launch speed from 8 through 24 ft/s.     |
-| Start position | Left / Right | Lateral release position in lane boards. |
-| Angle          | A / D        | Release direction, shown in degrees.     |
-| Spin           | Q / E        | Signed hook direction and strength.      |
+The 990-pin ball is deliberate special equipment: a measured 40 lb collider,
+not a regulation ball or a hidden density label. This fantasy endurance mode
+also permits superhuman power and spin. After genuine ball-pin contact, a
+bounded through-pin drive helps the ball reach the backstop through a deep
+rack; it never acts at launch, in a gutter, or after pit capture.
 
-Press Space to bowl. A rolling ball cannot be steered: technique is chosen
-before release, then the roll resolves under physics.
+## Bowl options
 
-The projected guide comes from a pins-free worker world that uses the same
-ball-force step as the live roll. Its three phases are skid, hook, and roll:
-zero spin stays straight, while signed spin curves in its selected direction
-as the ball slows. The preview ends before pin contact, so it describes the
-free path rather than predicting a specific pinfall.
+Choose one through five bowls per frame (`B`). This creates two clear game
+modes:
 
-## Frames one through nine
+| Selection | Mode        | Frames 1-9                                  | Tenth frame                    | Score marks     |
+| --------- | ----------- | ------------------------------------------- | ------------------------------ | --------------- |
+| B = 2     | Classic     | Standard two-roll bowling                   | Standard conditional fill ball | `X` and `/`     |
+| B != 2    | Super frame | Up to B bowls, ending early on a clear rack | Exactly B + 1 bowls            | Numeric pinfall |
 
-- A strike knocks all N pins on the first roll. Its score is N plus the next two rolls.
-- A spare knocks all N pins across two rolls. Its score is N plus the next roll.
-- An open frame scores the pins knocked in its two rolls.
-- A second roll uses the standing pins left by the first roll.
+In Super frame mode, a clear rack resets to a fresh rack for any bowls still
+available in the tenth frame. The tenth frame is exactly `B + 1` bowls; it
+never grants `B + 2`. Super frame scores are actual pinfall, with no strike or
+spare bonuses and no `X` or `/` marks.
 
-## Rack cleanup
+Classic `B = 2` keeps familiar scoring: a strike is a full-rack first roll plus
+the next two rolls, a spare is a full-rack two-roll frame plus the next roll,
+and the tenth frame has its normal conditional fill ball. A classic perfect
+game scores `30 * actual_rack_pin_count`. The Super frame maximum is
+`(10 + B) * actual_rack_pin_count`.
 
-Fallen pins remain physical obstacles during a roll. Their native pin-to-pin
-contacts can continue a cascade, so a legal centered shot can produce a strike;
-the score is determined by the actual settled pins, not by a blast radius.
-After settlement, the match chooses one of these next states:
+## Controls and power
 
-| Situation                                      | Next action                                                 |
-| ---------------------------------------------- | ----------------------------------------------------------- |
-| First roll leaves pins standing                | Sweep fallen pins, then aim at the standing pins.           |
-| Gutter ball or other zero-pin first roll       | Sweep (a no-op if nothing fell), then aim again.            |
-| Strike or completed second roll                | Reset a fresh rack for the next frame.                      |
-| Tenth-frame strike or spare that earns a bonus | Reset a fresh bonus rack.                                   |
-| Tenth-frame partial bonus                      | Keep that bonus rack's standing pins.                       |
-| Open final frame or player handoff             | Advance the match or handoff; do not sweep.                 |
-| Settlement timeout                             | Stop with a lane error rather than silently changing state. |
+Set the controls while aiming, then press Space to bowl. A launched ball
+cannot be steered. The preview uses the same authoritative limits and ball
+force logic as the live world, so a displayed setting is the one that launches.
 
-The sweep removes only fallen deadwood. Standing pins keep their positions for
-the next roll, so a two-roll frame remains one physical rack. The game waits
-for the worker's preparation acknowledgement before enabling second-roll
-controls, avoiding an aim guide or ball that belongs to the previous roll.
+| Control        | Keyboard     | 10-pin envelope             | 1,000-label envelope        |
+| -------------- | ------------ | --------------------------- | --------------------------- |
+| Power          | Up / Down    | 8 through 24 ft/s           | 8 through 60 ft/s           |
+| Start position | Left / Right | Lane-board release position | Lane-board release position |
+| Angle          | A / D        | Release direction           | Release direction           |
+| Spin           | Q / E        | -1 through +1               | -4 through +4               |
 
-## Single shot presentation
+The 10-pin controls stay intentionally modest. The 1,000-label mode is a
+fantasy endurance challenge with explicitly superhuman power, spin, and
+through-pin support instead of silently changing ordinary ten-pin bowling.
 
-The display uses one centered full-lane shot for aiming, rolling, and the
-result. The ball moves predictably up the projected lane from its physical
-down-lane position, while a small forward zoom adds emphasis without changing
-the horizon or lateral framing. The result stays in that framing; the game does
-not cut to a separate deck view. Every second roll returns to the same aiming
-composition, and reduced motion removes the zoom while keeping the full lane.
+The guide shows the pins-free path through skid, hook, and roll. It ends before
+pin contact, so it helps aim a shot without pretending to predict exact
+pinfall.
 
-## Tenth frame
+## Pinfall and progress
 
-- A tenth-frame open ends after two rolls.
-- A spare earns one bonus roll on a fresh rack of N pins.
-- A strike earns two bonus rolls. The first bonus starts on a fresh rack of N pins.
-- When the first strike bonus is a strike, the final bonus starts on another fresh rack.
-- When the first strike bonus leaves pins standing, the final bonus uses that bonus rack.
-- A perfect game has twelve strikes and scores `30 * N`.
+Pins and fallen pins remain physical obstacles throughout a roll. A settled
+result counts the pins actually knocked down; there is no blast-radius scoring.
+The game sweeps fallen deadwood between eligible bowls while keeping standing
+pins in place when the same rack continues.
 
-For example, a 10-pin tenth frame of `10, 7, 3` uses a fresh rack for the
-7-pin bonus, then uses its three remaining pins for the final bonus. `10, 10,
-10` uses three fresh racks. `10, 7, 4` is invalid because the final bonus rack
-has only three pins remaining.
+## Saving records
 
-## Worked scores
-
-| Scale label | Actual N | Rolls           | First-frame score | Meaning                         |
-| ----------: | -------: | --------------- | ----------------: | ------------------------------- |
-|          10 |       10 | `3, 4`          |                 7 | Open frame.                     |
-|          10 |       10 | `6, 4, 5`       |                15 | Spare plus the next roll.       |
-|          10 |       10 | `10, 3, 4`      |                17 | Strike plus the next two rolls. |
-|          20 |       21 | `21, 6, 4`      |                31 | 21-pin strike.                  |
-|          50 |       45 | `45, 15, 10`    |                70 | 45-pin strike.                  |
-|         100 |      105 | `105, 30, 20`   |               155 | 105-pin strike.                 |
-|         500 |      496 | `496, 150, 100` |               746 | 496-pin strike.                 |
-|        1000 |      990 | `990, 400, 300` |              1690 | 990-pin strike.                 |
-
-| Scale label | Actual N | Perfect-game score |
-| ----------: | -------: | -----------------: |
-|          10 |       10 |                300 |
-|          20 |       21 |                630 |
-|          50 |       45 |               1350 |
-|         100 |      105 |               3150 |
-|         500 |      496 |              14880 |
-|        1000 |      990 |              29700 |
-
-A score remains incomplete until every required bonus roll settles.
-
-## Saved matches
-
-The local save preserves recent player names and ball designs, mute, and
-reduced-motion preferences. The one-time V1-to-V2 migration clears best scores:
-the rebuilt foot-based lane and technique controls make old records
-incomparable. A V2 save keeps its valid per-rack best scores.
+The local save remembers recent setup choices, including `B`, along with player
+names, ball designs, mute, and reduced-motion preferences. Old saves default or
+migrate to `B = 2`. Best scores are separate for each rack scale and
+bowls-per-frame mode, so a Super frame result never replaces a Classic record.
