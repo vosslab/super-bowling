@@ -3,6 +3,7 @@
 import { get_mode_for_rack_pin_count, type RackPinCount } from "../config/pin_counts";
 import { get_mode_tuning, physics_config } from "../config/physics";
 import type { SimulationEvent, SimulationRequest } from "./protocol";
+import { create_preview_path } from "./preview";
 import { create_simulation_world, type SimulationWorld } from "./world";
 
 type WorkerState = {
@@ -15,6 +16,7 @@ type WorkerState = {
   simulation_seconds: number;
   ticking: boolean;
   generation: number;
+  preview_generation: number;
 };
 
 const worker_scope: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
@@ -29,6 +31,7 @@ const worker_state: WorkerState = {
   simulation_seconds: 0,
   ticking: false,
   generation: 0,
+  preview_generation: 0,
 };
 
 function assert_never(value: never): never {
@@ -116,6 +119,7 @@ async function reset_world(pin_count: RackPinCount): Promise<boolean> {
   // Fence stale asynchronous Rapier initialization before it can replace a newer rack.
   const generation = worker_state.generation + 1;
   worker_state.generation = generation;
+  worker_state.preview_generation += 1;
   worker_state.ticking = false;
   worker_state.world?.dispose();
   worker_state.world = undefined;
@@ -143,13 +147,37 @@ async function handle_reset_rack(pin_count: RackPinCount): Promise<void> {
   await reset_world(pin_count);
 }
 
-function handle_launch(power: number, lateral_offset: number): void {
-  get_world().launch(power, lateral_offset);
+function handle_launch(power: number, start_position: number, angle: number, spin: number): void {
+  get_world().launch(power, start_position, angle, spin);
   begin_ticking();
 }
 
-function handle_steer(direction: -1 | 0 | 1): void {
-  get_world().set_steer(direction);
+function handle_sweep_deadwood(): void {
+  get_world().sweep_deadwood();
+  emit_snapshot();
+}
+
+function handle_prepare_next_roll(): void {
+  get_world().prepare_next_roll();
+  emit_snapshot();
+  const pin_count = worker_state.pin_count;
+  if (pin_count === undefined) throw new Error("Simulation pin count is unavailable.");
+  post_event({ type: "sweep_complete", pin_count });
+}
+
+async function handle_preview_path(
+  request_id: number,
+  pin_count: RackPinCount,
+  power: number,
+  start_position: number,
+  angle: number,
+  spin: number,
+): Promise<void> {
+  const preview_generation = worker_state.preview_generation + 1;
+  worker_state.preview_generation = preview_generation;
+  const points = await create_preview_path(pin_count, { power, start_position, angle, spin });
+  if (preview_generation !== worker_state.preview_generation || worker_state.disposed) return;
+  post_event({ type: "preview_path", request_id, pin_count, points }, [points.buffer]);
 }
 
 function handle_pause_change(paused: boolean): void {
@@ -159,6 +187,7 @@ function handle_pause_change(paused: boolean): void {
 
 function handle_dispose(): void {
   worker_state.generation += 1;
+  worker_state.preview_generation += 1;
   worker_state.ticking = false;
   worker_state.world?.dispose();
   worker_state.world = undefined;
@@ -175,10 +204,23 @@ async function handle_request(request: SimulationRequest): Promise<void> {
       await handle_reset_rack(request.pin_count);
       return;
     case "launch":
-      handle_launch(request.power, request.lateral_offset);
+      handle_launch(request.power, request.start_position, request.angle, request.spin);
       return;
-    case "steer":
-      handle_steer(request.direction);
+    case "sweep_deadwood":
+      handle_sweep_deadwood();
+      return;
+    case "prepare_next_roll":
+      handle_prepare_next_roll();
+      return;
+    case "preview_path":
+      await handle_preview_path(
+        request.request_id,
+        request.pin_count,
+        request.power,
+        request.start_position,
+        request.angle,
+        request.spin,
+      );
       return;
     case "set_paused":
       handle_pause_change(request.paused);

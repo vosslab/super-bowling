@@ -11,7 +11,7 @@ const asset_urls = {
   // Document-relative URLs work from the GitHub Pages project path and benchmark page alike.
   upright: "./assets/pin_upright.svg",
   fallen: "./assets/pin_fallen.svg",
-  ball: "./assets/ball_sphere.svg",
+  ball: "./assets/ball_surface.svg",
 } as const;
 
 function load_image(url: string): Promise<HTMLImageElement> {

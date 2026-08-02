@@ -13,16 +13,17 @@ import {
   score_card,
   total_score,
 } from "./scoring";
+import { default_aim, normalize_aim, type AimValues } from "./aim";
 
 export type MatchAction =
   | { type: "start" }
   | { type: "rack_ready" }
   | { type: "continue_turn" }
-  | { type: "set_aim"; lateral_offset: number; power: number }
+  | { type: "set_aim"; aim: AimValues }
   | { type: "launch" }
-  | { type: "steer"; direction: -1 | 0 | 1 }
   | { type: "settled"; settled_roll: SettledRoll }
   | { type: "advance_after_result" }
+  | { type: "sweep_complete" }
   | { type: "fatal"; message: string };
 
 function initial_score_cards(
@@ -165,10 +166,11 @@ function transition_after_roll(state: MatchState): MatchTransition {
       standing_pin_count: state.pin_count,
     });
   }
-  return {
-    state: { ...state, phase: "aiming", current_roll_index: state.current_roll_index + 1 },
+  const transition: MatchTransition = {
+    state: { ...state, phase: "sweeping", current_roll_index: state.current_roll_index + 1 },
     effects: [],
   };
+  return transition;
 }
 
 function result_message(knocked_pin_count: number, pin_count: RackPinCount): string {
@@ -187,7 +189,7 @@ export function create_match_state(setup: MatchSetup): MatchState {
   if (first_player === undefined) throw new Error("A match needs its first player.");
   return {
     active_player_id: first_player.player_id,
-    aim: { lateral_offset: 0, power: 16, steer_direction: 0 },
+    aim: default_aim(get_rack_pin_count(setup.pin_count)),
     current_frame_index: 0,
     current_roll_index: 0,
     phase: "setup",
@@ -213,7 +215,7 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
         ? {
             state: {
               ...state,
-              aim: { ...state.aim, lateral_offset: action.lateral_offset, power: action.power },
+              aim: normalize_aim(state.pin_count, action.aim),
             },
             effects: [],
           }
@@ -223,7 +225,6 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
         ? {
             state: {
               ...state,
-              aim: { ...state.aim, steer_direction: 0 },
               phase: "rolling",
               standing_pin_count_at_launch: state.standing_pin_count,
             },
@@ -231,16 +232,11 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
               {
                 type: "launch",
                 power: state.aim.power,
-                lateral_offset: state.aim.lateral_offset,
+                start_position: state.aim.start_position,
+                angle: state.aim.angle,
+                spin: state.aim.spin,
               },
             ],
-          }
-        : { state, effects: [] };
-    case "steer":
-      return state.phase === "rolling"
-        ? {
-            state: { ...state, aim: { ...state.aim, steer_direction: action.direction } },
-            effects: [{ type: "steer", direction: action.direction }],
           }
         : { state, effects: [] };
     case "settled": {
@@ -296,9 +292,19 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
       );
       return { state: scored_state, effects: [] };
     }
-    case "advance_after_result":
-      return state.phase === "result"
-        ? transition_after_roll({ ...state, result_message: undefined })
+    case "advance_after_result": {
+      if (state.phase !== "result") return { state, effects: [] };
+      const transition = transition_after_roll({ ...state, result_message: undefined });
+      const continues_on_same_rack =
+        transition.state.phase === "sweeping" &&
+        !transition.effects.some((effect) => effect.type === "reset_rack");
+      return continues_on_same_rack
+        ? { ...transition, effects: [{ type: "prepare_next_roll" }] }
+        : transition;
+    }
+    case "sweep_complete":
+      return state.phase === "sweeping"
+        ? { state: { ...state, phase: "aiming" }, effects: [] }
         : { state, effects: [] };
     case "fatal":
       return { state: { ...state, phase: "fatal", fatal_message: action.message }, effects: [] };

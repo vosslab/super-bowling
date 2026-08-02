@@ -1,6 +1,7 @@
 import type { PlayerId } from "../brands";
 import type { PinCount, RackPinCount } from "../config/pin_counts";
 import type { BallDesign } from "../designer/ball_design";
+import type { AimValues } from "./aim";
 
 export type FrameScore = {
   frame_index: number;
@@ -26,13 +27,17 @@ export type HandoffState = {
 };
 
 export type MatchPhase =
-  "setup" | "rack_resetting" | "aiming" | "rolling" | "result" | "handoff" | "final" | "fatal";
+  | "setup"
+  | "rack_resetting"
+  | "aiming"
+  | "rolling"
+  | "result"
+  | "sweeping"
+  | "handoff"
+  | "final"
+  | "fatal";
 
-export type AimState = {
-  lateral_offset: number;
-  power: number;
-  steer_direction: -1 | 0 | 1;
-};
+export type AimState = AimValues;
 
 export type PlayerScoreCard = {
   player_id: PlayerId;
@@ -57,8 +62,9 @@ export type MatchState = {
 
 export type MatchEffect =
   | { type: "reset_rack"; pin_count: RackPinCount }
-  | { type: "launch"; power: number; lateral_offset: number }
-  | { type: "steer"; direction: -1 | 0 | 1 }
+  | { type: "sweep_deadwood" }
+  | { type: "prepare_next_roll" }
+  | { type: "launch"; power: number; start_position: number; angle: number; spin: number }
   | { type: "match_complete"; best_scores: Readonly<Record<number, number>> };
 
 export type MatchTransition = {

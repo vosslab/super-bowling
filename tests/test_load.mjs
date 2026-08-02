@@ -19,7 +19,7 @@ function create_memory_storage(initial_value = null) {
 test("loads defaults from missing, malformed, and obsolete storage values", () => {
   for (const value of [null, "not json", JSON.stringify({ version: 9 })]) {
     const save = load_save(create_memory_storage(value));
-    assert.equal(save.version, 1);
+    assert.equal(save.version, 2);
     assert.equal(save.recent_setup.pin_count, 10);
   }
 });
@@ -27,7 +27,7 @@ test("loads defaults from missing, malformed, and obsolete storage values", () =
 test("stores one normalized versioned schema and reads it back", () => {
   const storage = create_memory_storage();
   store_save(storage, {
-    version: 1,
+    version: 2,
     mute_enabled: true,
     reduced_motion: true,
     recent_setup: {
@@ -42,9 +42,9 @@ test("stores one normalized versioned schema and reads it back", () => {
     best_scores: { 50: 1350 },
   });
 
-  assert.equal(JSON.parse(storage.value())["version"], 1);
+  assert.equal(JSON.parse(storage.value())["version"], 2);
   assert.deepEqual(load_save(storage), {
-    version: 1,
+    version: 2,
     mute_enabled: true,
     reduced_motion: true,
     recent_setup: {

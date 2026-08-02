@@ -10,7 +10,7 @@ import {
   type BallDesign,
   type BallPattern,
 } from "../designer/ball_design";
-import type { RecentMatchSetup, RecentPlayerSetup, SaveFileV1 } from "./contracts";
+import type { RecentMatchSetup, RecentPlayerSetup, SaveFileV2 } from "./contracts";
 
 export const save_storage_key = "super_bowling.save";
 
@@ -89,9 +89,9 @@ function normalize_best_scores(value: unknown): Partial<Record<PinCount, number>
   return best_scores;
 }
 
-export function create_default_save(): SaveFileV1 {
+export function create_default_save(): SaveFileV2 {
   return {
-    version: 1,
+    version: 2,
     mute_enabled: false,
     reduced_motion: false,
     recent_setup: create_default_recent_setup(),
@@ -99,10 +99,20 @@ export function create_default_save(): SaveFileV1 {
   };
 }
 
-export function normalize_save_file(value: unknown): SaveFileV1 {
-  if (!is_record(value) || value.version !== 1) return create_default_save();
+export function normalize_save_file(value: unknown): SaveFileV2 {
+  if (!is_record(value)) return create_default_save();
+  if (value.version === 1) {
+    return {
+      version: 2,
+      mute_enabled: value.mute_enabled === true,
+      reduced_motion: value.reduced_motion === true,
+      recent_setup: normalize_recent_setup(value.recent_setup),
+      best_scores: {},
+    };
+  }
+  if (value.version !== 2) return create_default_save();
   return {
-    version: 1,
+    version: 2,
     mute_enabled: value.mute_enabled === true,
     reduced_motion: value.reduced_motion === true,
     recent_setup: normalize_recent_setup(value.recent_setup),
@@ -120,10 +130,10 @@ function is_valid_score(score: number, pin_count: PinCount): boolean {
 }
 
 export function update_best_score(
-  save: SaveFileV1,
+  save: SaveFileV2,
   pin_count: PinCount,
   score: number,
-): SaveFileV1 {
+): SaveFileV2 {
   const normalized_save = normalize_save_file(save);
   if (!is_valid_score(score, pin_count)) return normalized_save;
   const current_score = normalized_save.best_scores[pin_count];

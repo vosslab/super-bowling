@@ -20,7 +20,7 @@ function ready_tenth_frame_match() {
   let state = ready_match();
   for (let frame_index = 0; frame_index < 9; frame_index += 1) {
     state = advance_result(settle_roll(state, 10).state).state;
-    state = advance_result(settle_roll(state, 10).state).state;
+    state = advance_result(settle_roll(complete_sweep(state), 10).state).state;
     state = reduce_match(state, { type: "rack_ready" }).state;
   }
   return state;
@@ -38,6 +38,10 @@ function settle_roll(state, standing_pin_count) {
 
 function advance_result(state) {
   return reduce_match(state, { type: "advance_after_result" });
+}
+
+function complete_sweep(state) {
+  return reduce_match(state, { type: "sweep_complete" }).state;
 }
 
 test("starts a one-player match with a fresh rack effect", () => {
@@ -61,7 +65,11 @@ test("keeps a non-strike result visible before the second roll", () => {
   assert.equal(transition.state.standing_pin_count, 4);
   assert.deepEqual(transition.effects, []);
   assert.equal(transition.state.result_message, "6 pins down");
-  assert.equal(advance_result(transition.state).state.phase, "aiming");
+  const advanced = advance_result(transition.state);
+  assert.equal(advanced.state.phase, "sweeping");
+  assert.deepEqual(advanced.effects, [{ type: "prepare_next_roll" }]);
+  assert.equal(reduce_match(advanced.state, { type: "launch" }).state.phase, "sweeping");
+  assert.equal(complete_sweep(advanced.state).phase, "aiming");
 });
 
 test("resets a fresh rack after a strike and accepts settlement once", () => {
@@ -121,7 +129,7 @@ test("uses a visible handoff and one fresh rack effect for every hot-seat turn",
   const expected = ["Bea", "Chen", "Dia", "Ari"];
   for (const next_name of expected) {
     state = advance_result(settle_roll(state, 10).state).state;
-    const handoff = advance_result(settle_roll(state, 10).state);
+    const handoff = advance_result(settle_roll(complete_sweep(state), 10).state);
     assert.equal(handoff.state.phase, "handoff");
     assert.equal(handoff.effects.length, 0);
     assert.equal(
@@ -154,22 +162,80 @@ test("keeps a partial tenth-frame strike bonus on its existing rack", () => {
   const partial_bonus = advance_result(
     settle_roll(reduce_match(first_strike.state, { type: "rack_ready" }).state, 3).state,
   );
-  const final_bonus = advance_result(settle_roll(partial_bonus.state, 0).state);
+  const final_bonus = advance_result(settle_roll(complete_sweep(partial_bonus.state), 0).state);
 
   assert.deepEqual(first_strike.effects, [{ type: "reset_rack", pin_count: 10 }]);
-  assert.deepEqual(partial_bonus.effects, []);
-  assert.equal(partial_bonus.state.phase, "aiming");
+  assert.deepEqual(partial_bonus.effects, [{ type: "prepare_next_roll" }]);
+  assert.equal(partial_bonus.state.phase, "sweeping");
   assert.equal(partial_bonus.state.standing_pin_count, 3);
   assert.deepEqual(final_bonus.effects, [{ type: "match_complete", best_scores: { 0: 20 } }]);
 });
 
 test("resets a tenth-frame spare before its single bonus", () => {
   const first_roll = advance_result(settle_roll(ready_tenth_frame_match(), 3).state);
-  const spare = advance_result(settle_roll(first_roll.state, 0).state);
+  const spare = advance_result(settle_roll(complete_sweep(first_roll.state), 0).state);
 
-  assert.deepEqual(first_roll.effects, []);
+  assert.deepEqual(first_roll.effects, [{ type: "prepare_next_roll" }]);
   assert.deepEqual(spare.effects, [{ type: "reset_rack", pin_count: 10 }]);
   assert.equal(spare.state.phase, "rack_resetting");
+});
+
+test("sweeps a gutter-ball rack before the next roll and never after a completed frame", () => {
+  const gutter = advance_result(settle_roll(ready_match(), 10).state);
+  assert.equal(gutter.state.phase, "sweeping");
+  assert.deepEqual(gutter.effects, [{ type: "prepare_next_roll" }]);
+
+  const second_roll = advance_result(settle_roll(complete_sweep(gutter.state), 10).state);
+  assert.equal(second_roll.state.phase, "rack_resetting");
+  assert.deepEqual(second_roll.effects, [{ type: "reset_rack", pin_count: 10 }]);
+});
+
+test("keeps terminal tenth-frame and settle-timeout transitions free of rack effects", () => {
+  const tenth_first_roll = advance_result(settle_roll(ready_tenth_frame_match(), 4).state);
+  const tenth_open = advance_result(settle_roll(complete_sweep(tenth_first_roll.state), 1).state);
+  const rolling = reduce_match(ready_match(), { type: "launch" }).state;
+  const settle_timeout = reduce_match(rolling, {
+    type: "fatal",
+    message: "The lane did not settle in time.",
+  });
+  const terminal_rows = [
+    { transition: tenth_open, expected_phase: "final" },
+    { transition: settle_timeout, expected_phase: "fatal" },
+  ];
+
+  for (const { transition, expected_phase } of terminal_rows) {
+    assert.equal(transition.state.phase, expected_phase);
+    assert.equal(
+      transition.effects.some(
+        (effect) =>
+          effect.type === "sweep_deadwood" ||
+          effect.type === "prepare_next_roll" ||
+          effect.type === "reset_rack",
+      ),
+      false,
+    );
+  }
+});
+
+test("clamps a four-value aim state and emits every launch value", () => {
+  const state = ready_match();
+  const updated = reduce_match(state, {
+    type: "set_aim",
+    aim: { power: 999, start_position: 999, angle: 999, spin: 999 },
+  });
+  const launched = reduce_match(updated.state, { type: "launch" });
+  assert.equal(launched.effects.length, 1);
+  assert.deepEqual(launched.effects[0], {
+    type: "launch",
+    power: updated.state.aim.power,
+    start_position: updated.state.aim.start_position,
+    angle: updated.state.aim.angle,
+    spin: updated.state.aim.spin,
+  });
+  assert.ok(updated.state.aim.power < 999);
+  assert.ok(updated.state.aim.start_position < 999);
+  assert.ok(updated.state.aim.angle < 999);
+  assert.ok(updated.state.aim.spin < 999);
 });
 
 test("carries every selected rack size through reset and settlement conservation", () => {

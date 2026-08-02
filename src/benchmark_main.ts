@@ -1,5 +1,4 @@
 import { get_benchmark_fixture } from "./config/benchmark_fixtures";
-import { physics_config } from "./config/physics";
 import { get_rack_pin_count, supported_pin_counts, type PinCount } from "./config/pin_counts";
 import { draw_interpolated_snapshot } from "./render/benchmark_renderer";
 import type { SimulationEvent } from "./simulation/protocol";
@@ -65,7 +64,6 @@ const pin_count = get_pin_count();
 const rack_pin_count = get_rack_pin_count(pin_count);
 const fixture = get_benchmark_fixture(new URLSearchParams(window.location.search).get("fixture"));
 const worker = new Worker("./simulation_worker.js", { type: "module" });
-const fixture_timer_ids: number[] = [];
 let previous_snapshot: Float32Array | undefined;
 let current_snapshot: Float32Array | undefined;
 let previous_delivery_ms: number | undefined;
@@ -99,33 +97,16 @@ function draw_snapshot(): void {
   metrics.mean_draw_ms = draw_total_ms / metrics.delivered_frames;
 }
 
-function schedule_fixture_steering(): void {
-  if (fixture.steer_direction === 0) return;
-  const start_delay_ms = fixture.steer_start_step * physics_config.fixed_step_seconds * 1000;
-  const end_delay_ms = (fixture.steer_end_step + 1) * physics_config.fixed_step_seconds * 1000;
-  fixture_timer_ids.push(
-    window.setTimeout(
-      () => worker.postMessage({ type: "steer", direction: fixture.steer_direction }),
-      start_delay_ms,
-    ),
-    window.setTimeout(() => worker.postMessage({ type: "steer", direction: 0 }), end_delay_ms),
-  );
-}
-
-function clear_fixture_steering(): void {
-  for (const timer_id of fixture_timer_ids) window.clearTimeout(timer_id);
-  fixture_timer_ids.length = 0;
-}
-
 function handle_event(event: SimulationEvent): void {
   if (event.type === "ready") {
     benchmark_status.textContent = `Launching ${pin_count}-mode ${event.pin_count}-pin ${fixture.label} roll...`;
     worker.postMessage({
       type: "launch",
-      lateral_offset: fixture.lateral_offset,
       power: fixture.power,
+      start_position: fixture.start_position,
+      angle: fixture.angle,
+      spin: fixture.spin,
     });
-    schedule_fixture_steering();
     return;
   }
   if (event.type === "snapshot") {
@@ -149,7 +130,6 @@ function handle_event(event: SimulationEvent): void {
     return;
   }
   if (event.type === "settled") {
-    clear_fixture_steering();
     document.body.dataset.settlementOutcome = event.timed_out ? "timed_out" : "settled";
     benchmark_status.textContent = event.timed_out
       ? "Simulation reached its settlement limit."
@@ -158,7 +138,6 @@ function handle_event(event: SimulationEvent): void {
     return;
   }
   if (event.type === "fatal") {
-    clear_fixture_steering();
     benchmark_status.textContent = event.message;
   }
 }
@@ -166,5 +145,4 @@ function handle_event(event: SimulationEvent): void {
 worker.addEventListener("message", (event: MessageEvent<SimulationEvent>) =>
   handle_event(event.data),
 );
-window.addEventListener("pagehide", clear_fixture_steering, { once: true });
 worker.postMessage({ type: "initialize", pin_count: rack_pin_count });

@@ -5,6 +5,12 @@ export type PinState = "standing" | "fallen";
 export const standing_pin_flag = 0;
 export const fallen_pin_flag = 1;
 
+// A sweep is intentionally tolerant: a tenth of a pin radius and five degrees
+// are below a player's meaningful deck-position read, while avoiding false
+// precision from a solver-island rebuild.
+export const sweep_position_tolerance = physics_config.pin_radius * 0.1;
+export const sweep_angle_tolerance_radians = (5 * Math.PI) / 180;
+
 export function update_pin_state(
   current_state: PinState,
   displacement: number,

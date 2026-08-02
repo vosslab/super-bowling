@@ -1,7 +1,7 @@
 import { camera_config } from "../config/camera";
 import type { RackPinCount } from "../config/pin_counts";
 import { create_rack } from "../simulation/rack";
-import type { CameraMode, CameraState, RackBounds } from "./contracts";
+import type { CameraState, RackBounds } from "./contracts";
 
 function create_bounds_from_rack(pin_count: RackPinCount): RackBounds {
   const rack = create_rack(pin_count);
@@ -22,46 +22,53 @@ export function create_rack_bounds(pin_count: RackPinCount): RackBounds {
   return create_bounds_from_rack(pin_count);
 }
 
-export function select_camera_mode(ball_y: number, reduced_motion: boolean): CameraMode {
-  if (reduced_motion) return "lane";
-  return ball_y >= camera_config.deck_trigger_y ? "deck" : "lane";
+export function create_camera_state(pin_count: RackPinCount, reduced_motion: boolean): CameraState {
+  const rack_bounds = create_rack_bounds(pin_count);
+  return { rack_bounds, shot_progress: 0, zoom: 0, reduced_motion };
 }
 
-export function create_camera_state(
-  pin_count: RackPinCount,
-  ball_y: number,
-  reduced_motion: boolean,
-): CameraState {
-  const state: CameraState = {
-    mode: select_camera_mode(ball_y, reduced_motion),
-    rack_bounds: create_rack_bounds(pin_count),
-  };
-  return state;
-}
-
-/** Preserves rack bounds while updating only the selected stable camera mode. */
-export function with_camera_mode(
+/**
+ * Advances the one centered shot framing from physical ball travel. The max
+ * makes the zoom monotonic even if pin impact briefly sends the ball back.
+ */
+export function advance_camera_for_ball(
   camera: CameraState,
   ball_y: number,
   reduced_motion: boolean,
 ): CameraState {
-  const mode = reduced_motion
-    ? "lane"
-    : camera.mode === "deck"
-      ? "deck"
-      : select_camera_mode(ball_y, false);
-  const state: CameraState = {
-    mode,
+  if (reduced_motion) {
+    return { rack_bounds: camera.rack_bounds, shot_progress: 0, zoom: 0, reduced_motion: true };
+  }
+  const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
+  const sampled_progress = Math.min(1, Math.max(0, ball_y / head_pin_y));
+  const shot_progress = Math.max(camera.shot_progress, sampled_progress);
+  return {
     rack_bounds: camera.rack_bounds,
+    shot_progress,
+    zoom: shot_progress * camera_config.maximum_shot_zoom,
+    reduced_motion: false,
   };
-  return state;
 }
 
-/** Starts a roll in the stable lane composition while retaining immutable rack bounds. */
+/** Restores the identical full-lane aiming composition for every fresh roll. */
 export function reset_camera_for_roll(camera: CameraState): CameraState {
-  const state: CameraState = {
-    mode: "lane",
+  return {
     rack_bounds: camera.rack_bounds,
+    shot_progress: 0,
+    zoom: 0,
+    reduced_motion: camera.reduced_motion,
   };
-  return state;
+}
+
+/** Applies the accessibility setting without changing the centered composition. */
+export function with_reduced_motion(camera: CameraState, reduced_motion: boolean): CameraState {
+  if (reduced_motion) {
+    return { rack_bounds: camera.rack_bounds, shot_progress: 0, zoom: 0, reduced_motion: true };
+  }
+  return {
+    rack_bounds: camera.rack_bounds,
+    shot_progress: camera.reduced_motion ? 0 : camera.shot_progress,
+    zoom: camera.reduced_motion ? 0 : camera.zoom,
+    reduced_motion: false,
+  };
 }

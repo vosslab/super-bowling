@@ -1,4 +1,4 @@
-// Selector contract: src/app/game.tsx exposes reactive aim-guide data and a native power meter.
+// Selector contract: src/app/game.tsx exposes real-worker preview readiness and four control sliders.
 import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1600, height: 1000 } });
@@ -10,34 +10,37 @@ async function expect_in_viewport(locator: import("@playwright/test").Locator): 
   expect((box?.y ?? Infinity) + (box?.height ?? Infinity)).toBeLessThanOrEqual(1000);
 }
 
-test("aiming: arrow keys move the projected path and grow its power feedback", async ({ page }) => {
+test("aiming: keyboard controls update the projected path before launch", async ({ page }) => {
   await page.goto("/");
   await page
     .getByRole("button", { name: "Start 10 mode - 10 pins for 1 player", exact: true })
     .click();
 
   const play_shell = page.locator("main.play_shell");
-  const power_meter = page.locator("[data-power-meter]");
+  const power_control = page.locator('[data-control="power"]');
   const guide_readout = page.locator("[data-aim-guide-readout]");
   await expect(play_shell).toHaveAttribute("data-phase", "aiming");
+  await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
   await expect(play_shell).toHaveAttribute("data-aim-guide", "visible");
   await expect_in_viewport(page.locator(".play_header"));
   await expect_in_viewport(page.locator(".match_roster"));
   await expect_in_viewport(page.locator(".score_strip"));
   await expect_in_viewport(page.locator(".lane_panel"));
   await expect_in_viewport(page.locator(".control_deck"));
-  await expect(power_meter).toHaveAttribute("value", "16");
-  await expect(guide_readout).toContainText("0.0 lane offset, power 16");
+  await expect(power_control).toHaveValue("16");
+  await expect(guide_readout).toContainText("0.0 boards");
+  const initial_guide_readout = await guide_readout.textContent();
 
-  const initial_end_y = await play_shell.getAttribute("data-aim-guide-end-y");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ArrowUp");
-  await expect(play_shell).toHaveAttribute("data-aim-guide-offset", "0.5");
-  await expect(power_meter).toHaveAttribute("value", "18");
-  await expect(guide_readout).toContainText("0.5 lane offset, power 18");
-  const raised_end_y = await play_shell.getAttribute("data-aim-guide-end-y");
-  expect(Number(raised_end_y)).toBeGreaterThan(Number(initial_end_y));
+  await page.keyboard.press("KeyD");
+  await page.keyboard.press("KeyE");
+  await expect(power_control).toHaveValue("18");
+  await expect(guide_readout).toContainText("spin");
+  expect(await guide_readout.textContent()).not.toBe(initial_guide_readout);
+  await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
+  await expect(play_shell).toHaveAttribute("data-aim-guide", "visible");
   await page.screenshot({ path: "test-results/aim_feedback_16_10.png", fullPage: true });
 
   await page.keyboard.press("Space");

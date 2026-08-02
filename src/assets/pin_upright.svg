@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 180" role="img" aria-label="Upright bowling pin">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 252" role="img" aria-label="Upright bowling pin">
+  <metadata>Silhouette profile adapted from OpenClipart artwork 295903 (public domain).</metadata>
   <defs>
     <linearGradient id="body" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0" stop-color="#fffdf2"/>
@@ -9,10 +10,17 @@
       <stop stop-color="#e85842"/>
       <stop offset="1" stop-color="#a72e2c"/>
     </linearGradient>
+    <path id="pin_shape" d="M40 2C52 2 61.8 11 61.8 30C61.8 50 54.5 78 52.8 90C52.3 95 55.5 104 59.5 108C70 122 77 148 78 172C79 195 70 224 58 248Q57 250 54 250H26Q23 250 22 248C10 224 1 195 2 172C3 148 10 122 20.5 108C24.5 104 27.7 95 27.2 90C25.5 78 18.2 50 18.2 30C18.2 11 28 2 40 2Z"/>
+    <clipPath id="pin_clip">
+      <use href="#pin_shape"/>
+    </clipPath>
   </defs>
-  <path d="M32 8c0-5 16-5 16 0 0 17-3 25 7 42 14 24 19 48 19 78 0 27-14 44-34 44S6 155 6 128c0-30 5-54 19-78 10-17 7-25 7-42Z" fill="url(#body)" stroke="#4a3a2e" stroke-width="4"/>
-  <path d="M25 47h30c3 8 6 16 9 24H16c3-8 6-16 9-24Z" fill="url(#stripe)" stroke="#7f2928" stroke-width="2"/>
-  <path d="M20 76h40" stroke="#f7d9ba" stroke-width="3" opacity="0.85"/>
-  <ellipse cx="28" cy="114" rx="10" ry="29" fill="#fff" opacity="0.4"/>
-  <ellipse cx="40" cy="165" rx="23" ry="5" fill="#9c8d78" opacity="0.45"/>
+  <use href="#pin_shape" fill="url(#body)"/>
+  <g clip-path="url(#pin_clip)">
+    <path d="M0 57h80v8H0Z" fill="url(#stripe)"/>
+    <path d="M0 72h80v8H0Z" fill="url(#stripe)"/>
+    <path d="M17 119C10 139 9 168 12 189C13 198 18 198 19 189C16 162 17 139 24 121C27 113 21 110 17 119Z" fill="#fff" opacity="0.38"/>
+    <ellipse cx="40" cy="245" rx="14" ry="4" fill="#9c8d78" opacity="0.38"/>
+  </g>
+  <use href="#pin_shape" fill="none" stroke="#4a3a2e" stroke-width="4" stroke-linejoin="round"/>
 </svg>

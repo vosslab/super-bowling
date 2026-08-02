@@ -1,18 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 80" role="img" aria-label="Fallen bowling pin">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 80" role="img" aria-label="Fallen bowling pin">
+  <metadata>Silhouette profile adapted from OpenClipart artwork 295903 (public domain).</metadata>
   <defs>
     <linearGradient id="body" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0" stop-color="#fffdf2"/>
       <stop offset="0.55" stop-color="#f2eadb"/>
       <stop offset="1" stop-color="#cfc1aa"/>
     </linearGradient>
-    <linearGradient id="stripe" x1="0" x2="1">
+    <linearGradient id="stripe" x1="0" x2="0" y1="0" y2="1">
       <stop stop-color="#e85842"/>
       <stop offset="1" stop-color="#a72e2c"/>
     </linearGradient>
+    <path id="pin_shape" d="M40 2C52 2 61.8 11 61.8 30C61.8 50 54.5 78 52.8 90C52.3 95 55.5 104 59.5 108C70 122 77 148 78 172C79 195 70 224 58 248Q57 250 54 250H26Q23 250 22 248C10 224 1 195 2 172C3 148 10 122 20.5 108C24.5 104 27.7 95 27.2 90C25.5 78 18.2 50 18.2 30C18.2 11 28 2 40 2Z"/>
+    <clipPath id="pin_clip">
+      <use href="#pin_shape"/>
+    </clipPath>
   </defs>
-  <ellipse cx="94" cy="64" rx="73" ry="10" fill="#715846" opacity="0.34"/>
-  <path d="M172 32c5 0 5 16 0 16-17 0-25-3-42 7-24 14-48 19-78 19C25 74 8 60 8 40S25 6 52 6c30 0 54 5 78 19 17 10 25 7 42 7Z" fill="url(#body)" stroke="#4a3a2e" stroke-width="4"/>
-  <path d="M133 25c8 3 16 6 24 9v12c-8 3-16 6-24 9V25Z" fill="url(#stripe)" stroke="#7f2928" stroke-width="2"/>
-  <path d="M128 20v40" stroke="#f7d9ba" stroke-width="3" opacity="0.85"/>
-  <ellipse cx="70" cy="28" rx="29" ry="10" fill="#fff" opacity="0.4"/>
+  <ellipse cx="126" cy="65" rx="106" ry="10" fill="#715846" opacity="0.34"/>
+  <g transform="translate(252 0) rotate(90)">
+    <use href="#pin_shape" fill="url(#body)"/>
+    <g clip-path="url(#pin_clip)">
+      <path d="M0 57h80v8H0Z" fill="url(#stripe)"/>
+      <path d="M0 72h80v8H0Z" fill="url(#stripe)"/>
+      <path d="M17 119C10 139 9 168 12 189C13 198 18 198 19 189C16 162 17 139 24 121C27 113 21 110 17 119Z" fill="#fff" opacity="0.38"/>
+      <ellipse cx="40" cy="245" rx="14" ry="4" fill="#9c8d78" opacity="0.38"/>
+    </g>
+    <use href="#pin_shape" fill="none" stroke="#4a3a2e" stroke-width="4" stroke-linejoin="round"/>
+  </g>
 </svg>

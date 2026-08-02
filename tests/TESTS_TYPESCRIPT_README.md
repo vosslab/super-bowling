@@ -10,13 +10,13 @@ is the whole interface: drive the repo through them and you never need to open
 
 ## Front door shell scripts
 
-| Script | What it does |
-| --- | --- |
-| `./check_codebase.sh` | Fast gate: typecheck, lint, format check, Node unit tests. |
-| `./build_github_pages.sh` | Bundle `src/` into `dist/` (the Pages artifact). |
-| `./run_web_server.sh` | Build `dist/`, serve a local preview on a random port. |
-| `./run_playwright_tests.sh` | Run browser tests; builds `dist/` as needed. |
-| `./dist_clean.sh` | Wipe `dist/`. |
+| Script                      | What it does                                               |
+| --------------------------- | ---------------------------------------------------------- |
+| `./check_codebase.sh`       | Fast gate: typecheck, lint, format check, Node unit tests. |
+| `./build_github_pages.sh`   | Bundle `src/` into `dist/` (the Pages artifact).           |
+| `./run_web_server.sh`       | Build `dist/`, serve a local preview on a random port.     |
+| `./run_playwright_tests.sh` | Run browser tests; builds `dist/` as needed.               |
+| `./dist_clean.sh`           | Wipe `dist/`.                                              |
 
 Run `./check_codebase.sh --help` for usage. `./run_web_server.sh` picks a
 random port each run so the browser cache stays fresh; set `PORT` to override.
@@ -24,6 +24,25 @@ Its 600-second session bound releases the port after an interrupted local run;
 set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a positive whole-second override.
 `./run_playwright_tests.sh` lets Playwright's own `webServer` config start the
 test server, and accepts `--build` to force a rebuild first.
+
+## Deterministic strike matrix
+
+Use the persistent strike probe to test one legal launch setting against all
+six supported menu modes and their actual complete triangular racks, without
+random variation:
+
+```bash
+npm run strike-matrix -- --power 16 --start-position 0 --angle 0 --spin 0
+```
+
+The probe has no stochastic or seeded variability: it advances the production
+simulation with its fixed timestep. The report lists each menu label, actual
+triangular rack total, pin accounting, settlement status, and simulated time.
+Every sample must settle with conserved pins; add `--require-all-strikes` only
+when the setting must strike every rack, which makes a non-strike exit nonzero.
+Without that strict flag, a non-strike is useful tuning evidence rather than an
+automatic release failure. Run `npm run strike-matrix -- --help` for the
+complete argument list.
 
 ## Repo layout you edit
 

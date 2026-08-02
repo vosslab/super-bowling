@@ -4,58 +4,52 @@ export type BenchmarkFixtureId =
 export type BenchmarkFixture = {
   fixture_id: BenchmarkFixtureId;
   label: string;
-  lateral_offset: number;
   power: number;
-  steer_start_step: number;
-  steer_end_step: number;
-  steer_direction: -1 | 0 | 1;
+  start_position: number;
+  angle: number;
+  spin: number;
 };
 
 export const benchmark_fixtures: readonly BenchmarkFixture[] = [
   {
     fixture_id: "head_on",
     label: "head-on",
-    lateral_offset: 0,
     power: 18,
-    steer_start_step: 0,
-    steer_end_step: 0,
-    steer_direction: 0,
+    start_position: 0,
+    angle: 0,
+    spin: 0,
   },
   {
     fixture_id: "left_pocket",
     label: "left pocket",
-    lateral_offset: -0.38,
     power: 18,
-    steer_start_step: 0,
-    steer_end_step: 0,
-    steer_direction: 0,
+    start_position: -0.38,
+    angle: 0,
+    spin: 0,
   },
   {
     fixture_id: "right_pocket",
     label: "right pocket",
-    lateral_offset: 0.38,
     power: 18,
-    steer_start_step: 0,
-    steer_end_step: 0,
-    steer_direction: 0,
+    start_position: 0.38,
+    angle: 0,
+    spin: 0,
   },
   {
     fixture_id: "late_left_hook",
     label: "late left hook",
-    lateral_offset: 0.25,
     power: 17,
-    steer_start_step: 90,
-    steer_end_step: 210,
-    steer_direction: -1,
+    start_position: 0.25,
+    angle: -0.05,
+    spin: -0.7,
   },
   {
     fixture_id: "gutter_recovery",
     label: "gutter recovery",
-    lateral_offset: 0.82,
     power: 15,
-    steer_start_step: 40,
-    steer_end_step: 160,
-    steer_direction: -1,
+    start_position: 0.82,
+    angle: -0.08,
+    spin: -0.8,
   },
 ];
 

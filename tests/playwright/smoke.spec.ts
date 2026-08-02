@@ -40,7 +40,7 @@ test("smoke: the built app reaches a real ten-pin aiming state", async ({ page }
   for (const path of [
     "/assets/pin_upright.svg",
     "/assets/pin_fallen.svg",
-    "/assets/ball_sphere.svg",
+    "/assets/ball_surface.svg",
   ]) {
     const asset_response = await page.request.get(path);
     expect(asset_response.status()).toBe(200);

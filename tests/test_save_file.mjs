@@ -7,7 +7,7 @@ import {
   update_best_score,
 } from "../src/save/save_file.ts";
 
-test("normalizes a version-one save into a bounded recent match setup", () => {
+test("migrates a literal version-one save and clears incomparable best scores", () => {
   const save = normalize_save_file({
     version: 1,
     mute_enabled: true,
@@ -60,12 +60,13 @@ test("normalizes a version-one save into a bounded recent match setup", () => {
       },
     ],
   });
-  assert.deepEqual(save.best_scores, { 10: 300, 20: 601, 1000: 29700 });
+  assert.equal(save.version, 2);
+  assert.deepEqual(save.best_scores, {});
 });
 
 test("returns useful defaults for missing or obsolete save schemas", () => {
   assert.deepEqual(normalize_save_file(undefined), create_default_save());
-  assert.deepEqual(normalize_save_file({ version: 2 }), create_default_save());
+  assert.deepEqual(normalize_save_file({ version: 9 }), create_default_save());
 });
 
 test("records only monotonic legal best scores for each rack", () => {

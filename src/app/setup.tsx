@@ -71,7 +71,7 @@ export type SetupProps = {
   best_score(pin_count: PinCount): number | undefined;
   on_set_mute(mute_enabled: boolean): void;
   on_set_reduced_motion(reduced_motion: boolean): void;
-  fixture_mode?: "perfect_game" | "zero_knock" | "camera_deck";
+  fixture_mode?: "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | "preview_stale";
 };
 
 export function Setup(props: SetupProps): JSX.Element {

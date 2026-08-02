@@ -7,8 +7,10 @@ import {
   type PinCount,
   type RackPinCount,
 } from "../config/pin_counts";
-import { get_mode_tuning, physics_config } from "../config/physics";
+import { get_mode_tuning, get_settle_max_seconds, physics_config } from "../config/physics";
+import { ball_radius, lane_width, pin_radius } from "../config/lane";
 import { create_draw_commands } from "../render/benchmark_renderer";
+import { ball_snapshot_in_pit_flag_offset, pin_snapshot_stride } from "./protocol";
 import { create_simulation_world } from "./world";
 
 export type { BenchmarkFixture } from "../config/benchmark_fixtures";
@@ -41,6 +43,15 @@ export type BenchmarkReport = {
   samples: BenchmarkSample[];
 };
 
+export type ShotHarnessSample = {
+  shot_id: "A" | "B" | "C" | "D" | "E" | "F_left" | "F_right";
+  label: string;
+  fallen_pin_count: number;
+  reached_pit: boolean;
+  settled: boolean;
+  timed_out: boolean;
+};
+
 function summarize_cpu_times(samples: number[]): CpuTimeSummary {
   const sorted = [...samples].sort((first, second) => first - second);
   const total = sorted.reduce((sum, value) => sum + value, 0);
@@ -68,14 +79,11 @@ export async function run_benchmark(
   let timed_out = false;
   let step_count = 0;
   const fixture_start = performance.now();
-  world.launch(fixture.power, fixture.lateral_offset);
+  world.launch(fixture.power, fixture.start_position, fixture.angle, fixture.spin);
   const max_steps = Math.ceil(
-    physics_config.settle_max_seconds / physics_config.fixed_step_seconds,
+    get_settle_max_seconds(pin_count) / physics_config.fixed_step_seconds,
   );
   while (step_count < max_steps && !settled && !timed_out) {
-    const steering_active =
-      step_count >= fixture.steer_start_step && step_count <= fixture.steer_end_step;
-    world.set_steer(steering_active ? fixture.steer_direction : 0);
     const fixed_step_start = performance.now();
     const result = world.step_fixed();
     const fixed_step_cpu_time_ms = performance.now() - fixed_step_start;
@@ -128,6 +136,94 @@ export async function run_benchmark_report(): Promise<{
     }
   }
   return { generated_at: new Date().toISOString(), samples };
+}
+
+/**
+ * Repeatable M3 tuning observations. Calibrated pinfall targets stay in the
+ * report rather than becoming brittle release-gate assertions.
+ */
+export async function run_shot_harness_report(): Promise<ShotHarnessSample[]> {
+  const pin_count = 10;
+  const gutter_start = lane_width(pin_count) / 2 + ball_radius + pin_radius;
+  const shots: Array<{
+    shot_id: ShotHarnessSample["shot_id"];
+    label: string;
+    power: number;
+    start_position: number;
+    angle: number;
+    spin: number;
+  }> = [
+    { shot_id: "A", label: "center full power", power: 24, start_position: 0, angle: 0, spin: 0 },
+    { shot_id: "B", label: "center minimum power", power: 8, start_position: 0, angle: 0, spin: 0 },
+    {
+      shot_id: "C",
+      label: "lane edge full power",
+      power: 24,
+      start_position: gutter_start,
+      angle: 0,
+      spin: 0,
+    },
+    {
+      shot_id: "D",
+      label: "gutter path",
+      power: 8,
+      start_position: gutter_start,
+      angle: 0,
+      spin: 0,
+    },
+    {
+      shot_id: "E",
+      label: "left pocket full spin",
+      power: 24,
+      start_position: -0.5,
+      angle: 0,
+      spin: 1,
+    },
+    {
+      shot_id: "F_left",
+      label: "mirrored left spin",
+      power: 24,
+      start_position: -0.5,
+      angle: 0,
+      spin: 1,
+    },
+    {
+      shot_id: "F_right",
+      label: "mirrored right spin",
+      power: 24,
+      start_position: 0.5,
+      angle: 0,
+      spin: -1,
+    },
+  ];
+  const samples: ShotHarnessSample[] = [];
+  for (const shot of shots) {
+    const world = await create_simulation_world(pin_count);
+    world.launch(shot.power, shot.start_position, shot.angle, shot.spin);
+    let settled = false;
+    let timed_out = false;
+    const maximum_steps = Math.ceil(
+      get_settle_max_seconds(pin_count) / physics_config.fixed_step_seconds,
+    );
+    for (let step = 0; step < maximum_steps && !settled && !timed_out; step += 1) {
+      const result = world.step_fixed();
+      settled = result.settled;
+      timed_out = result.timed_out;
+    }
+    const snapshot = world.create_snapshot();
+    const reached_pit =
+      snapshot.data[pin_count * pin_snapshot_stride + ball_snapshot_in_pit_flag_offset] === 1;
+    samples.push({
+      shot_id: shot.shot_id,
+      label: shot.label,
+      fallen_pin_count: world.get_counts().fallen_pin_count,
+      reached_pit,
+      settled,
+      timed_out,
+    });
+    world.dispose();
+  }
+  return samples;
 }
 
 function has_finite_measurements(sample: BenchmarkSample): boolean {

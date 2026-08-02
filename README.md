@@ -1,16 +1,14 @@
 # Super Bowling
 
-An original browser bowling game for friends sharing one keyboard, with
-front-facing arcade lanes and complete triangular racks that grow from ten real pins to 990.
+An original browser bowling game for friends sharing one keyboard, where technique-driven shots
+curve through regulation-inspired lanes toward triangular racks from 10 to 990 pins.
 
-> **Playable now:** choose the 10, 20, 50, 100, 500, or 1,000 scale label for a complete
-> one-to-four-player keyboard match with worker physics, Canvas rendering, generalized scoring,
-> and custom balls.
+[Play Super Bowling live](https://vosslab.github.io/super-bowling/)
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 
-![1,000 mode aiming state with a circular ball, dotted path, full controls, and complete 990-pin triangle](docs/screenshots/thousand_pin_deck.png)
-![Four-player pass-the-keyboard handoff focused on Bea's next turn](docs/screenshots/pass_the_keyboard.png)
+![1,000-mode aiming lane with a 990-pin triangle, projected-path controls, regulation arrows, and a rolling ball](docs/screenshots/thousand_pin_deck.png)
+![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with the four technique controls visible](docs/screenshots/pass_the_keyboard.png)
 <!-- screenshots:end -->
 
 ## One keyboard, giant rack
@@ -48,9 +46,10 @@ silhouette stays familiar while the selected surface pattern visibly rolls.
 
 The shipped game starts a complete-triangle match with one to four named players. Setup keeps
 each player's colors, pattern, and optional monogram in the same production ball renderer used on
-the lane. A focused pass-the-keyboard card advances each hot-seat turn, while the full score strip,
-original pin and circular-ball art, projected aim path, worker-backed rolls, and
-phase feedback stay visible.
+the lane. The four pre-roll controls set power, start position, angle, and spin; the worker-backed
+preview shows the same free path the roll will follow before its first pin contact. A focused
+pass-the-keyboard card advances each hot-seat turn while the score strip and phase feedback stay
+visible.
 
 ## Quick start
 
@@ -65,8 +64,9 @@ GitHub Pages.
 
 Open the local URL printed by the server, choose a rack, add one to four players, and customize
 their balls before starting the match.
-Use arrow keys to set aim and power, press Space to bowl, and use Left/Right while rolling to
-guide the ball. The setup and in-game controls keep Mute and Reduced motion choices visible.
+Use Up/Down for power, Left/Right for start position, A/D for angle, Q/E for spin, and Space to
+bowl. Technique is selected before release; the rolling ball has no steering control. The setup
+and in-game controls keep Mute and Reduced motion choices visible.
 Stop the server with `Ctrl-C`.
 The preview session expires after 600 seconds; set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a
 positive whole-second value when a shorter or longer local session is useful.
@@ -75,16 +75,20 @@ positive whole-second value when a shorter or longer local session is useful.
 
 Every rack uses the same deliberately simple keyboard control scheme:
 
-| Key          | Action                                                   |
-| ------------ | -------------------------------------------------------- |
-| Left / Right | Aim before launch; guide the ball gently while it rolls. |
-| Up / Down    | Set bowling power before launch.                         |
-| Space        | Bowl.                                                    |
+| Key          | Action                            |
+| ------------ | --------------------------------- |
+| Up / Down    | Set pre-roll power.               |
+| Left / Right | Set pre-roll start position.      |
+| A / D        | Set pre-roll angle.               |
+| Q / E        | Set pre-roll spin.                |
+| Space        | Bowl with the selected technique. |
 
 The completed match follows classic strikes, spares, and tenth-frame bonus rolls.
 The shared [docs/GAME_RULES.md](docs/GAME_RULES.md) contract generalizes the same rules to
 every supported rack: a perfect game scores `30 * pin_count`.
 Here `pin_count` is the displayed actual total, rather than the convenient scale label.
+Existing V1 local saves keep player details and preferences but clear best scores once, because
+the rebuilt lane and controls make those old records incomparable.
 
 ## Verify and build
 
@@ -106,10 +110,8 @@ a 1600 x 1000 headless viewport, matching the game's 16:10 desktop target.
 ## GitHub Pages setup
 
 The repository includes [deploy-pages.yml](deploy-pages.yml), a user-copyable root GitHub Actions
-workflow. Copy it to `.github/workflows/deploy-pages.yml` in GitHub, enable Pages for
-the repository, and use the resulting deployment URL. The workflow sets up dependencies,
-checks the codebase, builds `dist/`, and deploys the uploaded Pages artifact. A public demo
-URL is not confirmed yet.
+workflow. Copy it to `.github/workflows/deploy-pages.yml` in GitHub to refresh the Pages deploy.
+The workflow checks the codebase, builds `dist/`, and deploys the uploaded Pages artifact.
 
 ## Documentation
 
@@ -123,16 +125,18 @@ URL is not confirmed yet.
   - Choose the appropriate test home for browser and non-browser workflows.
 - [docs/COLOR_CONTRAST_ACCESSIBILITY.md](docs/COLOR_CONTRAST_ACCESSIBILITY.md)
   - Readability guidance for the game's high-energy interface.
+- [docs/GEOMETRY_MODEL.md](docs/GEOMETRY_MODEL.md)
+  - Foot-based lane dimensions, fixed travel and gutters, and the shared preview boundary.
+- [docs/GAME_RULES.md](docs/GAME_RULES.md)
+  - Four-control technique play, rack cleanup, generalized scoring, and save migration.
 
 ## Roadmap status
 
-M1 through M8 are delivered: the Solid shell and worker contracts, complete-triangle simulation
-benchmark, full scoring match, generalized rack modes, hot-seat custom balls, and the audio,
-save, camera, reduced-motion presentation, and the playability/geometry revision are all part
-of the playable build. The final retained front doors pass 76 Node tests, the static Pages build,
-all 22 headless browser journeys, and the 30-shot simulation benchmark across 10->10, 20->21,
-50->45, 100->105, 500->496, and 1000->990. The benchmark release gate requires every sample to
-settle without timeout while conserving pins and reporting finite measurements. The README
-screenshots were visually inspected at the 1600 x 1000 target viewport.
+The regulation-lane rebuild is delivered: fixed lane geometry, real worker previews, four
+pre-roll controls, same-rack fallen-pin cleanup, and V2 score migration are part of the playable
+build. Retained front doors cover code checks, Pages builds, headless browser journeys, and the
+simulation benchmark. The active plan records the current evidence, including the final
+browser-run caveat; the README screenshots were visually inspected at the 1600 x 1000 target
+viewport.
 
 The active plan is the source of truth for milestone status and evidence.

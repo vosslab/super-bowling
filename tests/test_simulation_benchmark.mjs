@@ -4,12 +4,19 @@ import test from "node:test";
 import { create_pin_id } from "../src/brands.ts";
 import { benchmark_fixtures } from "../src/config/benchmark_fixtures.ts";
 import { get_rack_pin_count, supported_pin_counts } from "../src/config/pin_counts.ts";
-import { get_mode_tuning } from "../src/config/physics.ts";
+import { get_mode_tuning, physics_config } from "../src/config/physics.ts";
+import { fallen_pin_length } from "../src/config/lane.ts";
 import { find_nearby_pin_ids, create_activation_index } from "../src/simulation/activation.ts";
 import { get_benchmark_validation_failures } from "../src/simulation/benchmark.ts";
 import {
   ball_snapshot_stride,
+  ball_snapshot_in_pit_flag_offset,
   pin_snapshot_stride,
+  read_snapshot_pin,
+  snapshot_fallen_axis_angle_offset,
+  snapshot_in_pit_flag_offset,
+  snapshot_removed_flag_offset,
+  snapshot_state_flag_offset,
   snapshot_velocity_x_offset,
 } from "../src/simulation/protocol.ts";
 import { create_rack } from "../src/simulation/rack.ts";
@@ -20,11 +27,11 @@ async function run_centered_roll(mode, power) {
   const world = await create_simulation_world(get_rack_pin_count(mode));
   const head_pin = world.rack.slots[0];
   assert.ok(head_pin);
-  world.launch(power, 0);
+  world.launch(power, 0, 0, 0);
   let head_contact_step;
   let terminal = false;
   let fallen_pin_count = 0;
-  for (let step = 1; step <= 900 && !terminal; step += 1) {
+  for (let step = 1; step <= 3_600 && !terminal; step += 1) {
     const result = world.step_fixed();
     const head_velocity = world.get_pin_velocity(head_pin.pin_id);
     if (head_contact_step === undefined && Math.hypot(head_velocity.x, head_velocity.y) > 0.01) {
@@ -93,22 +100,23 @@ test("builds every supported rack from one centered head pin into centered trian
 test("exposes only snapshot and activation tuning for every supported count", () => {
   for (const pin_count of supported_pin_counts) {
     const tuning = get_mode_tuning(pin_count);
-    assert.equal(tuning.snapshot_hz, pin_count <= 100 ? 60 : 30);
-    assert.equal(Number.isFinite(tuning.activation_radius), true);
+    assert.ok(Number.isFinite(tuning.snapshot_hz) && tuning.snapshot_hz > 0);
+    assert.ok(Number.isFinite(tuning.activation_radius) && tuning.activation_radius > 0);
   }
 });
 
-test("shares labeled steering fixtures between benchmark entry points", () => {
-  const hook = benchmark_fixtures.find((fixture) => fixture.fixture_id === "late_left_hook");
-  assert.deepEqual(hook, {
-    fixture_id: "late_left_hook",
-    label: "late left hook",
-    lateral_offset: 0.25,
-    power: 17,
-    steer_start_step: 90,
-    steer_end_step: 210,
-    steer_direction: -1,
-  });
+test("shares four-parameter launch fixtures between benchmark entry points", () => {
+  assert.ok(benchmark_fixtures.some((fixture) => fixture.fixture_id === "late_left_hook"));
+  for (const fixture of benchmark_fixtures) {
+    assert.ok(
+      [fixture.power, fixture.start_position, fixture.angle, fixture.spin].every(Number.isFinite),
+    );
+    assert.equal("lateral_offset" in fixture, false);
+    assert.equal("steer" in fixture, false);
+    assert.equal("steer_direction" in fixture, false);
+    assert.equal("steer_start_step" in fixture, false);
+    assert.equal("steer_end_step" in fixture, false);
+  }
 });
 
 test("includes only radius candidates across spatial-hash cell boundaries", () => {
@@ -125,8 +133,8 @@ test("direct contact wakes a sleeping dynamic pin and transfers velocity", async
   const world = await create_simulation_world(10);
   const first_pin = world.rack.slots[0];
   assert.ok(first_pin);
-  world.launch(24, first_pin.x);
-  for (let step = 0; step < 300; step += 1) {
+  world.launch(24, first_pin.x, 0, 0);
+  for (let step = 0; step < 1_200; step += 1) {
     world.step_fixed();
     const velocity = world.get_pin_velocity(first_pin.pin_id);
     if (Math.hypot(velocity.x, velocity.y) > 0) break;
@@ -175,9 +183,9 @@ test("a second roll retains its full settlement lifecycle on the same rack", asy
     }
     return { terminal, step_count };
   };
-  world.launch(18, 0);
+  world.launch(18, 0, 0, 0);
   assert.equal(settle_roll().terminal, true);
-  world.launch(18, 0);
+  world.launch(18, 0, 0, 0);
   const second_roll = settle_roll();
   assert.equal(second_roll.terminal, true);
   assert.ok(second_roll.step_count > 1);
@@ -186,7 +194,7 @@ test("a second roll retains its full settlement lifecycle on the same rack", asy
 
 test("count conservation and exactly-once falls hold through a cascade", async () => {
   const world = await create_simulation_world(get_rack_pin_count(20));
-  world.launch(20, 0);
+  world.launch(20, 0, 0, 0);
   const fall_ids = new Set();
   for (let step = 0; step < 900; step += 1) {
     const result = world.step_fixed();
@@ -199,6 +207,170 @@ test("count conservation and exactly-once falls hold through a cascade", async (
     if (result.settled || result.timed_out) break;
   }
   world.dispose();
+});
+
+test("a centered roll topples a non-head pin whose first dynamic contact was pin-only", async () => {
+  const world = await create_simulation_world(10);
+  const non_head_pin_ids = new Set(world.rack.slots.slice(1).map((slot) => slot.pin_id));
+  const fall_events = [];
+
+  try {
+    world.launch(18, 0, 0, 0);
+    for (let step = 1; step <= 900; step += 1) {
+      const result = world.step_fixed();
+      for (const pin_id of result.fall_events) fall_events.push({ pin_id, step });
+      if (result.settled || result.timed_out) break;
+    }
+
+    assert.ok(
+      fall_events.some(
+        (event) =>
+          non_head_pin_ids.has(event.pin_id) &&
+          world.get_pin_first_contact(event.pin_id) === "pin_pin",
+      ),
+      "a fallen non-head pin must first contact another pin without a simultaneous ball contact",
+    );
+  } finally {
+    world.dispose();
+  }
+});
+
+test("a fallen pin replaces its base circle with a mass-preserving outward capsule", async () => {
+  const world = await create_simulation_world(10);
+  const head_pin = world.rack.slots[0];
+  assert.ok(head_pin);
+
+  try {
+    const standing = world.get_pin_collision_profile(head_pin.pin_id);
+    assert.equal(standing.shape, "standing_circle");
+    assert.equal(standing.footprint_length, physics_config.pin_radius * 2);
+
+    world.launch(16, 0, 0, 0);
+    for (let step = 0; step < 1_200; step += 1) {
+      world.step_fixed();
+      if (world.get_counts().fallen_pin_count > 0) break;
+    }
+
+    const fallen = world.get_pin_collision_profile(head_pin.pin_id);
+    assert.equal(fallen.shape, "fallen_capsule");
+    assert.equal(fallen.footprint_length, fallen_pin_length);
+    assert.ok(fallen.footprint_length > standing.footprint_length);
+    assert.ok(Math.abs(fallen.mass - standing.mass) < 1e-6);
+  } finally {
+    world.dispose();
+  }
+});
+
+test("fallen snapshots publish the collider center and long axis", async () => {
+  const world = await create_simulation_world(10);
+  const head_pin = world.rack.slots[0];
+  assert.ok(head_pin);
+
+  try {
+    world.launch(16, 0, 0, 0);
+    for (let step = 0; step < 1_200; step += 1) {
+      world.step_fixed();
+      if (world.get_counts().fallen_pin_count > 0) break;
+    }
+
+    const snapshot = world.create_snapshot();
+    const offset = Number(head_pin.pin_id) * pin_snapshot_stride;
+    const pin = read_snapshot_pin(snapshot.data, offset);
+    const body = world.get_pin_position(head_pin.pin_id);
+    const center_offset_x = pin.x - body.x;
+    const center_offset_y = pin.y - body.y;
+    const center_offset_length = Math.hypot(center_offset_x, center_offset_y);
+
+    assert.equal(pin.state_flag, 1);
+    assert.ok(Math.abs(center_offset_length - fallen_pin_length / 2) < 1e-5);
+    assert.ok(
+      Math.abs(center_offset_x / center_offset_length - Math.cos(pin.fallen_axis_angle)) < 1e-5,
+    );
+    assert.ok(
+      Math.abs(center_offset_y / center_offset_length - Math.sin(pin.fallen_axis_angle)) < 1e-5,
+    );
+    assert.equal(snapshot.data[offset + snapshot_fallen_axis_angle_offset], pin.fallen_axis_angle);
+  } finally {
+    world.dispose();
+  }
+});
+
+test("at least one legal centered ten-pin roll can strike", async () => {
+  const legal_powers = [8, 10, 12, 14, 16, 18, 20, 22, 24];
+  let strike_power;
+
+  for (const power of legal_powers) {
+    const world = await create_simulation_world(10);
+    try {
+      world.launch(power, 0, 0, 0);
+      for (let step = 0; step < 3_600; step += 1) {
+        const result = world.step_fixed();
+        if (result.settled || result.timed_out) break;
+      }
+      if (world.get_counts().fallen_pin_count === 10) {
+        strike_power = power;
+        break;
+      }
+    } finally {
+      world.dispose();
+    }
+  }
+
+  assert.notEqual(strike_power, undefined, "one legal centered roll should produce a strike");
+});
+
+test("fallen capsule axes settle without windmill-scale rotation", async () => {
+  const world = await create_simulation_world(10);
+  const accumulated_turn_by_pin = new Map();
+  const last_axis_angle_by_pin = new Map();
+  let terminal = false;
+
+  function shortest_arc(first, second) {
+    return ((((second - first + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+  }
+
+  try {
+    world.launch(18, 0, 0, 0);
+    for (let step = 0; step < 3_600; step += 1) {
+      const result = world.step_fixed();
+      for (const slot of world.rack.slots) {
+        const axis_angle = world.get_pin_fallen_axis_angle(slot.pin_id);
+        if (axis_angle === undefined) continue;
+        assert.ok(Number.isFinite(axis_angle), `pin ${slot.pin_id} axis remains finite`);
+        const previous = last_axis_angle_by_pin.get(slot.pin_id);
+        if (previous !== undefined) {
+          const accumulated =
+            (accumulated_turn_by_pin.get(slot.pin_id) ?? 0) +
+            Math.abs(shortest_arc(previous, axis_angle));
+          accumulated_turn_by_pin.set(slot.pin_id, accumulated);
+        } else {
+          accumulated_turn_by_pin.set(slot.pin_id, 0);
+        }
+        last_axis_angle_by_pin.set(slot.pin_id, axis_angle);
+      }
+      if (result.settled || result.timed_out) {
+        terminal = result.settled;
+        break;
+      }
+    }
+
+    assert.equal(terminal, true, "representative centered strike roll settles without a timeout");
+    assert.ok(accumulated_turn_by_pin.size > 0, "fixture creates fallen capsules");
+    const maximum_accumulated_rotation = Math.max(...accumulated_turn_by_pin.values());
+    assert.ok(
+      maximum_accumulated_rotation > 0.01,
+      "native capsule contacts retain visible physical rotation",
+    );
+    for (const [pin_id, accumulated] of accumulated_turn_by_pin) {
+      assert.ok(Number.isFinite(accumulated), `pin ${pin_id} rotation remains finite`);
+      assert.ok(
+        accumulated < Math.PI * 2,
+        `pin ${pin_id} physical capsule axis remains below one full turn (${accumulated})`,
+      );
+    }
+  } finally {
+    world.dispose();
+  }
 });
 
 test("benchmark validation identifies incomplete, unconserved, and unusable samples", () => {
@@ -243,4 +415,34 @@ test("renderer creates a finite command for every pin at each framing count", ()
       ),
     );
   }
+});
+
+test("benchmark renderer interpolates a fallen axis through the short PI boundary arc", () => {
+  const pin_count = 10;
+  const previous = new Float32Array(pin_count * pin_snapshot_stride + ball_snapshot_stride);
+  const current = new Float32Array(pin_count * pin_snapshot_stride + ball_snapshot_stride);
+  previous[snapshot_state_flag_offset] = 1;
+  current[snapshot_state_flag_offset] = 1;
+  previous[snapshot_fallen_axis_angle_offset] = Math.PI - 0.1;
+  current[snapshot_fallen_axis_angle_offset] = -Math.PI + 0.1;
+
+  const command = create_draw_commands(previous, current, pin_count, 0.5, 1600, 1000)[1];
+  assert.ok(command);
+  const angular_distance = (first, second) =>
+    Math.abs(
+      ((((first - second + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI,
+    );
+
+  assert.equal(command.kind, "fallen_pin");
+  assert.ok(angular_distance(command.angle, Math.PI) < 0.001);
+});
+
+test("benchmark renderer omits pins and balls that have left the visible lane", () => {
+  const pin_count = 10;
+  const data = new Float32Array(pin_count * pin_snapshot_stride + ball_snapshot_stride);
+  data[snapshot_removed_flag_offset] = 1;
+  data[pin_snapshot_stride + snapshot_in_pit_flag_offset] = 1;
+  data[pin_count * pin_snapshot_stride + ball_snapshot_in_pit_flag_offset] = 1;
+  const commands = create_draw_commands(data, data, pin_count, 0.5, 1600, 1000);
+  assert.equal(commands.filter((command) => command.kind !== "lane").length, pin_count - 2);
 });

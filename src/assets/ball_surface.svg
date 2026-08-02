@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" role="img" aria-label="Seamless bowling ball surface">
+  <defs>
+    <linearGradient id="surface" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#d8f7ff" stop-opacity="0.8"/>
+      <stop offset="0.5" stop-color="#2a8fd1" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#062c64" stop-opacity="0.6"/>
+    </linearGradient>
+    <pattern id="repeated-surface" width="180" height="120" patternUnits="userSpaceOnUse">
+      <rect width="180" height="120" fill="url(#surface)"/>
+      <path d="M18 32L60 15l42 17 42-17 18 7" fill="none" stroke="#d9f6ff" stroke-width="9" opacity="0.38"/>
+      <g fill="#09192f" stroke="#b9e6ff" stroke-width="2" opacity="0.85">
+        <circle cx="84" cy="47" r="10"/>
+        <circle cx="112" cy="41" r="10"/>
+        <circle cx="99" cy="69" r="10"/>
+      </g>
+    </pattern>
+  </defs>
+  <rect width="360" height="120" fill="url(#repeated-surface)"/>
+</svg>

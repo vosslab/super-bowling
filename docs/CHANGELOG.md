@@ -1,3 +1,108 @@
+## 2026-08-01
+
+### Additions and New Features
+
+- Added the post-closeout playability recovery record: a single centered faux-3D shot,
+  worker-acknowledged second-roll readiness, stale-preview fencing, and durable browser-capture
+  gates for real production-path evidence.
+- Added `npm run strike-matrix -- ...`, a permanent fixed-timestep diagnostic that runs one legal
+  four-parameter launch through all six actual triangular racks, reports settlement and pin
+  conservation, and can make all-rack strikes strict with `--require-all-strikes`.
+
+### Behavior or Interface Changes
+
+- Fallen capsules now receive angular damping only at their physical transition, preserving
+  upright-pin response while preventing implausible repeated windmill rotations after impact.
+- Fallen pins now replace their standing circular collider with a mass-preserving 1.25 ft outward
+  capsule. Native Rapier pin-to-pin contacts carry cascades, and the first-contact diagnostic
+  reports ball-to-pin or pin-to-pin provenance without adding synthetic fall logic.
+- Fallen-pin snapshots now carry each capsule's physical center and long-axis pose, which the
+  renderer uses to align the sprite with its collision footprint.
+- The camera now holds one centered full-lane composition. Physical ball travel drives monotonic
+  visible upward movement and a mild zoom; results hold the final view, second rolls reset before
+  controls enable, and reduced motion keeps the same composition without zoom.
+
+### Fixes and Maintenance
+
+- Scoped the fixture-only second-roll rolling hold to the partial-knock journey, so zero-knock
+  fixtures publish their normal settled second roll and four-player handoffs complete.
+- Rebuilt the upright and fallen pin silhouettes from the curved profile in the public-domain
+  [OpenClipart strike artwork](https://openclipart.org/download/295903/publicdomainq-strike.svg),
+  replacing the
+  early-swelling oval profile with a rounded crown, narrowing neck, late shoulder, full belly,
+  and narrow foot. Both orientations now use the same profile, with both red bands on the neck.
+
+### Decisions and Failures
+
+- Reopened visual finding S10 after player review overruled the earlier independent acceptance:
+  the first replacement still had the wrong curve and its generated crown ended in a point. The
+  supplied public-domain source is now the shape reference instead of another freehand redraw.
+- The deterministic centered power sweep at 8, 12, 16, 20, and 24 found no setting that strikes
+  every rack: only 10 pins struck, and the best 990-pin result was 359 fallen at power 24. This is
+  recorded as propagation-design evidence, not represented as success or made a release gate
+  unless `--require-all-strikes` is explicitly requested.
+
+### Developer Tests and Notes
+
+- Rendered both standalone SVGs with `rsvg-convert`, validated them with `xmllint`, and refreshed
+  the maintained documentation and milestone captures through
+  `./devel/capture_screenshots.sh`. The live 10-, 105-, and 990-pin aiming captures and deadwood
+  capture show the corrected upright and fallen profiles at game scale.
+- Updated the four-player Playwright turn helper to wait for the real next-roll aiming readiness
+  contract before bowling again, keeping the handoff journey race-free without a fixed delay.
+- The fallen-capsule realism check now requires finite, visible native rotation below one
+  accumulated turn on a representative roll. It avoids exact angular paths while a separate legal
+  centered-shot test retains the possibility of a strike.
+
+## 2026-07-30
+
+### Additions and New Features
+
+- Rebuilt Super Bowling around a foot-based regulation lane with fixed 60 ft ball travel,
+  fixed 9.25 in gutters, rack-scaled lane width, and a pit that removes fallen pins between
+  rolls on the same rack.
+- Added four pre-roll bowling controls: start position, launch angle, power, and spin. The
+  worker now provides the actual aim preview instead of a separate synthetic guide.
+- Updated the ball, pin, and lane presentation so the equipment reads as bowling at every
+  supported rack size, and retained the permanent 1600 x 1000 screenshot harness for docs and
+  milestone probes.
+- Added the young-adult design guidance and refreshed player-facing geometry, rules, and README
+  documentation to describe technique, sweeping, the four controls, and the fixed-travel lane.
+
+### Fixes and Maintenance
+
+- Removed rolling-ball steering. Input now commits a bowling shot before the ball rolls, which
+  keeps the live path consistent with its preview.
+- Cleared incomparable persisted best scores through the V2 save migration, and widened the
+  playable power range to support the regulation-lane travel model.
+- Bumped release metadata to CalVer `26.07.1` in `VERSION`, `package.json`, and the root package
+  metadata in `package-lock.json`.
+
+### Decisions and Failures
+
+- Replaced local lane patches with foot conversion, fixed gutter and travel dimensions, and
+  rack-scaled width so every rack follows one physical model.
+- Chose a real-engine worker preview rather than a parallel integrator. The safe centered shot is
+  intentionally not a reliable strike; the measured pocket result is eight down, accepted as
+  good enough rather than tuned toward a fragile exact target.
+- Recorded that full Playwright attempts reached 23/24 before host suspension or browser-session
+  closure. Each current spec passed in focused or component reruns, so this entry does not claim
+  a single fully green final browser run.
+
+### Developer Tests and Notes
+
+- `./check_codebase.sh`, `./build_github_pages.sh`, and the 30-shot `npm run benchmark` gate
+  passed. All 30 shots settled with zero false timeouts.
+- The final 990 benchmark median was 431.27 ms per shot: 1.11x the M1 baseline and under the
+  750 ms budget. The 990 rAF capture measured 22.7 ms median and 28.8 ms p95, under the
+  50 ms and 60 ms perceptual guards.
+- The shot harness observed A=6, B=6, C=0, D=0, E=8, and mirrored F=8/8 pins down. Independent
+  visual review accepted S1 through S10 using maintained 1600 x 1000 captures.
+- Tuning evidence, not permanent gates: skid/hook/roll use 26/17/2 ft/s with 0.7 gain, producing
+  2.10 ft full-spin displacement at the head-pin plane; 1.9 pin linear damping gave A=6, B=6,
+  and E=8 accepted as good enough; a 12 s + 0.35 * deck-depth settle limit with a 0.75 s quiet
+  window produced zero false timeouts across 30 benchmark shots.
+
 ## 2026-07-29
 
 ### Additions and New Features

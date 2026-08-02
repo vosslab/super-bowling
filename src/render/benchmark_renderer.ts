@@ -1,11 +1,5 @@
-import {
-  pin_snapshot_stride,
-  snapshot_state_flag_offset,
-  snapshot_velocity_x_offset,
-  snapshot_velocity_y_offset,
-  snapshot_x_offset,
-  snapshot_y_offset,
-} from "../simulation/protocol";
+import { pin_snapshot_stride, read_snapshot_ball, read_snapshot_pin } from "../simulation/protocol";
+import { interpolate_shortest_angle } from "./interpolation";
 
 export type DrawCommand = {
   kind: "lane" | "standing_pin" | "fallen_pin" | "ball";
@@ -59,28 +53,13 @@ export function create_draw_commands(
   ];
   for (let pin_index = 0; pin_index < pin_count; pin_index += 1) {
     const offset = pin_index * pin_snapshot_stride;
-    const x = interpolate(
-      previous_snapshot[offset + snapshot_x_offset]!,
-      current_snapshot[offset + snapshot_x_offset]!,
-      alpha,
-    );
-    const y = interpolate(
-      previous_snapshot[offset + snapshot_y_offset]!,
-      current_snapshot[offset + snapshot_y_offset]!,
-      alpha,
-    );
-    const velocity_x = interpolate(
-      previous_snapshot[offset + snapshot_velocity_x_offset]!,
-      current_snapshot[offset + snapshot_velocity_x_offset]!,
-      alpha,
-    );
-    const velocity_y = interpolate(
-      previous_snapshot[offset + snapshot_velocity_y_offset]!,
-      current_snapshot[offset + snapshot_velocity_y_offset]!,
-      alpha,
-    );
+    const previous_pin = read_snapshot_pin(previous_snapshot, offset);
+    const current_pin = read_snapshot_pin(current_snapshot, offset);
+    if (current_pin.removed || current_pin.in_pit) continue;
+    const x = interpolate(previous_pin.x, current_pin.x, alpha);
+    const y = interpolate(previous_pin.y, current_pin.y, alpha);
     const point = project_point(x, y, width, height);
-    const is_fallen = current_snapshot[offset + snapshot_state_flag_offset] === 1;
+    const is_fallen = current_pin.state_flag === 1;
     const pin_width = point.scale * 11;
     const pin_height = point.scale * 30;
     commands.push({
@@ -89,24 +68,28 @@ export function create_draw_commands(
       y: point.y,
       width: is_fallen ? pin_height : pin_width,
       height: is_fallen ? pin_width : pin_height,
-      angle: is_fallen ? Math.atan2(velocity_y, velocity_x) : 0,
+      angle: is_fallen
+        ? interpolate_shortest_angle(
+            previous_pin.fallen_axis_angle,
+            current_pin.fallen_axis_angle,
+            alpha,
+          )
+        : 0,
     });
   }
   const ball_offset = pin_count * pin_snapshot_stride;
-  const ball = project_point(
-    current_snapshot[ball_offset]!,
-    current_snapshot[ball_offset + 1]!,
-    width,
-    height,
-  );
-  commands.push({
-    kind: "ball",
-    x: ball.x,
-    y: ball.y,
-    width: ball.scale * 24,
-    height: ball.scale * 15,
-    angle: 0,
-  });
+  const current_ball = read_snapshot_ball(current_snapshot, ball_offset);
+  if (!current_ball.in_pit) {
+    const ball = project_point(current_ball.x, current_ball.y, width, height);
+    commands.push({
+      kind: "ball",
+      x: ball.x,
+      y: ball.y,
+      width: ball.scale * 24,
+      height: ball.scale * 15,
+      angle: 0,
+    });
+  }
   return commands;
 }
 

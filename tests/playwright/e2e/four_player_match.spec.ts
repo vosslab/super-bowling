@@ -1,5 +1,5 @@
 // Selector contract: src/app/setup.tsx exposes roster names, player selection, garage radios, and start;
-// src/app/game.tsx:324-330 exposes handoff phase state.
+// src/app/game.tsx:453-461 exposes phase plus the ball and aim-guide draw diagnostics.
 import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1600, height: 1000 } });
@@ -7,9 +7,15 @@ test.use({ viewport: { width: 1600, height: 1000 } });
 const player_names = ["Ari", "Bea", "Chen", "Dia"];
 
 async function finish_zero_turn(page: import("@playwright/test").Page): Promise<void> {
-  await page.getByRole("button", { name: "Bowl now" }).click();
-  await expect(page.getByRole("button", { name: "Bowl now" })).toBeVisible();
-  await page.getByRole("button", { name: "Bowl now" }).click();
+  const play_shell = page.locator("main.play_shell");
+  const bowl_button = page.getByRole("button", { name: "Bowl now" });
+
+  await bowl_button.click();
+  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
+  await expect(bowl_button).toBeEnabled();
+  await expect(play_shell).toHaveAttribute("data-drawn-ball", "true");
+  await expect(play_shell).toHaveAttribute("data-drawn-aim-guide", "true");
+  await bowl_button.click();
 }
 
 test("fixture: four players pass one keyboard in frame order with their own balls", async ({

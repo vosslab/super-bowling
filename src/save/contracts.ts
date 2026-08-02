@@ -19,7 +19,15 @@ export type SaveFileV1 = {
   best_scores: Partial<Record<PinCount, number>>;
 };
 
-export type SaveFile = SaveFileV1;
+export type SaveFileV2 = {
+  version: 2;
+  mute_enabled: boolean;
+  reduced_motion: boolean;
+  recent_setup: RecentMatchSetup;
+  best_scores: Partial<Record<PinCount, number>>;
+};
+
+export type SaveFile = SaveFileV2;
 
 export type SaveSettings = {
   mute_enabled: boolean;

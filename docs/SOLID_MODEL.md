@@ -10,9 +10,9 @@ site has no server-owned state and no network data boundary.
 
 App owns scalar saved settings and active-screen signals. Setup owns a local
 draft signal initialized from the saved recent setup. Game owns scalar match,
-asset, renderer-observation, and camera-mode signals. The worker snapshot stream
-remains an explicit boundary; Canvas receives immutable snapshot data and camera
-states rather than a reactive physics world.
+asset, renderer observation, and centered-shot camera signals. The worker
+snapshot stream remains an explicit boundary; Canvas receives immutable snapshot
+data and camera states rather than a reactive physics world.
 
 ## Component structure
 
@@ -24,6 +24,24 @@ preference controls, and static previews that call the production ball renderer.
 subscription, hot-seat handoff, audio lifecycle, and game-facing save updates.
 Canvas drawing remains in `src/render/`; JSX presents controls and accessible
 match state rather than duplicating rendering logic.
+
+## Second-roll readiness flow
+
+The reducer separates a scored partial roll from the next aiming state with a
+`sweeping` phase. It emits `prepare_next_roll`; the worker sweeps fallen pins,
+resets the ball, publishes the prepared snapshot, and then emits
+`sweep_complete`. Only that acknowledgement enables aiming controls. This
+keeps the visible second-roll ball and guide aligned with the physical rack.
+
+Aim previews carry monotonically increasing request IDs. Game accepts a preview
+only when its ID matches the newest request for the active rack and aiming
+phase. A late worker response therefore cannot replace the player's newer
+guide.
+
+Camera progress comes from the interpolated physical ball `y`, not from a timer
+or a render-only animation. It is monotonic during the roll, resets before a
+fresh or swept roll is enabled, and is held for the result. The reduced-motion
+preference keeps the centered full-lane view while setting camera zoom to zero.
 
 ## Lifecycle model
 

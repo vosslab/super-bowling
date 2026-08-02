@@ -22,11 +22,13 @@ export type RackBounds = {
   pin_count: RackPinCount;
 };
 
-export type CameraMode = "lane" | "deck";
-
 export type CameraState = {
-  mode: CameraMode;
   rack_bounds: RackBounds;
+  /** 0 at the foul line, 1 at the head pin; never decreases during a roll. */
+  shot_progress: number;
+  /** Mild centered faux-3D zoom derived from shot_progress. */
+  zoom: number;
+  reduced_motion: boolean;
 };
 
 export type RenderSnapshotPair = {

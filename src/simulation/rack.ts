@@ -1,6 +1,6 @@
 import { create_pin_id, type PinId } from "../brands";
+import { foul_to_head_pin, pin_radius, pin_spacing, row_spacing } from "../config/lane";
 import type { RackPinCount } from "../config/pin_counts";
-import { physics_config } from "../config/physics";
 
 export type RackSlot = {
   pin_id: PinId;
@@ -22,14 +22,10 @@ export type Rack = {
   bounds: RackBounds;
 };
 
-const rack_start_y = 7;
-const pin_spacing = physics_config.pin_radius * 2.22;
-const row_spacing = pin_spacing * 0.9;
-
 function add_row(slots: RackSlot[], width: number, row_index: number): void {
   for (let column_index = 0; column_index < width; column_index += 1) {
     const x = (column_index - (width - 1) / 2) * pin_spacing;
-    const y = rack_start_y + row_index * row_spacing;
+    const y = foul_to_head_pin + row_index * row_spacing;
     slots.push({ pin_id: create_pin_id(slots.length), x, y, row_index, column_index });
   }
 }
@@ -49,7 +45,7 @@ function calculate_bounds(slots: RackSlot[]): RackBounds {
     min_y = Math.min(min_y, slot.y);
     max_y = Math.max(max_y, slot.y);
   }
-  const radius = physics_config.pin_radius;
+  const radius = pin_radius;
   return {
     min_x: min_x - radius,
     max_x: max_x + radius,

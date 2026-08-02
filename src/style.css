@@ -524,36 +524,27 @@ input:focus-visible {
 }
 .aim_block {
   display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 0.6rem;
+  grid-template-columns: repeat(4, minmax(7.5rem, 1fr));
+  gap: 0.45rem;
   align-items: center;
   color: #c8d9d8;
   font-size: 0.8rem;
 }
-.power_control {
+.aim_control {
   display: grid;
   gap: 0.22rem;
 }
-.power_control label {
+.aim_control label {
   display: flex;
   justify-content: space-between;
   gap: 0.45rem;
 }
-.power_control meter {
-  width: 8.5rem;
-  height: 0.8rem;
+.aim_control input {
+  width: 100%;
   accent-color: #ffe76d;
 }
-.power_control meter::-webkit-meter-bar {
-  border: 1px solid #53778a;
-  border-radius: 999px;
-  background: #102235;
-}
-.power_control meter::-webkit-meter-optimum-value,
-.power_control meter::-webkit-meter-suboptimum-value,
-.power_control meter::-webkit-meter-even-less-good-value {
-  border-radius: 999px;
-  background: linear-gradient(90deg, #e65343, #ffe76d, #78dc69);
+.aim_block > p {
+  grid-column: 1 / -1;
 }
 .aim_block output {
   color: #ffe76d;
@@ -767,7 +758,7 @@ input:focus-visible {
     flex: 1 1 10rem;
   }
   .aim_block {
-    grid-template-columns: auto auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .aim_block p {
     grid-column: 1 / -1;

@@ -24,6 +24,9 @@ Applying this doc outside its genre will make the result feel infantile
 where it should feel professional. Use the portable rules below in
 non-arcade projects; skip the kid-arcade rules entirely.
 
+For young-adult games where technique and earned mastery are the intended
+experience, use [docs/YOUNG_ADULT_VIBES_DESIGN_STYLE.md](YOUNG_ADULT_VIBES_DESIGN_STYLE.md).
+
 ## Rule layers
 
 The doc has two layers. Layer 1 ports to most TypeScript interactive
@@ -298,6 +301,9 @@ right.
 
 ## See also
 
+- [docs/YOUNG_ADULT_VIBES_DESIGN_STYLE.md](YOUNG_ADULT_VIBES_DESIGN_STYLE.md):
+  use this sibling guide for young-adult players who should read challenge as
+  skill expression, not kid-arcade reward collection.
 - [docs/PLAYFUL_TRAINING_GAME_STYLE.md](PLAYFUL_TRAINING_GAME_STYLE.md):
   sibling doc tuned for older learners (lab students, technical apprentices).
   Same engine, calmer tone. Use that doc when the target is competence

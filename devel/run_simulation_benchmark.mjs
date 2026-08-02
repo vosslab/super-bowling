@@ -5,13 +5,16 @@ import { physics_config } from "../src/config/physics.ts";
 import {
   get_benchmark_validation_failures,
   run_benchmark_report,
+  run_shot_harness_report,
 } from "../src/simulation/benchmark.ts";
 
 async function main() {
   const report = await run_benchmark_report();
+  const shot_harness = await run_shot_harness_report();
   const output = {
     environment: { platform: platform(), arch: arch(), release: release(), node: process.version },
     physics_config,
+    shot_harness,
     ...report,
   };
   await mkdir("artifacts/benchmark", { recursive: true });
