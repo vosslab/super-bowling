@@ -6,10 +6,10 @@
 # invokes the maintained Playwright interaction helper.
 #
 # Usage:
-#   ./capture_screenshots.sh
-#   ./capture_screenshots.sh --milestone
-#   ./capture_screenshots.sh --camera-bakeoff
-#   ./capture_screenshots.sh --all
+#   ./devel/capture_screenshots.sh --documentation
+#   ./devel/capture_screenshots.sh --milestone
+#   ./devel/capture_screenshots.sh --camera-bakeoff
+#   ./devel/capture_screenshots.sh --all
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

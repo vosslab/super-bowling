@@ -24,6 +24,14 @@
 - Canonicalized fallen-pin art to crown-up orientation while preserving the raw
   physics capsule axis.
 
+### Fixes and Maintenance
+
+- Refreshed both managed README screenshots from the shipped 1600 x 1000 browser
+  build. The 990-pin aiming view and four-player handoff now show the accepted
+  side-control layout instead of the discarded bottom control deck. Updated the
+  managed alt text and documented the repository-root rerun command in the
+  maintained capture front door.
+
 ### Decisions and Failures
 
 - Rejected the earlier tiny centered lane-and-rack island and the later
@@ -40,6 +48,9 @@
   and physics tests (21/21). The Playwright suite reached 31 tests with no
   reported failures, and maintained captures completed. `./check_codebase.sh`
   remains a required final rerun and is not claimed as complete here.
+- Regenerated the managed documentation PNGs with
+  `./devel/capture_screenshots.sh --documentation`; both are 1600 x 1000 and
+  under the 1 MB documentation-image budget.
 
 ## 2026-08-01
 

@@ -7,8 +7,8 @@ curve through regulation-inspired lanes toward triangular racks from 10 to 990 p
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 
-![1,000-mode aiming lane with a 990-pin triangle, projected-path controls, regulation arrows, and a rolling ball](docs/screenshots/thousand_pin_deck.png)
-![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with the four technique controls visible](docs/screenshots/pass_the_keyboard.png)
+![1,000-mode aiming view with the full 990-pin rack filling the lane and technique controls in the side panel](docs/screenshots/thousand_pin_deck.png)
+![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with technique controls in the side panel](docs/screenshots/pass_the_keyboard.png)
 <!-- screenshots:end -->
 
 ## One keyboard, giant rack

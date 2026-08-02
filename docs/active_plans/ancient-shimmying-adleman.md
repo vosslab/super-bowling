@@ -1329,3 +1329,23 @@ decisions are recorded for audit, not reopened as executable rules.
 
 Every scope question this plan raised is now classified as in scope or as a non-goal. Nothing is
 left open for a human to resolve before dispatch.
+
+## Implementation close-out (2026-08-02)
+
+All implementation milestones are complete. This plan remains in `docs/active_plans/` by current
+direction; it has not been archived or moved.
+
+| Milestone | Completed outcome | Verified evidence |
+| --- | --- | --- |
+| M3 | Frozen physics evidence reconciled without retuning. | The 990 report hashes match regenerated backstop-probe and benchmark artifacts; the 990 ball is 40 lb, supports power 60 and spin 4, and its contact-gated forward drive/anti-stall reaches the backstop. |
+| M4 | The desktop layout is frozen at 116 px of header-plus-score chrome. Controls occupy a desktop side panel, leaving a 1248 x 884 lane canvas at 1600 x 1000. | The selected `open` camera profile uses a measured 10% rear-row reveal (90% overlap). Complete-rack framing places the rack crown at 4%, aiming-ball bottom at 95%, and the lane+rack+ball span at 91%. |
+| M5 | The selected camera remains invariant through the final 10-, 105-, and 990-pin aiming, mid-roll, and settled-result captures. | All nine captures retain the 1248 x 884 canvas, 4%/95% anchors, 91% occupied span, and 10% reveal. Independent screenshot reviews accepted composition, large-rack readability, orientation, and settled-result state semantics. |
+| M6 | Fallen pins use crown-up visual canonicalization without changing truthful physics axes. | A real settled-pin integration test verifies finite canonical axes, preserved undirected axis, and no render-side mutation; independent final orientation review found no upside-down final pin. |
+| M7 | `bowls_per_frame` is a persistent bounded match setting from 1 through 5. | B=2 retains classic early-strike/conditional tenth-fill semantics; other values use the shared super-bowling flow, and frame ten always permits exactly B+1 bowls. |
+| M8 | Behavior, geometry, rules, capture tooling, and changelog documentation were refreshed. | Camera bakeoff and final state-matrix reports record the selected composition, measurements, reviewer decisions, and reproducible artifacts. |
+
+Final repository gates passed:
+
+- `./check_codebase.sh`: exit 0; Node tests 158/158.
+- `./run_playwright_tests.sh`: exit 0; Playwright tests 31/31.
+- `git diff --check`: exit 0.
