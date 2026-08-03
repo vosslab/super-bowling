@@ -18,6 +18,16 @@ type StrikeStreaks = {
   longest: number;
 };
 
+/**
+ * Score-card progress that is safe to compare while a game is still in play.
+ * Only finalized frame scores contribute: unresolved strike/spare frames do not
+ * supply either a cumulative total or a single-frame contribution.
+ */
+export type FinalizedFrameScoreProgress = {
+  last_finalized_score: number | undefined;
+  best_frame_score: number | undefined;
+};
+
 function strike_streaks(
   frames: readonly FrameScore[],
   pin_count: RackPinCount,
@@ -42,23 +52,26 @@ function strike_streaks(
   return { current, longest };
 }
 
-function best_frame_contribution(
+/** Derives the latest finalized total and best finalized frame from one score card. */
+export function finalized_frame_score_progress(
   frames: readonly FrameScore[],
   pin_count: RackPinCount,
   bowls_per_frame: number,
-): number | undefined {
+): FinalizedFrameScoreProgress {
   const scored_frames = score_card(frames, pin_count, bowls_per_frame);
   let previous_cumulative_score = 0;
   let best_score: number | undefined;
+  let last_finalized_score: number | undefined;
 
   for (const frame of scored_frames) {
     if (frame.score === undefined) continue;
     const contribution = frame.score - previous_cumulative_score;
     previous_cumulative_score = frame.score;
+    last_finalized_score = frame.score;
     best_score = best_score === undefined ? contribution : Math.max(best_score, contribution);
   }
 
-  return best_score;
+  return { last_finalized_score, best_frame_score: best_score };
 }
 
 export function current_strike_streak(
@@ -74,9 +87,10 @@ export function match_statistics(
   pin_count: RackPinCount,
   bowls_per_frame = default_bowls_per_frame,
 ): MatchStatistics {
+  const finalized_progress = finalized_frame_score_progress(frames, pin_count, bowls_per_frame);
   return {
     total_score: total_score(frames, pin_count, bowls_per_frame),
-    best_frame_score: best_frame_contribution(frames, pin_count, bowls_per_frame),
+    best_frame_score: finalized_progress.best_frame_score,
     longest_strike_streak: strike_streaks(frames, pin_count, bowls_per_frame).longest,
   };
 }

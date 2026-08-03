@@ -80,11 +80,15 @@ function score_text(score: number | undefined): string {
 }
 
 function earned_moment_label(moment: EarnedMoment): string {
-  return moment.kind === "high_game" ? scoreboard_labels.high_game : moment.term.toUpperCase();
+  if (moment.kind === "high_game") return scoreboard_labels.high_game;
+  if (moment.kind === "best_frame") return scoreboard_labels.best_frame;
+  return moment.term.toUpperCase();
 }
 
 function earned_moment_support_text(moment: EarnedMoment): string | undefined {
-  return moment.kind === "high_game" ? `New high score: ${moment.score}` : undefined;
+  if (moment.kind === "high_game") return `New high score: ${moment.score}`;
+  if (moment.kind === "best_frame") return `New best frame: ${moment.score}`;
+  return undefined;
 }
 
 function find_player(state: MatchState, player_id: number): PlayerSetup {
@@ -134,6 +138,7 @@ export function Game(props: GameProps): JSX.Element {
   let input_controller: InputController | undefined;
   let unsubscribe: (() => void) | undefined;
   let high_game_already_fired = false;
+  const best_frame_announced_players = new Set<number>();
 
   function apply_camera(next_camera: CameraState): void {
     camera = next_camera;
@@ -176,7 +181,10 @@ export function Game(props: GameProps): JSX.Element {
   }
 
   function dispatch(action: MatchAction): MatchState {
-    if (action.type === "start") high_game_already_fired = false;
+    if (action.type === "start") {
+      high_game_already_fired = false;
+      best_frame_announced_players.clear();
+    }
     const transition = reduce_match(match_state(), action);
     set_match_state(transition.state);
     for (const effect of transition.effects) execute_effect(effect);
@@ -207,10 +215,12 @@ export function Game(props: GameProps): JSX.Element {
       ),
       current_state: earned_moment_state(current_card.frames, next.pin_count, next.bowls_per_frame),
       high_game_already_fired,
+      best_frame_already_fired: best_frame_announced_players.has(player_id),
     });
     if (moment === undefined) return;
 
     if (moment.kind === "high_game") high_game_already_fired = true;
+    if (moment.kind === "best_frame") best_frame_announced_players.add(player_id);
     show_earned_moment(moment);
   }
 
@@ -516,6 +526,16 @@ export function Game(props: GameProps): JSX.Element {
     const signed_delta = delta >= 0 ? `+${delta}` : String(delta);
     return `High game delta: ${signed_delta}`;
   };
+  const final_best_frame_text = (): string => {
+    const completed_score = final_record()?.best_frame_score;
+    if (completed_score === undefined) return "-";
+
+    const previous_score = props.previous_record()?.best_frame_score;
+    if (previous_score === undefined) return `${completed_score} - first record`;
+    const delta = completed_score - previous_score;
+    if (delta > 0) return `${completed_score} - new record (+${delta})`;
+    return `${completed_score} - record ${previous_score}`;
+  };
 
   return (
     <main
@@ -816,6 +836,10 @@ export function Game(props: GameProps): JSX.Element {
               <div>
                 <dt>Record change</dt>
                 <dd>{final_delta_text()}</dd>
+              </div>
+              <div>
+                <dt>{scoreboard_labels.best_frame}</dt>
+                <dd>{final_best_frame_text()}</dd>
               </div>
               <div>
                 <dt>Best run</dt>

@@ -7,7 +7,7 @@ curve through regulation-inspired lanes toward triangular racks from 10 to 990 p
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 
-![1,000-mode aiming view with the full 990-pin rack filling the lane and technique controls in the side panel](docs/screenshots/thousand_pin_deck.png)
+![1,000-mode BEST FRAME earned-moment toast above the 990-pin lane and technique controls](docs/screenshots/thousand_pin_deck.png)
 ![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with technique controls in the side panel](docs/screenshots/pass_the_keyboard.png)
 <!-- screenshots:end -->
 
@@ -53,10 +53,10 @@ preview shows the same free path the roll will follow before its first pin conta
 pass-the-keyboard card advances each hot-seat turn while the score strip and phase feedback stay
 visible.
 
-When a player earns it, the game calls out a new high game or a named strike run such as a
-Double or Turkey without stopping the next turn. At match end, each player sees the final score,
-the prior high game for that practice mode, the difference, and their best run before returning to
-setup, where the updated record is ready for the next match.
+Every roll reports its result, including visible Strike and Spare calls. When a player earns it,
+the game also calls out a new high game, best frame, or named strike run without stopping the next
+turn. At match end, the final score, prior high game, record difference, best frame, and best run
+stay visible before returning to setup for another attempt.
 
 ## Quick start
 

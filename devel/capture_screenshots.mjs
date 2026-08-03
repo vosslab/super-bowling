@@ -29,6 +29,7 @@ import {
 import { create_rack } from "../src/simulation/rack.ts";
 
 const viewport = { width: 1600, height: 1000 };
+const documentation_roll_timeout_ms = 30_000;
 const valid_modes = new Set(["documentation", "milestone", "camera-bakeoff", "all"]);
 const live_source_closure_seeds = ["src/main.ts", "src/simulation/worker.ts"];
 const required_live_source_closure_paths = [
@@ -504,13 +505,38 @@ async function start_aiming_state(page, base_url, mode_label, start_label, pin_c
   return wait_for_aiming(page, pin_count);
 }
 
+async function wait_for_best_frame_earned(page) {
+  await page.waitForFunction(() => {
+    const play_shell = document.querySelector("main.play_shell");
+    const toast = document.querySelector(".earned_moment_toast[role='status']");
+    return (
+      play_shell?.getAttribute("data-earned-moment") === "best_frame" &&
+      toast !== null &&
+      toast.textContent?.includes("BEST FRAME") === true &&
+      toast.textContent.includes("New best frame")
+    );
+  });
+  const toast = page.locator(".earned_moment_toast[role='status']");
+  const visible_after_entrance = await toast.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+  });
+  if (!visible_after_entrance)
+    throw new Error("BEST FRAME toast was not visible after its entrance.");
+}
+
 async function capture_documentation(browser, base_url) {
-  console.log("==> Capturing README thousand-pin aiming view");
+  console.log("==> Capturing README thousand-pin BEST FRAME view");
   const deck_path = "docs/screenshots/thousand_pin_deck.png";
   {
+    // This is the fresh-player production path: two actual default 990-pin
+    // rolls establish the first finalized frame and its BEST FRAME moment.
+    // The per-operation allowance reflects the dense live simulation while
+    // the front-door capture deadline still bounds the complete document run.
     const context = await browser.newContext({ viewport });
     const page = await context.newPage();
-    page.setDefaultTimeout(15_000);
+    page.setDefaultTimeout(documentation_roll_timeout_ms);
     try {
       await start_aiming_state(
         page,
@@ -519,7 +545,21 @@ async function capture_documentation(browser, base_url) {
         "Start 1,000 mode - 990 pins for 1 player",
         990,
       );
-      await page.screenshot({ path: deck_path });
+      await page.keyboard.press("Space");
+      console.log("==> Waiting for first 990-pin roll result");
+      await page.waitForFunction(
+        () => document.querySelector("main.play_shell")?.getAttribute("data-phase") === "result",
+        { timeout: documentation_roll_timeout_ms },
+      );
+      console.log("==> Waiting for second 990-pin roll aiming readiness");
+      await page.waitForFunction(
+        () => document.querySelector("main.play_shell")?.getAttribute("data-phase") === "aiming",
+        { timeout: documentation_roll_timeout_ms },
+      );
+      await page.keyboard.press("Space");
+      console.log("==> Waiting for 990-pin BEST FRAME earned moment");
+      await wait_for_best_frame_earned(page);
+      await capture_live_screenshot(page, deck_path, "best_frame_earned", 990);
     } finally {
       await context.close();
     }
@@ -555,7 +595,10 @@ async function capture_documentation(browser, base_url) {
       await context.close();
     }
   }
-  return Promise.all([png_metadata(deck_path), png_metadata(handoff_path)]);
+
+  return Promise.all([png_metadata(deck_path), png_metadata(handoff_path)]).then(
+    ([deck, handoff]) => [deck, handoff],
+  );
 }
 
 async function capture_milestone_decks(browser, base_url, output_directory) {

@@ -139,12 +139,38 @@ angle, power, and spin to create a productive entry, rather than discovering
 that the least expressive input is optimal. Difficulty is therefore a skill to
 learn and communicate, not a toll before a coin reward.
 
-Practice records make that improvement legible in the setup without turning it
-into a wall of zeroes: an empty record invites the first game, while earned
-moments name a new high game or scoring run as it happens. The brief toast does
-not block the next attempt, and the final comparison explains the result
-against the previous record. When reduced motion is enabled, the same text
-remains visible without relying on animation.
+Practice records make improvement legible without turning setup into a wall of
+zeroes. An empty record invites the first game; a returning player sees `LAST 5`,
+`BEST FRAME`, `BEST RUN`, and `GAMES BOWLED`. During play, ordinary results are
+never silent: each completed roll reports pins down, `Strike!`, or `Spare!`.
+That immediate result explains the scorecard and lets the player connect an
+input with what happened before choosing the next shot.
+
+The game has one earned-moment toast slot. It reports a meaningful practice
+milestone, stays out of the way of the controls, and permits the next roll
+without acknowledgement. Its priority favors transferable skill evidence over
+streak theater: a carried-record `HIGH GAME` replaces a simultaneous moment;
+once that has been announced, a once-per-player `BEST FRAME` replaces a named
+strike run. A named run begins at `Turkey` and rises with the run. This keeps a
+single clear message on screen rather than making every successful shot compete
+for attention.
+
+| Trigger | Surface | What the player learns |
+| --- | --- | --- |
+| Every completed roll | Result text near the lane: pins down, `Strike!`, or `Spare!` | The shot has resolved and the scorecard is about to reflect a concrete bowling result. |
+| First positive frame or a frame that beats the carried frame record, once for that player | `BEST FRAME` toast | A single frame is a practice target; a first game can establish it, and later games can improve it. |
+| Completed score exceeds the carried high-game record, once per match | `HIGH GAME` toast | The whole-game result has surpassed the player's real prior standard. |
+| Three or more consecutive strikes after higher-priority record moments are handled | Named-run toast, beginning with `Turkey` | Repeated execution is visible, but it does not outrank a durable practice record. |
+| Match completion | Final comparison with score change, best-frame context, and best-run context | The player can decide whether to replay for a specific, understandable improvement. |
+
+Review this contract by following the visible path, not a mockup: start with no
+record, establish a positive frame, continue from a saved record, complete a
+spare and a strike run, and finish the match. Each case must leave a readable
+text result while controls remain usable. Reduced motion preserves the same
+labels, ordering, and final comparison; animation may change, information may
+not. Do not add a toast for every roll: ordinary result text teaches cause and
+effect, while the toast remains reserved for the few outcomes that earn a
+practice milestone.
 
 ## Engineering rules for tone
 

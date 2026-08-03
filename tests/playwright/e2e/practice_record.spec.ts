@@ -1,5 +1,5 @@
-// Selector contract: src/app/game.tsx:537-556 exposes earned-moment state and toast text;
-// src/app/game.tsx:808-826 exposes the match summary; src/app/setup.tsx:166-218 exposes records.
+// Selector contract: src/app/game.tsx:557-579 exposes earned-moment state and toast text;
+// src/app/game.tsx:828-846 exposes the match summary; src/app/setup.tsx:166-218 exposes records.
 // Named-run selection is covered by the pure Node decision tests; this fixture fast-forwards
 // through those transient states, so this spec covers browser-observable record feedback.
 import { expect, test } from "@playwright/test";
@@ -38,15 +38,12 @@ async function seed_tiny_record(page: import("@playwright/test").Page): Promise<
   });
 }
 
-test("practice record: a high game feeds the summary and keeps repeated completed scores", async ({
+test("practice record: a perfect game feeds the summary and keeps repeated completed scores", async ({
   page,
 }) => {
   await seed_tiny_record(page);
   await page.goto("/?fixture=perfect_game");
   await page.getByRole("button", { name: start_label, exact: true }).click();
-
-  const high_game = page.getByRole("status").filter({ hasText: "HIGH GAME" });
-  await expect(high_game).toBeVisible();
 
   const summary = page.locator(".match_summary");
   await expect(summary).toBeVisible();
@@ -57,6 +54,9 @@ test("practice record: a high game feeds the summary and keeps repeated complete
       .locator("xpath=following-sibling::dd[1]"),
   ).toHaveText("5");
   await expect(summary).toContainText("High game delta: +295");
+  const best_frame = summary.locator("dt", { hasText: "BEST FRAME" }).locator("..").locator("dd");
+  await expect(best_frame).toContainText("30");
+  await expect(best_frame).toContainText("new record");
   await expect(summary).toContainText("Perfect game");
 
   await page.getByRole("button", { name: "New match" }).click();
@@ -72,11 +72,27 @@ test("practice record: a high game feeds the summary and keeps repeated complete
 });
 
 test("earned moment: reduced motion still shows high-game feedback", async ({ page }) => {
+  test.slow();
   await seed_tiny_record(page);
-  await page.goto("/?fixture=perfect_game");
+  await page.goto("/");
   await page.getByRole("button", { name: "Reduced motion off" }).press("Space");
   await page.getByRole("button", { name: start_label, exact: true }).click();
 
-  await expect(page.locator("main.play_shell")).toHaveAttribute("data-reduced-motion", "true");
-  await expect(page.getByRole("status").filter({ hasText: "HIGH GAME" })).toBeVisible();
+  const play_shell = page.locator("main.play_shell");
+  await expect(play_shell).toHaveAttribute("data-reduced-motion", "true");
+  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
+
+  await page.keyboard.press("Space");
+  await expect(play_shell).toHaveAttribute("data-phase", "rolling");
+  await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 20_000 });
+  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
+
+  await page.keyboard.press("Space");
+  await expect(play_shell).toHaveAttribute("data-phase", "rolling");
+  await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 20_000 });
+  await expect(play_shell).toHaveAttribute("data-earned-moment", "high_game");
+  const toast = page.locator(".earned_moment_toast[role='status']");
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("HIGH GAME");
+  await expect(toast).toContainText("New high score");
 });

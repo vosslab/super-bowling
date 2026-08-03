@@ -18,12 +18,12 @@ nothing shows whether this session is trending up, and a finished match ends on
 a bare "Final score" number. A player who just rolled their best game ever gets
 the same visual treatment as a player who gutter-balled ten frames.
 
-This plan adds a per-mode practice record to local storage and two restrained
-feedback surfaces that read from it: a non-blocking in-play toast on genuinely
-earned moments, and an end-of-match summary that names what changed. The
-intended outcome is the guide's target reaction -- "I can see what I did, I can
-improve it, and I want another try" -- without adding coins, rarity tiers, or a
-dashboard of obligations.
+This plan adds a per-mode practice record to local storage and restrained
+feedback: a non-blocking in-play toast for genuinely earned moments, ordinary
+roll-result text for Strike and Spare, and an end-of-match summary that names
+what changed. The intended outcome is the guide's target reaction -- "I can see
+what I did, I can improve it, and I want another try" -- without adding coins,
+rarity tiers, or a dashboard of obligations.
 
 Real bowling alleys already solved the naming half of this problem, and their
 vocabulary is the reason the feedback can stay restrained. An overhead monitor
@@ -42,8 +42,11 @@ prints `0` where an alley prints `-`.
   best single-frame score, longest strike run, and games bowled.
 - Name strike runs with real bowling-alley vernacular -- double, turkey,
   four-bagger, and onward -- from one shared module every surface reads.
-- Fire a non-blocking toast at the moment a player beats their high game or
-  earns a named run, starting at the turkey.
+- Fire one non-blocking earned-moment toast per qualifying transition: HIGH
+  GAME first, then BEST FRAME, then a named run starting at the turkey.
+- Name ordinary classic scoring results in the result surface, including
+  `Strike!` and `Spare!`, without treating every pins-down result as an earned
+  moment.
 - Replace the bare final-score block with a summary that names the change
   against the record the player carried into the match.
 - Show the practice record on the setup screen so a returning player sees their
@@ -74,14 +77,16 @@ is another place the counter can silently diverge from the score card. Deriving
 from the score card has exactly one source of truth.
 
 The second trade-off is **restraint over volume in the feedback itself**. The
-toast fires on two conditions only, auto-dismisses, and never blocks the next
-roll. The style guide's "Feedback earns its space" and "Respect player time"
-rules make an every-strike celebration a defect, not a feature; this plan
-deliberately ships fewer popups than the engine could support. House vernacular
-is what makes that restraint affordable: TURKEY carries the whole meaning of a
-three-strike run in one word, so the surface stays small while the signal stays
-loud. This also satisfies the guide's "Let the interface carry itself" rule --
-the game teaches its own terms through use, with no tutorial text.
+toast considers three earned conditions in a fixed priority order -- HIGH GAME,
+BEST FRAME, then a named run -- auto-dismisses, and never blocks the next roll.
+The style guide's "Feedback earns its space" and "Respect player time" rules
+make an every-strike celebration a defect, not a feature; ordinary `Strike!`
+and `Spare!` result text reports what happened without becoming a reward popup.
+House vernacular is what makes the earned feedback affordable: TURKEY carries
+the whole meaning of a three-strike run in one word, so the surface stays small
+while the signal stays loud. This also satisfies the guide's "Let the interface
+carry itself" rule -- the game teaches its own terms through use, with no
+tutorial text.
 
 The third trade-off is **vernacular as data, not prose**. Every alley term lives
 in one lookup module rather than being spelled inline at each call site, so the
@@ -219,7 +224,7 @@ payload, calling into the derivation boundary to build it.
 | --- | --- | --- | --- |
 | M1 | Save schema V4 | Add `ModeRecord`, migrate V1/V2/V3 forward, extend the settings controller | Every existing save loads with its best score intact and room for the new fields |
 | M2 | Statistic derivation and vernacular | Pure match-stats, bagger-ladder, and earned-moment modules; house scoresheet marks; reducer carries per-player summaries | Each statistic is computed from a score card, and every alley word comes from one module |
-| M3 | Feedback surfaces | Toast, match summary panel, setup practice-record block, shared CSS | A player sees a named alley moment when it happens and a named change when the match ends |
+| M3 | Feedback surfaces | Toast, ordinary roll results, match summary panel, setup practice-record block, shared CSS | A player sees a prioritized earned moment, clear ordinary result text, and a named change when the match ends |
 | M4 | Evidence and close-out | Playwright coverage, capture check, changelog, README, style-guide example | Shipped behavior matches the written record |
 
 ### Milestone: M1 save schema V4
@@ -265,11 +270,12 @@ payload, calling into the derivation boundary to build it.
 - Deliverables: WP-U0 and WP-U4 first, then WP-U1, WP-U2, WP-U3.
 - Workstreams: WS-U.
 - Done checks: the toast appears and auto-dismisses without blocking the next
-  roll, and prints the alley term (TURKEY, not "3 strikes"); reduced motion
-  suppresses toast movement while keeping the text; the match summary names the
-  previous high game and the delta; the setup block shows all five statistics
-  under scoreboard labels; the two literal strings existing Playwright specs
-  assert --
+  roll, and prioritizes HIGH GAME, BEST FRAME, then the named run; ordinary
+  classic results name Strike or Spare without adding an earned popup; reduced
+  motion suppresses toast movement while keeping the text; the match summary
+  names the previous high game, delta, and best-frame context; the setup block
+  shows all five statistics under scoreboard labels; the two literal strings
+  existing Playwright specs assert --
   `Final score` inside `role="status"` and `Best for {mode_label}: {score}` --
   are still present verbatim.
 - Entry criteria: WP-U0's stylesheet additions and WP-U4's prop contracts are
@@ -287,11 +293,12 @@ payload, calling into the derivation boundary to build it.
 - Depends on: M3, because browser evidence needs the shipped surfaces.
 - Deliverables: WP-V1, WP-V2, WP-V3.
 - Workstreams: WS-V.
-- Done checks: a new Playwright spec proves seeded HIGH GAME rendering, the
-  final summary, the setup record, duplicate two-match history, and
+- Done checks: a new Playwright spec proves the shared toast seam, final summary
+  including best-frame context, setup record, duplicate two-match history, and
   reduced-motion text; the changelog, README, and style guide describe the
-  shipped behavior. The pure Node coverage proves the named-run/Turkey decision
-  because `perfect_game` consumes intermediate rungs before a browser paint.
+  shipped behavior. The pure Node coverage proves the earned-moment priority and
+  named-run decision; an ordinary live observation proves the exact transient
+  BEST FRAME toast without turning its timing into a permanent browser gate.
 - Entry criteria: M3 exit criteria met.
 - Exit criteria: `./check_codebase.sh`, `./run_playwright_tests.sh`, and
   `pytest tests/` all pass, the last of which covers the markdown link check on
@@ -558,13 +565,13 @@ payload, calling into the derivation boundary to build it.
 - Acceptance criteria:
   - `earned_moment(input): EarnedMoment | undefined` is pure and returns at most
     one moment per call.
-  - Two moment kinds ship: `high_game` (the score has just passed
-    `previous_record.best_score` for the first time this match) and
-    `strike_run` (the current run just reached three or grew beyond three).
-  - **`strike_run` outranks `high_game`** when both would fire on the same roll.
-    The run is perishable -- that exact rung is named now or never -- while the
-    high game is guaranteed a second, calmer mention in the end-of-match
-    summary. This also stops the two channels from competing for one toast slot.
+  - Three moment kinds ship: `high_game` (the finalized score has passed
+    `previous_record.best_score`), `best_frame` (a finalized frame contribution
+    has passed the carried-in frame record), and `strike_run` (the current run
+    just reached three or grew beyond three).
+  - **`high_game`, then `best_frame`, then `strike_run`** is the one-toast
+    priority. Practice records reflect earned improvement and take priority over
+    streak theater; a continuing run can still name its next rung.
   - A `strike_run` moment carries the term from `strike_run_term`, not a raw
     count. The threshold is three because that is the turkey -- the first run an
     alley bothers to name aloud. A double is tracked in the record but does not
@@ -580,13 +587,13 @@ payload, calling into the derivation boundary to build it.
     rule lives in the caller's state and the function stays pure. With no
     previous record it does not fire at all -- a first-ever game has nothing to
     beat.
+  - `best_frame` fires at most once per player. With no previous record, the
+    first positive finalized frame starts that player's visible practice record;
+    with a record, the contribution must beat `previous_record.best_frame_score`.
   - The module holds no timers, no DOM access, and no Solid primitives.
-- Evidence or review: `tests/test_earned_moments.mjs` with inline inputs
-  covering: no previous record, score below the high game, the exact crossing
-  roll, `high_game_already_fired` suppressing a second crossing, an unresolved
-  bonus not counting toward the crossing, a run reaching two (no moment), a run
-  reaching three (turkey), a run reaching four, and both conditions on one roll
-  resolving to the run.
+- Evidence or review: `tests/test_earned_moments.mjs` uses inline inputs for a
+  below-record score, unresolved score, high-game suppression, first and
+  improved frame records, named run rungs, and the record-first priority.
 - Obvious follow-ons: WP-U1 renders the result and owns the fired flag.
 
 ### Work package: WP-S3 carry per-player summaries in match completion
@@ -652,15 +659,17 @@ payload, calling into the derivation boundary to build it.
     moment returns, shows a toast with `role="status"` that auto-dismisses after
     roughly 1.8 seconds.
   - The toast leads with the alley term in the overhead-monitor register --
-    `TURKEY`, `FOUR-BAGGER`, `HIGH GAME` -- with at most one short supporting
-    line beneath it. The term comes from `strike_run_term`; the component
-    spells no vernacular of its own.
+    `TURKEY`, `FOUR-BAGGER`, `HIGH GAME`, `BEST FRAME` -- with at most one short
+    supporting line beneath it. Run terms come from `strike_run_term` and record
+    labels come from `scoreboard_labels`.
   - The toast never blocks input, never delays `schedule_result_advance`, and
     never takes focus. Aiming controls stay reachable while it is visible.
   - `data-earned-moment` on the `main.play_shell` element carries the current
     moment kind or an empty string, giving WP-V1 a stable hook.
   - The component owns the `high_game_already_fired` flag WP-S2 reads, resets it
     when a match starts, and passes it on every call.
+  - The component also remembers which players received their one best-frame
+    callout and clears that set when the match starts.
   - `earned_moment` is called AFTER the settled action has updated the score
     card, not before, so the resolved cumulative totals it compares against
     include the roll that just landed. Verify this against the existing
@@ -692,8 +701,8 @@ payload, calling into the derivation boundary to build it.
   WP-U4.
 - Acceptance criteria:
   - The `final` phase renders the final score, the previous high game, the
-    signed delta against it, and the match's longest strike run named through
-    `strike_run_term` (for example "Best run: Turkey") rather than as a bare
+    signed delta against it, the match's best frame with record context, and the
+    longest strike run named through `strike_run_term` rather than as a bare
     count.
   - The literal text `Final score` remains inside a `role="status"` element.
     `tests/playwright/e2e/presentation_persistence.spec.ts:83` asserts it, and
@@ -769,10 +778,11 @@ payload, calling into the derivation boundary to build it.
     the first-frame HIGH GAME toast renders, then assert the end-of-match panel
     names the previous high game and delta. This proves the persistent browser
     seam without requiring a fake clock, fixed delay, or dismissal assertion.
-  - `perfect_game` advances through intermediate named-run rungs before a
-    browser paint, so `tests/test_earned_moments.mjs` permanently proves the
-    named-run/Turkey decision. The browser suite does not assert a transient
-    Turkey DOM state.
+  - Permanent coverage divides by cost: `tests/test_earned_moments.mjs` proves
+    the priority and named-run decisions; the browser spec proves the shared
+    toast seam and final best-frame context. Exact transient BEST FRAME DOM
+    visibility is observed once in ordinary live play, not asserted through a
+    new fast fixture, fake clock, fixed delay, screenshot, or timing gate.
   - It asserts the summary panel names the seeded previous high game, the delta,
     and the run term.
   - It returns to setup and asserts the practice-record block shows the updated
@@ -829,14 +839,69 @@ payload, calling into the derivation boundary to build it.
     the GitHub About rule, and `tests/test_readme_first_paragraph.py` still
     passes.
   - The style guide's "Super Bowling worked example" section gains a short
-    paragraph on how the practice record and the two feedback surfaces satisfy
-    its own "Progress and reward signals" rules, so the guide's example stays
-    truthful about the shipped game.
+    paragraph on how the practice record, earned feedback surfaces, and ordinary
+    result text satisfy its own "Progress and reward signals" rules, so the
+    guide's example stays truthful about the shipped game.
   - Every new local markdown link uses file-path link text and resolves from its
     containing file.
 - Evidence or review: `pytest tests/` passes, covering markdown links, ASCII
   compliance, and the README first-paragraph check.
 - Obvious follow-ons: none.
+
+## Follow-up completion work packages
+
+### F1 feedback visibility
+
+- Owner: feedback coder. Status: complete.
+- Touch points: `src/app/earned_moments.ts`, `src/app/game.tsx`,
+  `src/game/match.ts`, `src/game/match_stats.ts`, and focused Node tests.
+- Success condition: the first positive finalized frame or an improved frame
+  record yields one BEST FRAME toast per player; a classic spare reports visible
+  `Spare!`; and the final summary carries best-frame record context.
+- Validation: TypeScript typecheck and focused Node tests passed; the permanent
+  browser spec passed for the real two-roll visible HIGH GAME seam. F5 supplies
+  one-time production-path visual proof for the exact BEST FRAME toast, without
+  a transient timing assertion or a pixel-equivalence test.
+
+### F2 compact supported setup
+
+- Owner: UI stylesheet coder. Status: complete.
+- Touch points: `src/style.css`.
+- Success condition: Start Match stays visible and clickable for one and four
+  players at 1600 x 1000 without hidden content; shorter screens can scroll.
+- Validation: focused setup Playwright coverage and the full browser suite
+  passed.
+
+### F3 operational YA guide
+
+- Owner: docs writer. Status: complete.
+- Touch points: `docs/YOUNG_ADULT_VIBES_DESIGN_STYLE.md`.
+- Success condition: the guide states the shipped trigger, surface, and learning
+  contract for earned moments and ordinary results without aspirational claims.
+- Validation: focused Markdown and ASCII checks plus `pytest tests/` (667
+  passed).
+
+### F4 gate-path integrity
+
+- Owner: test-maintenance coder. Status: complete.
+- Touch points: `tests/test_strike_matrix.mjs`.
+- Success condition: the strike matrix reads the canonical archived baseline.
+- Validation: focused Node test and `./check_codebase.sh` (181 Node tests)
+  passed.
+
+### F5 earned-moment documentation capture
+
+- Owner: screenshot-docs web capture. Status: complete.
+- Touch points: `README.md`, `devel/capture_screenshots.mjs`, and the existing
+  tracked `docs/screenshots/thousand_pin_deck.png`.
+- Success condition: the managed README screenshot block retains exactly two
+  tracked embeds. Its refreshed 1,000-mode capture follows two real 990-pin
+  worker rolls, visibly reads `BEST FRAME` / `New best frame: 526`, and keeps
+  the lane and controls unobscured.
+- Validation: `./devel/capture_screenshots.sh --documentation`; inspect PNG
+  metadata (1600 x 1000, 232905 bytes), review it visually for legibility and
+  lane-control clearance, and verify Markdown links (35 passed). This is
+  one-time visual evidence, not a pixel-equivalence test.
 
 ## Acceptance criteria and gates
 
@@ -856,6 +921,13 @@ payload, calling into the derivation boundary to build it.
 - Failure semantics: a red per-patch gate blocks that patch only. A red
   integration gate blocks M4 close-out. A review rejection of a surface returns
   that surface's work package to WS-U and does not reopen WS-P or WS-S.
+- Completion record: M1-M4 and F1-F5 are complete. `./check_codebase.sh`
+  passed with 181 Node tests, `./run_playwright_tests.sh` passed 33/33 and
+  exercised `run_web_server.sh`, focused practice-record browser coverage
+  passed 2/2, and `pytest tests/` passed 667. The capture front door, capture
+  harness ESLint, capture provenance, Markdown links (35 passed), and
+  `git diff --check` also passed. Independent rereview accepted F1, F2, and F4;
+  visual review accepted F5.
 
 ## Test and verification strategy
 
@@ -881,10 +953,11 @@ Tests land in the tier that matches their cost, per
   an invalid history entry, an oversized history, and an invalid counter. The
   goal is to prove the recovery boundary, not to enumerate malformed JSON.
 - **Playwright** (`tests/playwright/e2e/`, run by `./run_playwright_tests.sh`)
-  carries durable browser integration: seeded HIGH GAME rendering, final
-  summary, setup record, duplicate two-match history, and reduced-motion text.
-  One new spec plus the unchanged existing suite; no new fixture, fake clock,
-  fixed delay, or dismissal assertion.
+  carries durable browser integration: the shared toast seam, final summary
+  including best-frame context, setup record, duplicate two-match history, and
+  reduced-motion text. Pure Node logic covers the exact BEST FRAME decision;
+  one ordinary live observation verifies its transient DOM surface. No new
+  fixture, fake clock, fixed delay, screenshot, pixel, or dismissal assertion.
 - **pytest** (`pytest tests/`) stays the thin cross-ecosystem hygiene lane:
   markdown links, ASCII compliance, README first paragraph. No new pytest is
   added by this plan; the TypeScript behavior belongs in the Node and browser

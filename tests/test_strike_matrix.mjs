@@ -18,7 +18,7 @@ import { aim_limits, board_position_limits } from "../src/game/aim.ts";
 import { get_rack_pin_count, supported_pin_counts } from "../src/config/pin_counts.ts";
 
 const cascade_baseline = readFileSync(
-  new URL("../docs/active_plans/reports/cascade_baseline.md", import.meta.url),
+  new URL("../docs/archive/reports/cascade_baseline.md", import.meta.url),
   "utf8",
 );
 

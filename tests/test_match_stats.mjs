@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   current_strike_streak,
+  finalized_frame_score_progress,
   fold_match_summaries,
   match_statistics,
 } from "../src/game/match_stats.ts";
@@ -42,6 +43,18 @@ test("skips unresolved frame contributions while accepting an incomplete card", 
     total_score: undefined,
     best_frame_score: undefined,
     longest_strike_streak: 1,
+  });
+});
+
+test("exposes only finalized cumulative score progress", () => {
+  const frames = [
+    { frame_index: 0, rolls: [5, 3] },
+    { frame_index: 1, rolls: [10] },
+  ];
+
+  assert.deepEqual(finalized_frame_score_progress(frames, 10, 2), {
+    last_finalized_score: 8,
+    best_frame_score: 8,
   });
 });
 

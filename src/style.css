@@ -1062,6 +1062,31 @@ input:focus-visible {
   }
 }
 
+/* Keep the complete local-match setup actionable at the supported 16:10 desktop
+   size. This tightens repeated section rhythm, rather than removing a record,
+   player, or control; shorter desktop windows still use the setup shell's
+   normal vertical scroll. */
+@media (min-width: 1001px) and (min-height: 800px) and (max-height: 1080px) {
+  .setup_panel {
+    padding-block: clamp(0.75rem, 1.2vw, 1rem) 0.9rem;
+  }
+  .setup_heading {
+    margin-bottom: 0.65rem;
+  }
+  .match_column {
+    gap: 0.55rem;
+    padding: 0.8rem;
+  }
+  .bowls_per_frame_picker,
+  .practice_record {
+    gap: 0.4rem;
+    padding: 0.6rem;
+  }
+  .player_roster {
+    gap: 0.35rem;
+  }
+}
+
 @media (max-height: 760px) and (min-width: 761px) {
   .play_header {
     padding-block: 0.25rem;

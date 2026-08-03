@@ -82,6 +82,13 @@ test("keeps a non-strike result visible before the second roll", () => {
   assert.equal(complete_sweep(advanced.state).phase, "aiming");
 });
 
+test("names a completed spare in the visible roll result", () => {
+  const first_roll = advance_result(settle_roll(ready_match(), 4).state);
+  const spare = settle_roll(complete_sweep(first_roll.state), 0);
+  assert.equal(spare.state.phase, "result");
+  assert.equal(spare.state.result_message, "Spare!");
+});
+
 test("resets a fresh rack after a strike and accepts settlement once", () => {
   let state = ready_match();
   state = reduce_match(state, { type: "launch" }).state;

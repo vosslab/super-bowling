@@ -7,7 +7,13 @@ import type {
   PlayerScoreCard,
   SettledRoll,
 } from "./contracts";
-import { append_roll, create_empty_score_card, is_frame_complete, score_card } from "./scoring";
+import {
+  append_roll,
+  create_empty_score_card,
+  is_frame_complete,
+  is_spare,
+  score_card,
+} from "./scoring";
 import { default_bowls_per_frame, is_valid_bowls_per_frame } from "./bowls_per_frame";
 import { default_aim, normalize_aim, type AimValues } from "./aim";
 import { match_statistics } from "./match_stats";
@@ -220,9 +226,14 @@ function result_message(
   knocked_pin_count: number,
   pin_count: RackPinCount,
   bowls_per_frame: number,
+  frames: PlayerScoreCard["frames"],
 ): string {
   if (knocked_pin_count === pin_count && bowls_per_frame === default_bowls_per_frame)
     return "Strike!";
+  const current_frame = frames[frames.length - 1];
+  if (current_frame !== undefined && is_spare(current_frame, pin_count, bowls_per_frame)) {
+    return "Spare!";
+  }
   return `${knocked_pin_count} pin${knocked_pin_count === 1 ? "" : "s"} down`;
 }
 
@@ -338,7 +349,12 @@ export function reduce_match(state: MatchState, action: MatchAction): MatchTrans
         {
           ...state,
           phase: "result",
-          result_message: result_message(knocked_pin_count, state.pin_count, state.bowls_per_frame),
+          result_message: result_message(
+            knocked_pin_count,
+            state.pin_count,
+            state.bowls_per_frame,
+            next_rolls,
+          ),
           standing_pin_count: settled.standing_pin_count,
           standing_pin_count_at_launch: undefined,
         },

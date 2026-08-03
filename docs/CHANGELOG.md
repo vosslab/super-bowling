@@ -14,6 +14,11 @@
 
 ### Behavior or Interface Changes
 
+- Reopened earned feedback after live play showed that an ordinary first match
+  could finish without a milestone toast. A player's first positive or improved
+  frame record now raises `BEST FRAME` once, completed spares read `Spare!`, and
+  the final panel includes the match's best frame with record context. Shared
+  finalized-frame derivation now supplies that record decision and summary.
 - Completed matches now update their selected mode's record only after the score
   is final. Legacy saves retain compatible settings while the migration starts
   their new V4 match history empty.
@@ -32,17 +37,26 @@
   reach the backstop without changing ordinary ten-pin play.
 - Canonicalized fallen-pin art to crown-up orientation while preserving the raw
   physics capsule axis.
+- Compacted the supported desktop setup so Start Match remains visible at
+  1600 x 1000 for one through four players; shorter screens retain scrolling.
 
 ### Fixes and Maintenance
 
 - Refreshed both managed README screenshots from the shipped 1600 x 1000 browser
-  build. The 990-pin aiming view and four-player handoff now show the accepted
-  side-control layout instead of the discarded bottom control deck. Updated the
-  managed alt text and documented the repository-root rerun command in the
-  maintained capture front door.
+  build. The 990-pin capture now deliberately shows the live `BEST FRAME` toast
+  after two real worker rolls, while the four-player handoff preserves its
+  keyboard-flow proof. Updated the managed alt text and maintained capture
+  front door.
+- Corrected the strike-matrix test's baseline path to
+  `docs/archive/reports/cascade_baseline.md`.
 
 ### Decisions and Failures
 
+- Prioritized `HIGH GAME`, then `BEST FRAME`, then named strike runs in the
+  single non-blocking toast slot. Practice records reflect improvement and earn
+  emphasis before streak theater, while later run rungs remain available. A
+  lower-priority `BEST FRAME` sharing a `HIGH GAME` transition is not replayed
+  on an unrelated later roll, but a genuine later frame improvement can earn it.
 - Derived match statistics from completed summaries instead of tracking parallel
   mutable counters. Generalized earned terminology uses Double through Six-pack,
   then `N-bagger`, based on USBC and Bowl.com terminology references.
@@ -59,14 +73,15 @@
 
 ### Developer Tests and Notes
 
-- `./check_codebase.sh` passed. The full Playwright suite passed 33/33, focused
-  practice-record coverage passed 2/2, and Python hygiene passed 665 tests.
-- One-time browser and capture review confirmed the new toast and final-summary
-  surfaces without imposing pixel-equivalence or committed screenshot gates.
-- Verified focused camera tests (39/39), settled-orientation tests (33/33),
-  and physics tests (21/21). The Playwright suite reached 31 tests with no
-  reported failures, and maintained captures completed. `./check_codebase.sh`
-  remains a required final rerun and is not claimed as complete here.
+- `./check_codebase.sh` passed with 181 Node tests. The full Playwright suite
+  passed 33/33 (including the `run_web_server.sh` front door), focused
+  practice-record coverage passed 2/2, and `pytest tests/` passed 667.
+- One-time browser and capture review confirmed the live BEST FRAME toast and
+  final-summary surfaces without imposing pixel-equivalence, snapshots, or
+  timing gates. Independent rereview accepted F1, F2, and F4; visual review
+  accepted the managed README capture.
+- Capture provenance, capture-harness ESLint, Markdown links (35 passed), and
+  `git diff --check` passed.
 - Regenerated the managed documentation PNGs with
   `./devel/capture_screenshots.sh --documentation`; both are 1600 x 1000 and
   under the 1 MB documentation-image budget.
