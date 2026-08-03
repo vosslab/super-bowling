@@ -4,12 +4,17 @@ import test from "node:test";
 
 import { normalize_ball_design } from "../src/designer/ball_design.ts";
 import { ball_radius, pin_radius } from "../src/config/lane.ts";
-import { draw_ball, get_ball_pattern_commands } from "../src/render/ball.ts";
+import {
+  draw_ball,
+  get_ball_hole_commands,
+  get_ball_pattern_commands,
+} from "../src/render/ball.ts";
 import { get_game_asset_urls } from "../src/render/game_assets.ts";
 import { advance_camera_for_ball, create_camera_state } from "../src/render/camera.ts";
 import {
   create_camera_projection,
   derive_ball_roll_angle,
+  derive_ball_surface_offset,
   create_game_draw_commands,
 } from "../src/render/game_renderer.ts";
 import { create_rack } from "../src/simulation/rack.ts";
@@ -564,8 +569,8 @@ test("maps each supported ball pattern to the shared spherical draw design", () 
   }
 });
 
-test("uses the seamless ball surface as a repeated gameplay draw overlay", () => {
-  let image_draw_count = 0;
+test("uses the seamless ball surface as a vertically repeated gameplay draw overlay", () => {
+  const image_draws = [];
   const context = {
     save() {},
     restore() {},
@@ -578,8 +583,8 @@ test("uses the seamless ball surface as a repeated gameplay draw overlay", () =>
     createLinearGradient() {
       return { addColorStop() {} };
     },
-    drawImage() {
-      image_draw_count += 1;
+    drawImage(...draw) {
+      image_draws.push(draw);
     },
     fillText() {},
     moveTo() {},
@@ -597,25 +602,30 @@ test("uses the seamless ball surface as a repeated gameplay draw overlay", () =>
     { x: 100, y: 100, width: 60, height: 60, roll_angle: 0, design: normalize_ball_design({}) },
     {},
   );
-  assert.equal(image_draw_count, 2);
+  assert.equal(image_draws.length, 2);
+  assert.equal(image_draws[0][1], image_draws[1][1]);
+  assert.ok(image_draws[1][2] > image_draws[0][2]);
   assert.equal(get_game_asset_urls().ball, "./assets/ball_surface.svg");
 });
 
-test("builds the ball surface from a seam-safe repeated tile", () => {
+test("builds the ball surface from a seam-safe vertically repeated tile", () => {
   const surface_url = new URL("../src/assets/ball_surface.svg", import.meta.url);
   const surface_svg = readFileSync(surface_url, "utf8");
   const svg_attributes = get_tag_attributes(surface_svg, "svg");
   const view_box = get_attribute(svg_attributes, "viewBox").split(/\s+/).map(Number);
   const root_width = view_box[2];
-  assert.ok(root_width !== undefined);
+  const root_height = view_box[3];
+  assert.ok(root_width !== undefined && root_height !== undefined);
 
   const pattern_match = surface_svg.match(/<pattern\b([^>]*)>([\s\S]*?)<\/pattern>/);
   assert.ok(pattern_match);
   const pattern_attributes = pattern_match[1];
   const pattern_body = pattern_match[2];
+  const tile_height = Number(get_attribute(pattern_attributes, "height"));
   const tile_width = Number(get_attribute(pattern_attributes, "width"));
-  assert.ok(Number.isFinite(tile_width) && root_width / tile_width >= 2);
-  assert.equal(root_width % tile_width, 0);
+  assert.equal(tile_width, root_width);
+  assert.ok(Number.isFinite(tile_height) && root_height / tile_height >= 2);
+  assert.equal(root_height % tile_height, 0);
 
   const pattern_id = get_attribute(pattern_attributes, "id");
   const outer_markup = surface_svg.slice(surface_svg.indexOf("</defs>") + "</defs>".length);
@@ -624,16 +634,6 @@ test("builds the ball surface from a seam-safe repeated tile", () => {
   );
   assert.equal(outer_fill, pattern_id);
 
-  const gradient_id = get_url_reference(
-    get_attribute(get_tag_attributes(pattern_body, "rect"), "fill"),
-  );
-  const gradient_match = surface_svg.match(
-    new RegExp(`<linearGradient\\b([^>]*)\\bid="${gradient_id}"([^>]*)>`),
-  );
-  assert.ok(gradient_match);
-  const gradient_attributes = `${gradient_match[1]} ${gradient_match[2]}`;
-  assert.equal(get_attribute(gradient_attributes, "x1"), get_attribute(gradient_attributes, "x2"));
-
   const path_match = pattern_body.match(/<path\b([^>]*)\/>/);
   assert.ok(path_match);
   const path_attributes = path_match[1];
@@ -641,6 +641,31 @@ test("builds the ball surface from a seam-safe repeated tile", () => {
   const half_stroke_width = Number(get_attribute(path_attributes, "stroke-width")) / 2;
   assert.ok(path_extent.min - half_stroke_width > 0);
   assert.ok(path_extent.max + half_stroke_width < tile_width);
+});
+
+test("rolls finger holes over the spherical face instead of wiggling them sideways", () => {
+  const state = {
+    x: 100,
+    y: 100,
+    width: 60,
+    height: 60,
+    roll_angle: 0,
+    surface_offset: 0,
+    design: normalize_ball_design({}),
+  };
+  const opening_holes = get_ball_hole_commands(state);
+  const rolling_holes = get_ball_hole_commands({ ...state, surface_offset: 0.35 });
+  const hidden_holes = get_ball_hole_commands({ ...state, surface_offset: Math.PI });
+  assert.equal(opening_holes.length, 3);
+  assert.equal(rolling_holes.length, 3);
+  assert.ok(rolling_holes.every((hole, index) => hole.x === opening_holes[index].x));
+  assert.ok(rolling_holes.some((hole, index) => hole.y !== opening_holes[index].y));
+  assert.equal(hidden_holes.length, 0);
+});
+
+test("derives one radian of visible roll from one ball radius of forward travel", () => {
+  assert.equal(derive_ball_surface_offset(0), 0);
+  assert.ok(Math.abs(derive_ball_surface_offset(ball_radius) - 1) < 0.001);
 });
 
 test("projects lane edges toward the shared forward vanishing point", () => {

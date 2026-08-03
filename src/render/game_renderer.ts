@@ -66,8 +66,9 @@ export type LaneProjection = {
     head_pin_y: number;
     rack_top_target_fraction: number;
     achieved_rack_top_fraction: number;
-    aiming_ball_bottom_target_fraction: number;
     achieved_aiming_ball_bottom_fraction: number;
+    maximum_launch_platform_screen_fraction: number;
+    achieved_launch_platform_screen_fraction: number;
     occupied_vertical_span_fraction: number;
     unused_top_fraction: number;
     unused_bottom_fraction: number;
@@ -144,6 +145,10 @@ function get_depth_scale(projection: LaneProjection, y: number): number | undefi
   return projection.camera.depth_distance / depth;
 }
 
+function get_aiming_ball_world_y(): number {
+  return -camera_config.launch_platform_depth * camera_config.aiming_ball_platform_fraction;
+}
+
 function projected_row_reveals(projection: LaneProjection, row_y_positions: number[]): number[] {
   const rows = row_y_positions.map((y) => {
     const base = project_world_point(projection, { x: 0, y, z: 0 });
@@ -188,7 +193,7 @@ function create_projection(
   const full_half_width = lane_half_width + gutter_width;
   return {
     x_extent: full_half_width + camera_config.horizontal_padding,
-    near_y: camera_config.lane_near_y,
+    near_y: -camera_config.launch_platform_depth,
     far_y: bounds.back + camera_config.lane_back_padding,
     lane_half_width,
     gutter_width,
@@ -204,8 +209,10 @@ function create_projection(
       head_pin_y,
       rack_top_target_fraction: camera_config.bakeoff_rack_top_fraction,
       achieved_rack_top_fraction: 0,
-      aiming_ball_bottom_target_fraction: camera_config.aiming_ball_bottom_fraction,
       achieved_aiming_ball_bottom_fraction: 0,
+      maximum_launch_platform_screen_fraction:
+        camera_config.maximum_launch_platform_screen_fraction,
+      achieved_launch_platform_screen_fraction: 0,
       occupied_vertical_span_fraction: 0,
       unused_top_fraction: 0,
       unused_bottom_fraction: 0,
@@ -229,9 +236,10 @@ type DeckFraming = {
 };
 
 /**
- * Solves the complete rack crown and aiming ball endpoints from the shared
- * world-space projection. The authoritative rack, never a survivor snapshot,
- * supplies the rear row; this makes framing stable through every game state.
+ * Solves the complete rack crown and compact launch-platform endpoints from
+ * the shared world-space projection. The authoritative rack, never a survivor
+ * snapshot, supplies the rear row; this makes framing stable through every
+ * game state.
  */
 function solve_rack_framing(
   camera: CameraState,
@@ -258,25 +266,15 @@ function solve_rack_framing(
   if (scale === undefined || scale >= 1) throw new Error("Rack framing requires a receding scale.");
 
   // Rear crown: h * (1 - rearScale) + n * rearScale - pinHeightPx * rearScale.
-  // Aiming-ball bottom at y=-9: h * (1 - ballScale) + n * ballScale.
-  // Solve both anchors together so the scene fills its actual canvas before
-  // any deck reveal exaggeration is considered.
-  const ball_scale = get_depth_scale(unframed, -9);
-  if (ball_scale === undefined || ball_scale >= 1)
-    throw new Error("Rack framing requires a finite aiming-ball scale.");
+  // Keep the physical near lane edge at the foot of the canvas, then solve the
+  // horizon from the rear crown. The aiming ball can now move forward without
+  // pulling the lane edge up and creating a blank strip beneath it.
   const crown_target_y = height * camera_config.bakeoff_rack_top_fraction;
-  const ball_target_y = height * camera_config.aiming_ball_bottom_fraction;
   const rear_horizon_weight = 1 - scale;
-  const ball_horizon_weight = 1 - ball_scale;
-  const determinant = rear_horizon_weight * ball_scale - ball_horizon_weight * scale;
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-9)
-    throw new Error("Rack framing anchors must be independently solvable.");
   const rear_target_with_crown = crown_target_y + 1.25 * unframed.pixels_per_world_unit * scale;
+  const required_near_screen_y = height * camera_config.near_lane_y_fraction;
   const required_horizon_y =
-    (rear_target_with_crown * ball_scale - ball_target_y * scale) / determinant;
-  const required_near_screen_y =
-    (rear_horizon_weight * ball_target_y - ball_horizon_weight * rear_target_with_crown) /
-    determinant;
+    (rear_target_with_crown - required_near_screen_y * scale) / rear_horizon_weight;
   const requested_fraction = required_horizon_y / height;
   if (
     requested_fraction < camera_config.bakeoff_horizon_fraction.minimum ||
@@ -472,11 +470,18 @@ export function create_camera_projection(
   const rear_y = row_y_positions[row_y_positions.length - 1];
   if (rear_y === undefined) throw new Error("Camera projection requires a rear rack row.");
   const rear_crown = project_world_point(projection, { x: 0, y: rear_y, z: 1.25 });
-  const aiming_ball_bottom = project_world_point(projection, { x: 0, y: -9, z: 0 });
-  if (rear_crown === undefined || aiming_ball_bottom === undefined)
+  const aiming_ball_bottom = project_world_point(projection, {
+    x: 0,
+    y: get_aiming_ball_world_y(),
+    z: 0,
+  });
+  const foul_line = project_world_point(projection, { x: 0, y: 0, z: 0 });
+  if (rear_crown === undefined || aiming_ball_bottom === undefined || foul_line === undefined)
     throw new Error("Camera projection requires finite framing anchors.");
   const achieved_rack_top_fraction = rear_crown.y / height;
   const achieved_aiming_ball_bottom_fraction = aiming_ball_bottom.y / height;
+  const achieved_launch_platform_screen_fraction =
+    (projection.near_screen_y - foul_line.y) / height;
   return {
     ...projection,
     camera: {
@@ -487,8 +492,10 @@ export function create_camera_projection(
       calibration_reason: solved.calibration_reason,
       rack_top_target_fraction: camera_config.bakeoff_rack_top_fraction,
       achieved_rack_top_fraction,
-      aiming_ball_bottom_target_fraction: camera_config.aiming_ball_bottom_fraction,
       achieved_aiming_ball_bottom_fraction,
+      maximum_launch_platform_screen_fraction:
+        camera_config.maximum_launch_platform_screen_fraction,
+      achieved_launch_platform_screen_fraction,
       occupied_vertical_span_fraction:
         achieved_aiming_ball_bottom_fraction - achieved_rack_top_fraction,
       unused_top_fraction: achieved_rack_top_fraction,
@@ -667,13 +674,15 @@ export function derive_ball_roll_angle(
   alpha: number,
   physical_rotation: number,
 ): number {
-  const roll_angle =
-    physical_rotation + interpolate(previous_forward_y, current_forward_y, alpha) * Math.PI * 1.6;
+  const forward_y = interpolate(previous_forward_y, current_forward_y, alpha);
+  const roll_angle = derive_ball_surface_offset(forward_y, physical_rotation);
   return Number.isFinite(roll_angle) ? roll_angle : 0;
 }
 
-export function derive_ball_surface_offset(forward_y: number, lateral_x: number): number {
-  const offset = forward_y * Math.PI * 1.6 + lateral_x * Math.PI * 0.7;
+export function derive_ball_surface_offset(forward_y: number, physical_rotation = 0): number {
+  // Physical travel begins at the foul line; the aiming presentation below
+  // supplies its own upright starting surface.
+  const offset = physical_rotation + forward_y / ball_radius;
   return Number.isFinite(offset) ? offset : 0;
 }
 
@@ -692,7 +701,9 @@ function create_ball_command(
   if (current_ball.in_pit) return undefined;
   const x = aim_lateral_offset ?? interpolate(previous_ball.x, current_ball.x, alpha);
   const y =
-    aim_lateral_offset === undefined ? interpolate(previous_ball.y, current_ball.y, alpha) : -9;
+    aim_lateral_offset === undefined
+      ? interpolate(previous_ball.y, current_ball.y, alpha)
+      : get_aiming_ball_world_y();
   const body = project_body(
     projection,
     { x, y, z: ball_radius },
@@ -713,7 +724,8 @@ function create_ball_command(
       alpha,
       current_ball.rotation,
     ),
-    surface_offset: derive_ball_surface_offset(y, x),
+    surface_offset:
+      aim_lateral_offset === undefined ? derive_ball_surface_offset(y, current_ball.rotation) : 0,
     highlight_offset: 0,
     design,
   };

@@ -1,3 +1,4 @@
+import { rack_row_count } from "./lane";
 import type { RackPinCount } from "./pin_counts";
 
 /**
@@ -6,7 +7,16 @@ import type { RackPinCount } from "./pin_counts";
  * goes through the same rational depth scale in the renderer.
  */
 export const camera_config = {
-  lane_near_y: -10,
+  /**
+   * Presentation-only space behind the foul line. The simulation launches at
+   * y=0; this compact apron gives the player room to stage the ball without
+   * letting inactive foreground dominate the regulation lane.
+   */
+  launch_platform_depth: 3,
+  /** Ball position from the foul line (0) toward the platform foot (1). */
+  aiming_ball_platform_fraction: 0.55,
+  /** Visual hierarchy budget verified across every supported rack. */
+  maximum_launch_platform_screen_fraction: 0.12,
   lane_back_padding: 2,
   horizontal_padding: 0.35,
   horizon_fraction: 0.08,
@@ -16,11 +26,8 @@ export const camera_config = {
    * while retaining a bounded, inspectable perspective transform.
    */
   bakeoff_horizon_fraction: { minimum: -2.5, maximum: 0.4 },
-  /** Complete-rack crown and aiming-ball-bottom anchors in the lane canvas. */
+  /** Complete-rack crown composition target. */
   bakeoff_rack_top_fraction: 0.04,
-  // 95% keeps the physical near rail (at y=-10) inside short 16:10 canvases
-  // while placing the aiming ball in the requested 94--98% near-edge band.
-  aiming_ball_bottom_fraction: 0.95,
   near_rail_half_width_fraction: 0.475,
   near_lane_y_fraction: 0.99,
   // Measured in lane-depth world units. A larger value makes the deck denser.
@@ -67,8 +74,11 @@ export function get_camera_composition(
 ): CameraComposition {
   // Wider physical lanes receive a longer denominator so their deep triangle
   // stays layered and legible rather than collapsing into a tiny distant grid.
-  const mode_depth_distance =
-    pin_count >= 990 ? 170 : pin_count >= 105 ? 60 : camera_config.depth_distance;
+  const mode_depth_distance = Math.max(
+    36,
+    rack_row_count(pin_count) * 4,
+    camera_config.depth_distance,
+  );
   return {
     candidate,
     // Candidate variation is solved exclusively from its measured row-reveal

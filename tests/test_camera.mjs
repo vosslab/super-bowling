@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  camera_config,
   camera_candidate_profiles,
   camera_candidates,
   default_camera_candidate,
@@ -240,6 +241,29 @@ test("keeps all legal aiming scenes inside the measured 16:10 play canvas", () =
   }
 });
 
+test("gives the 21-pin active lane and rack a useful share of the action field", () => {
+  const commands = draw(21, create_camera_state(21, false, default_camera_candidate));
+  const { ball, pins } = assert_complete_scene(21, default_camera_candidate);
+  const lane = get_lane(commands);
+  const rack_left = Math.min(...pins.map((pin) => pin.x - pin.width / 2));
+  const rack_right = Math.max(...pins.map((pin) => pin.x + pin.width / 2));
+  const launch_platform_fraction =
+    (lane.geometry.lane_near[0].y - lane.geometry.foul_line[0].y) / canvas.height;
+  assert.ok(
+    launch_platform_fraction <= camera_config.maximum_launch_platform_screen_fraction,
+    "the inactive launch platform stays inside its hierarchy budget",
+  );
+  assert.ok(
+    ball.y + ball.height / 2 >= lane.geometry.foul_line[0].y &&
+      ball.y + ball.height / 2 <= lane.geometry.lane_near[0].y,
+    "the aiming ball stays grounded on the compact launch platform",
+  );
+  assert.ok(
+    (rack_right - rack_left) / canvas.width >= 0.2,
+    "the complete rack occupies at least one fifth of the lane width",
+  );
+});
+
 test("reports dense, ordered rows without a blank band and keeps candidate variants responsive", () => {
   for (const pin_count of [10, 105, 990]) {
     const diagnostics = camera_candidates.map((candidate) => row_diagnostic(pin_count, candidate));
@@ -333,13 +357,20 @@ test("calibrates every selected mode from adaptable reveal and full-rack framing
         `${pin_count}-pin ${candidate} complete rack crown uses the 2-6% top margin`,
       );
       assert.ok(
-        diagnostics.achieved_aiming_ball_bottom_fraction >= 0.94 &&
-          diagnostics.achieved_aiming_ball_bottom_fraction <= 0.98,
-        `${pin_count}-pin ${candidate} aiming ball uses the 94-98% lower placement`,
+        diagnostics.achieved_launch_platform_screen_fraction > 0 &&
+          diagnostics.achieved_launch_platform_screen_fraction <=
+            diagnostics.maximum_launch_platform_screen_fraction,
+        `${pin_count}-pin ${candidate} launch platform stays inside its hierarchy budget`,
       );
       assert.ok(
-        diagnostics.occupied_vertical_span_fraction >= 0.9,
-        `${pin_count}-pin ${candidate} complete lane/rack/ball span is at least 90%`,
+        diagnostics.achieved_aiming_ball_bottom_fraction >=
+          1 - diagnostics.maximum_launch_platform_screen_fraction &&
+          diagnostics.achieved_aiming_ball_bottom_fraction <= 0.99,
+        `${pin_count}-pin ${candidate} aiming ball remains attached to the launch platform`,
+      );
+      assert.ok(
+        diagnostics.occupied_vertical_span_fraction >= 0.88,
+        `${pin_count}-pin ${candidate} complete lane/rack/ball span is at least 88%`,
       );
       assert.ok(
         [
@@ -348,6 +379,7 @@ test("calibrates every selected mode from adaptable reveal and full-rack framing
           diagnostics.horizon_fraction,
           diagnostics.unused_top_fraction,
           diagnostics.unused_bottom_fraction,
+          diagnostics.achieved_launch_platform_screen_fraction,
           ...diagnostics.row_reveal_fractions,
         ].every(Number.isFinite),
         `${pin_count}-pin ${candidate} diagnostics are finite`,

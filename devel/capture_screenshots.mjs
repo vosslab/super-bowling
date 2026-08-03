@@ -380,6 +380,9 @@ function camera_projection_diagnostics(camera, game_canvas) {
       solved_horizon_fraction: projection.camera.horizon_fraction,
       rack_top_fraction: projection.camera.achieved_rack_top_fraction,
       aiming_ball_bottom_fraction: projection.camera.achieved_aiming_ball_bottom_fraction,
+      launch_platform_screen_fraction: projection.camera.achieved_launch_platform_screen_fraction,
+      maximum_launch_platform_screen_fraction:
+        projection.camera.maximum_launch_platform_screen_fraction,
       occupied_span_fraction: projection.camera.occupied_vertical_span_fraction,
       unused_vertical_bands: {
         top_fraction: projection.camera.unused_top_fraction,

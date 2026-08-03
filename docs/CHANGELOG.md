@@ -1,3 +1,68 @@
+## 2026-08-03
+
+### Behavior or Interface Changes
+
+- Rebuilt the completed-match control column around a dominant final score,
+  record context, and focused `Play again` and `Change setup` actions. Replays
+  retain the match setup while remounting a fresh simulation client.
+- Replaced raw aiming readouts with board direction, angle direction, hook
+  strength, pace, range-end labels, and a concise shot-plan interpretation.
+- Extended ordinary result dwell to 2.2 seconds and added a visible Continue
+  action with Space and Enter support after a 900 ms minimum result hold.
+- Demoted the in-match exit action to a quiet `End match` control. Initial aim
+  exits immediately, while a roll in progress or a populated score opens a
+  focused confirmation that explains the unsaved-record consequence.
+- Anchored earned-moment toasts inside the lane so they cannot cover the score
+  strip. Simplified setup copy to player-facing ball language and removed the
+  redundant empty best-score line above the practice record.
+- Replaced signed physical range values with centered integer ticks for start
+  position, angle, and spin. Every mode now reaches exact negative, zero, and
+  positive positions while the visible and accessible text retains boards,
+  degrees, and hook strength.
+- Reduced the presentation-only launch platform from ten world feet to three
+  and staged the aiming ball as a proportion of that platform. The 21-pin
+  foreground now uses about 10% instead of 27% of the lane canvas, giving the
+  active lane and rack the dominant share while every row-reveal target remains
+  intact.
+
+### Fixes and Maintenance
+
+- Updated result and deadwood browser journeys to advance through the visible
+  Continue action and assert the stable next-aim state instead of depending on
+  a brief automatic sweep transition.
+- Added pure centered-slider invariants and a six-mode browser journey that
+  drives every slider to both native endpoints. Added a 12% maximum launch-
+  platform budget across every camera mode plus a live 21-pin composition check
+  and original-resolution aiming capture.
+
+### Decisions and Failures
+
+- Kept the strong arcade palette and lane-first composition after
+  original-resolution review. The quieter exit action, interpreted shot labels,
+  and dedicated final panel improve hierarchy without muting the game's tone.
+- The first full browser run found two tests coupled to the former 1.2-second
+  automatic result transition. Product behavior was correct; the journeys now
+  use the player-facing Continue action and readiness states.
+- Extending each signed slider maximum by half a step would leave the browser's
+  negative-minimum step grid unchanged and could overshoot the physical limit.
+  Centered integer ticks make both endpoints and zero exact by construction.
+- Rejected two symptom-level camera attempts. Using the ball as the lower
+  framing anchor exposed a dark strip; independently targeting its bottom at
+  86% merely moved it within the same oversized foreground. The durable model
+  makes launch-platform depth and ball position within that platform explicit,
+  anchors its foot at 99%, and measures the platform's screen share directly.
+
+### Developer Tests and Notes
+
+- `./check_codebase.sh` passed with 191 Node tests, `pytest tests/` passed 667,
+  and the full Playwright suite passed 36/36.
+- Focused Playwright checks passed 13/13 before the full run, then the updated
+  result and layout journeys passed 7/7. Original-resolution review accepted
+  the 1600 x 1000 aiming and final-score captures.
+- The centered-slider and 21-pin camera browser checks passed 5/5. Final
+  original-resolution review accepted the active-lane capture with its compact
+  launch platform and physical near lane filling the canvas to its lower edge.
+
 ## 2026-08-02
 
 ### Additions and New Features
@@ -14,6 +79,13 @@
 
 ### Behavior or Interface Changes
 
+- Replaced the rolling ball's sideways hole wiggle with a vertically scrolling,
+  seam-safe surface reel. Finger holes now travel over the spherical face,
+  flatten near the rim, disappear on the back half, and return on the next turn;
+  finite chevrons and monograms share that depth behavior while the screen-space
+  highlight remains fixed.
+- Scaled visible ball rotation from physical forward travel by ball radius and
+  aligned the lane's starting orientation with the static garage preview.
 - Reopened earned feedback after live play showed that an ordinary first match
   could finish without a milestone toast. A player's first positive or improved
   frame record now raises `BEST FRAME` once, completed spares read `Spare!`, and
@@ -55,6 +127,12 @@
 
 ### Decisions and Failures
 
+- Chose texture scrolling plus projected surface geometry over a frame-by-frame
+  sprite sheet. The production canvas renderer keeps player-selected colors and
+  patterns, gives continuous speed-linked motion, and avoids duplicating ball art.
+- The 90-second milestone capture produced its live aiming, rolling, and result
+  ball evidence, then timed out in the later unrelated 990-pin frame-window
+  measurement. The full browser suite subsequently passed.
 - Prioritized `HIGH GAME`, then `BEST FRAME`, then named strike runs in the
   single non-blocking toast slot. Practice records reflect improvement and earn
   emphasis before streak theater, while later run rungs remain available. A
@@ -76,6 +154,10 @@
 
 ### Developer Tests and Notes
 
+- `./check_codebase.sh` passed with 184 Node tests, `pytest tests/` passed 667,
+  and the full Playwright suite passed 33/33. Focused renderer coverage passed
+  26/26, and original-resolution inspection accepted the static pattern gallery,
+  real mid-roll capture, and six consecutive production canvas frames.
 - `./check_codebase.sh` passed with 182 Node tests. The full Playwright suite
   passed 33/33 (including the `run_web_server.sh` front door), focused
   practice-record coverage passed 2/2, and `pytest tests/` passed 667.

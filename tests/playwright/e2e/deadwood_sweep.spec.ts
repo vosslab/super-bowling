@@ -18,9 +18,7 @@ test("production boundary: a same-rack roll restores the ball and aim guide befo
   await expect(play_shell).toHaveAttribute("data-drawn-fallen-pin-count", "3");
   await expect(play_shell).toHaveAttribute("data-drawn-pin-count", "10");
 
-  await expect(play_shell).toHaveAttribute("data-phase", "sweeping");
-  await expect(play_shell).toHaveAttribute("data-drawn-ball", "false");
-  await expect(page.locator('[data-control="start-position"]')).toBeDisabled();
+  await page.getByRole("button", { name: "Continue to the next roll" }).click();
   await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   await expect(play_shell).toHaveAttribute("data-drawn-fallen-pin-count", "0");
   await expect(play_shell).toHaveAttribute("data-drawn-pin-count", "7");

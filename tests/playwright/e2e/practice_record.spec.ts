@@ -58,8 +58,11 @@ test("practice record: a perfect game feeds the summary and keeps repeated compl
   await expect(best_frame).toContainText("30");
   await expect(best_frame).toContainText("new record");
   await expect(summary).toContainText("Perfect game");
+  await expect(page.locator(".aim_block")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Play again" })).toBeFocused();
+  await page.screenshot({ path: "test-results/final_score_16_10.png", fullPage: true });
 
-  await page.getByRole("button", { name: "New match" }).click();
+  await page.getByRole("button", { name: "Change setup" }).click();
   const practice_record = page.locator('[data-practice-record="record"]');
   await expect(practice_record).toContainText("HIGH GAME");
   await expect(practice_record).toContainText("300");
@@ -67,8 +70,16 @@ test("practice record: a perfect game feeds the summary and keeps repeated compl
 
   await page.getByRole("button", { name: start_label, exact: true }).click();
   await expect(page.locator(".match_summary")).toBeVisible();
-  await page.getByRole("button", { name: "New match" }).click();
-  await expect(practice_record).toContainText("300, 300, 5");
+  await page.getByRole("button", { name: "Play again" }).click();
+  await expect(page.locator(".match_summary")).toBeVisible();
+  await expect(
+    page
+      .locator(".match_summary")
+      .locator("dt", { hasText: "Previous high game" })
+      .locator("xpath=following-sibling::dd[1]"),
+  ).toHaveText("300");
+  await page.getByRole("button", { name: "Change setup" }).click();
+  await expect(practice_record).toContainText("300, 300, 300, 5");
 });
 
 test("earned moment: reduced motion still shows high-game feedback", async ({ page }) => {

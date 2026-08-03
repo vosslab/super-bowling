@@ -19,6 +19,22 @@ export type BallPatternCommand = {
   offset: number;
 };
 
+export type BallHoleCommand = {
+  x: number;
+  y: number;
+  radius_x: number;
+  radius_y: number;
+  opacity: number;
+};
+
+type ProjectedSurfacePoint = {
+  x: number;
+  y: number;
+  depth: number;
+};
+
+const full_turn = Math.PI * 2;
+
 function create_band_commands(pattern: BallPattern): BallPatternCommand[] {
   if (pattern === "single_band") {
     return [{ kind: "band", color: "accent", offset: 0 }];
@@ -40,8 +56,8 @@ export function get_ball_pattern_commands(pattern: BallPattern): BallPatternComm
 }
 
 function draw_band(context: CanvasRenderingContext2D, state: BallDrawState, offset: number): void {
-  const surface_offset = state.surface_offset ?? state.roll_angle;
-  const band_x = state.x + Math.sin(surface_offset) * state.width * 0.12 + offset * state.width;
+  // A pole-to-pole band stays fixed while the ball rolls around its horizontal axis.
+  const band_x = state.x + offset * state.width;
   context.fillStyle = state.design.accent_color;
   context.fillRect(
     band_x - state.width * 0.055,
@@ -51,49 +67,106 @@ function draw_band(context: CanvasRenderingContext2D, state: BallDrawState, offs
   );
 }
 
-function draw_chevron(context: CanvasRenderingContext2D, state: BallDrawState): void {
+function project_surface_point(
+  state: BallDrawState,
+  local_x: number,
+  local_y: number,
+): ProjectedSurfacePoint | undefined {
+  const local_z_squared = 1 - local_x * local_x - local_y * local_y;
+  if (local_z_squared <= 0) return undefined;
+  const local_z = Math.sqrt(local_z_squared);
   const surface_offset = state.surface_offset ?? state.roll_angle;
-  const shift = Math.sin(surface_offset) * state.width * 0.12;
+  const rotated_y = local_y * Math.cos(surface_offset) - local_z * Math.sin(surface_offset);
+  const rotated_z = local_y * Math.sin(surface_offset) + local_z * Math.cos(surface_offset);
+  if (rotated_z <= 0) return undefined;
+  return {
+    x: state.x + local_x * state.width * 0.5,
+    y: state.y + rotated_y * state.height * 0.5,
+    depth: rotated_z,
+  };
+}
+
+function draw_chevron(context: CanvasRenderingContext2D, state: BallDrawState): void {
+  const center = project_surface_point(state, -0.15, 0);
+  if (center === undefined) return;
   context.strokeStyle = state.design.accent_color;
   context.lineWidth = Math.max(2, state.width * 0.08);
+  context.globalAlpha = 0.35 + center.depth * 0.65;
   context.beginPath();
-  context.moveTo(state.x - state.width * 0.25 + shift, state.y - state.height * 0.26);
-  context.lineTo(state.x + shift, state.y);
-  context.lineTo(state.x - state.width * 0.25 + shift, state.y + state.height * 0.26);
+  context.moveTo(state.x - state.width * 0.25, center.y - state.height * 0.26);
+  context.lineTo(state.x, center.y);
+  context.lineTo(state.x - state.width * 0.25, center.y + state.height * 0.26);
   context.stroke();
+  context.globalAlpha = 1;
 }
 
 function draw_monogram(context: CanvasRenderingContext2D, state: BallDrawState): void {
   if (state.design.monogram === undefined) return;
+  const center = project_surface_point(state, 0.4, 0);
+  if (center === undefined) return;
   context.fillStyle = "#FFFFFF";
-  context.font = `700 ${Math.max(9, state.height * 0.31)}px system-ui, sans-serif`;
+  context.font = `700 ${Math.max(9, state.height * 0.31 * center.depth)}px system-ui, sans-serif`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(state.design.monogram, state.x + state.width * 0.2, state.y);
+  context.globalAlpha = 0.35 + center.depth * 0.65;
+  context.fillText(state.design.monogram, center.x, center.y);
+  context.globalAlpha = 1;
+}
+
+export function get_ball_hole_commands(state: BallDrawState): BallHoleCommand[] {
+  const holes = [
+    { x: 0.16, y: -0.36 },
+    { x: 0.46, y: -0.5 },
+    { x: 0.4, y: -0.08 },
+  ];
+  const commands: BallHoleCommand[] = [];
+  for (const hole of holes) {
+    const center = project_surface_point(state, hole.x, hole.y);
+    if (center === undefined) continue;
+    const size_scale = 0.55 + center.depth * 0.45;
+    commands.push({
+      x: center.x,
+      y: center.y,
+      radius_x: state.width * 0.075 * size_scale,
+      radius_y: state.height * 0.075 * size_scale * Math.max(0.22, center.depth),
+      opacity: 0.3 + center.depth * 0.7,
+    });
+  }
+  return commands;
 }
 
 function draw_finger_holes(context: CanvasRenderingContext2D, state: BallDrawState): void {
-  const surface_offset = state.surface_offset ?? state.roll_angle;
-  const shift = Math.sin(surface_offset) * state.width * 0.08;
-  const holes = [
-    { x: 0.08, y: -0.18 },
-    { x: 0.23, y: -0.25 },
-    { x: 0.2, y: -0.04 },
-  ];
   context.fillStyle = "rgba(5, 20, 43, 0.82)";
-  for (const hole of holes) {
+  for (const hole of get_ball_hole_commands(state)) {
+    context.globalAlpha = hole.opacity;
     context.beginPath();
-    context.ellipse(
-      state.x + hole.x * state.width + shift,
-      state.y + hole.y * state.height,
-      state.width * 0.075,
-      state.height * 0.075,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    context.ellipse(hole.x, hole.y, hole.radius_x, hole.radius_y, 0, 0, full_turn);
     context.fill();
   }
+  context.globalAlpha = 1;
+}
+
+function positive_modulo(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
+
+function draw_rolling_surface(
+  context: CanvasRenderingContext2D,
+  state: BallDrawState,
+  asset: CanvasImageSource,
+): void {
+  const left = state.x - state.width / 2;
+  const top = state.y - state.height / 2;
+  const surface_offset = state.surface_offset ?? state.roll_angle;
+  const tile_height = state.height * 1.45;
+  const surface_travel = positive_modulo((surface_offset / full_turn) * tile_height, tile_height);
+  const surface_width = state.width * 1.16;
+  const surface_left = left - (surface_width - state.width) / 2;
+  const surface_top = top - surface_travel;
+  context.globalAlpha = 0.32;
+  context.drawImage(asset, surface_left, surface_top, surface_width, tile_height);
+  context.drawImage(asset, surface_left, surface_top + tile_height, surface_width, tile_height);
+  context.globalAlpha = 1;
 }
 
 /** Draws the same circular bowling ball used by the setup preview and the lane. */
@@ -114,15 +187,7 @@ export function draw_ball(
   gradient.addColorStop(1, "#122A4D");
   context.fillStyle = gradient;
   context.fillRect(left, top, state.width, state.height);
-  if (asset !== undefined) {
-    const surface_width = state.width * 1.8;
-    const surface_offset = state.surface_offset ?? state.roll_angle;
-    const surface_left = left - ((surface_offset * state.width * 0.18) % surface_width);
-    context.globalAlpha = 0.42;
-    context.drawImage(asset, surface_left, top, surface_width, state.height);
-    context.drawImage(asset, surface_left + surface_width, top, surface_width, state.height);
-    context.globalAlpha = 1;
-  }
+  if (asset !== undefined) draw_rolling_surface(context, state, asset);
   for (const command of get_ball_pattern_commands(state.design.pattern)) {
     if (command.kind === "band") draw_band(context, state, command.offset);
     if (command.kind === "chevron") draw_chevron(context, state);

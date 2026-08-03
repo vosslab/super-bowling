@@ -20,7 +20,7 @@ test("saved setup and preferences restore across a reload", async ({ page }) => 
     .getByRole("button", { name: `Start ${mode_label(100, 105)} for 1 player`, exact: true })
     .click();
   await expect(page.locator("main.play_shell")).toHaveAttribute("data-phase", "aiming");
-  await page.getByRole("button", { name: "New match" }).click();
+  await page.getByRole("button", { name: "End match" }).click();
   await page.reload();
   await expect(
     page.getByRole("button", { name: mode_label(100, 105), exact: true }),
@@ -51,7 +51,7 @@ test("custom bowls-per-frame reaches the live rule and restores after reload", a
   await expect(page.locator("[data-bowls-per-frame]")).toContainText(
     "frames 1-9 end after a clear or 3 bowls; frame 10 always has 4 bowls.",
   );
-  await page.getByRole("button", { name: "New match" }).click();
+  await page.getByRole("button", { name: "End match" }).click();
   await page.reload();
   await expect(page.getByRole("button", { name: "3", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -81,8 +81,10 @@ test("perfect match stores the selected mode best score", async ({ page }) => {
     .getByRole("button", { name: "Start 10 mode - 10 pins for 1 player", exact: true })
     .click();
   await expect(page.getByRole("status").filter({ hasText: "Final score" })).toContainText("300");
-  await page.getByRole("button", { name: "New match" }).click();
-  await expect(page.getByText("Best for 10 mode - 10 pins: 300")).toBeVisible();
+  await page.getByRole("button", { name: "Change setup" }).click();
+  const practice_record = page.locator('[data-practice-record="record"]');
+  await expect(practice_record).toContainText("HIGH GAME");
+  await expect(practice_record).toContainText("300");
 });
 
 for (const [pin_count, rack_pin_count] of [

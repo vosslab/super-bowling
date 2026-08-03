@@ -231,7 +231,8 @@ test("zero-knock result keeps the compact desktop chrome and lane geometry", asy
   // rather than merely checking the first-roll result phase.
   await page.getByRole("button", { name: "Bowl now" }).click();
   await expect(play_shell).toHaveAttribute("data-phase", "result");
-  await expect(play_shell).toHaveAttribute("data-phase", "aiming", { timeout: 2_000 });
+  await page.getByRole("button", { name: "Continue to the next roll" }).click();
+  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   await page.getByRole("button", { name: "Bowl now" }).click();
   await expect(play_shell).toHaveAttribute("data-phase", "result");
   const result = await layout_rectangles(page);

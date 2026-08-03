@@ -144,11 +144,11 @@ export function Setup(props: SetupProps): JSX.Element {
       </header>
       <section class="setup_panel">
         <header class="setup_heading">
-          <p class="eyebrow">16:10 local arcade night</p>
+          <p class="eyebrow">Local arcade night</p>
           <h1>Set up your super match</h1>
           <p>
             Choose a complete triangle, name your bowlers, then tune the selected player&apos;s
-            sphere.
+            ball.
           </p>
         </header>
         <div class="setup_board">
@@ -170,9 +170,6 @@ export function Setup(props: SetupProps): JSX.Element {
                 </For>
               </div>
             </fieldset>
-            <p class="best_score" aria-live="polite">
-              Best for {get_mode_label(draft().pin_count)}: {mode_record()?.best_score ?? "-"}
-            </p>
             <fieldset class="bowls_per_frame_picker">
               <legend>Bowls per frame</legend>
               <div class="bowls_per_frame_row" aria-label="Bowls per frame">
@@ -308,7 +305,7 @@ export function Setup(props: SetupProps): JSX.Element {
                 {selected_player()?.name.trim() || `Player ${selected_player_index() + 1}`}&apos;s
                 ball
               </h2>
-              <p>Give this bowling sphere its own colors, pattern, and optional monogram.</p>
+              <p>Give this ball its own colors, pattern, and optional monogram.</p>
             </header>
             <Show when={selected_player()}>
               {(player) => (

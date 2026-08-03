@@ -1,0 +1,14 @@
+you are the manager; read and implement the plan docs/active_plans/ancient-shimmying-adleman.md using subagents $vosslab-skills:delegate-manager-to-subagents
+
+do you have a plan so that we can use more than half of the vertical space? how about "lane + rack + ball to span at least 90% of the available vertical space."
+
+the viewpoint is too front view. I think we should see at least ~3-10% of the pin between each row. exaggerate the faux 3d perspective more... so we can see more pins and we do not have wasted empty
+  space; when I asked for ~3-10% showing, I meant like 90-97% overlap between pins
+
+make sure to make use of independent subagent screenshot reviewers; we need to have more independent visual confirmation on the different states of the lane
+
+there are times when regulation values make sense, but there is no real 990 pin bowling, so we have to become
+  superhuman then; the stats are fine for 10 pin, but we need like superhuman stats to get 1000pin; I think we can have more spin I guess the spin with the max power is not enough, but I feel like I need more power for 1000 pin; the 990 pin ball gets stuck and cannot make it to the backstop; I think we should add an additional force that pulls the ball through the pins to prevent stalling; ? for 990 pins let's pull out a 40 pound ball or something
+
+
+pins should never have a final state of upside down

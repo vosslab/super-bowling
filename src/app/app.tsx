@@ -19,6 +19,12 @@ import { Setup } from "./setup";
 type FixtureMode =
   "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | "preview_stale" | undefined;
 
+type ActiveGame = {
+  client: SimulationClient;
+  previous_record: ModeRecord | undefined;
+  setup: MatchSetup;
+};
+
 const in_memory_storage = new Map<string, string>();
 
 function get_browser_storage(): StorageLike {
@@ -63,14 +69,25 @@ export function App(): JSX.Element {
   const fixture_mode = read_fixture_mode();
   const settings = create_app_settings(get_browser_storage());
   const [saved, set_saved] = createSignal<SaveFileV4>(settings.get_save());
-  const [setup, set_setup] = createSignal<MatchSetup>();
-  const [client, set_client] = createSignal<SimulationClient>();
-  const [previous_record, set_previous_record] = createSignal<ModeRecord>();
+  const [active_game, set_active_game] = createSignal<ActiveGame>();
+
+  function create_match_client(pin_count: MatchSetup["pin_count"]): SimulationClient {
+    const next_client =
+      fixture_mode === "perfect_game"
+        ? create_perfect_game_fixture(pin_count)
+        : fixture_mode === "zero_knock"
+          ? create_zero_knock_fixture(pin_count)
+          : fixture_mode === "partial_knock"
+            ? create_partial_knock_fixture(pin_count)
+            : fixture_mode === "preview_stale"
+              ? create_preview_stale_fixture(pin_count)
+              : fixture_mode === "camera_deck"
+                ? create_camera_deck_fixture(pin_count)
+                : create_simulation_client();
+    return next_client;
+  }
 
   function on_start(next_setup: MatchSetup): void {
-    set_previous_record(
-      settings.get_mode_record(next_setup.pin_count, next_setup.bowls_per_frame ?? 2),
-    );
     set_saved(
       settings.set_recent_setup({
         bowls_per_frame: next_setup.bowls_per_frame ?? 2,
@@ -81,20 +98,14 @@ export function App(): JSX.Element {
         })),
       }),
     );
-    const next_client =
-      fixture_mode === "perfect_game"
-        ? create_perfect_game_fixture(next_setup.pin_count)
-        : fixture_mode === "zero_knock"
-          ? create_zero_knock_fixture(next_setup.pin_count)
-          : fixture_mode === "partial_knock"
-            ? create_partial_knock_fixture(next_setup.pin_count)
-            : fixture_mode === "preview_stale"
-              ? create_preview_stale_fixture(next_setup.pin_count)
-              : fixture_mode === "camera_deck"
-                ? create_camera_deck_fixture(next_setup.pin_count)
-                : create_simulation_client();
-    set_client(next_client);
-    set_setup(next_setup);
+    set_active_game({
+      client: create_match_client(next_setup.pin_count),
+      previous_record: settings.get_mode_record(
+        next_setup.pin_count,
+        next_setup.bowls_per_frame ?? 2,
+      ),
+      setup: next_setup,
+    });
   }
 
   function set_mute_enabled(mute_enabled: boolean): void {
@@ -106,26 +117,39 @@ export function App(): JSX.Element {
   }
 
   function record_completed_match(summaries: readonly PlayerMatchSummary[]): void {
-    const completed_setup = setup();
-    if (completed_setup === undefined) throw new Error("A completed match must retain its setup.");
+    const completed_game = active_game();
+    if (completed_game === undefined) throw new Error("A completed match must retain its setup.");
     set_saved(
       settings.record_completed_match(
-        completed_setup.pin_count,
-        completed_setup.bowls_per_frame ?? 2,
+        completed_game.setup.pin_count,
+        completed_game.setup.bowls_per_frame ?? 2,
         fold_match_summaries(summaries),
       ),
     );
   }
 
   function exit_game(): void {
-    set_previous_record(undefined);
-    set_setup(undefined);
-    set_client(undefined);
+    set_active_game(undefined);
+  }
+
+  function replay_game(): void {
+    const completed_game = active_game();
+    if (completed_game === undefined) throw new Error("A replay must retain its match setup.");
+    const completed_setup = completed_game.setup;
+    set_active_game({
+      client: create_match_client(completed_setup.pin_count),
+      previous_record: settings.get_mode_record(
+        completed_setup.pin_count,
+        completed_setup.bowls_per_frame ?? 2,
+      ),
+      setup: completed_setup,
+    });
   }
 
   return (
     <Show
-      when={setup() !== undefined && client() !== undefined}
+      when={active_game()}
+      keyed
       fallback={
         <Setup
           on_start={on_start}
@@ -141,18 +165,21 @@ export function App(): JSX.Element {
         />
       }
     >
-      <Game
-        client={client()!}
-        setup={setup()!}
-        auto_run={fixture_mode === "perfect_game"}
-        mute_enabled={() => saved().mute_enabled}
-        reduced_motion={() => saved().reduced_motion}
-        on_set_mute={set_mute_enabled}
-        on_set_reduced_motion={set_reduced_motion}
-        on_match_complete={record_completed_match}
-        on_exit={exit_game}
-        previous_record={previous_record}
-      />
+      {(game) => (
+        <Game
+          client={game.client}
+          setup={game.setup}
+          auto_run={fixture_mode === "perfect_game"}
+          mute_enabled={() => saved().mute_enabled}
+          reduced_motion={() => saved().reduced_motion}
+          on_set_mute={set_mute_enabled}
+          on_set_reduced_motion={set_reduced_motion}
+          on_match_complete={record_completed_match}
+          on_exit={exit_game}
+          on_replay={replay_game}
+          previous_record={() => game.previous_record}
+        />
+      )}
     </Show>
   );
 }
