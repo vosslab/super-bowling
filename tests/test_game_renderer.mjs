@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { normalize_ball_design } from "../src/designer/ball_design.ts";
 import { ball_radius, pin_radius } from "../src/config/lane.ts";
-import {
-  draw_ball,
-  get_ball_hole_commands,
-  get_ball_pattern_commands,
-} from "../src/render/ball.ts";
-import { get_game_asset_urls } from "../src/render/game_assets.ts";
+import { get_ball_hole_commands } from "../src/render/ball.ts";
 import { advance_camera_for_ball, create_camera_state } from "../src/render/camera.ts";
 import {
   create_camera_projection,
@@ -95,83 +89,6 @@ function line_reaches_horizon(first, second, horizon) {
   const cross_product = line_x * horizon_y - line_y * horizon_x;
   const scale = Math.max(1, Math.hypot(line_x, line_y) * Math.hypot(horizon_x, horizon_y));
   return Math.abs(cross_product) <= geometry_tolerance * scale;
-}
-
-function get_tag_attributes(markup, tag_name) {
-  const match = markup.match(new RegExp(`<${tag_name}\\b([^>]*)>`));
-  assert.ok(match);
-  return match[1];
-}
-
-function get_attribute(attributes, name) {
-  const match = attributes.match(new RegExp(`\\b${name}="([^"]+)"`));
-  assert.ok(match);
-  return match[1];
-}
-
-function get_url_reference(value) {
-  const match = value.match(/^url\(#([^)]+)\)$/);
-  assert.ok(match);
-  return match[1];
-}
-
-function get_path_x_extent(path_data) {
-  const tokens = path_data.match(/[a-zA-Z]|-?\d+(?:\.\d+)?/g);
-  assert.ok(tokens);
-  let command = "";
-  let cursor = 0;
-  let current_x = 0;
-  let current_y = 0;
-  let start_x = 0;
-  const x_values = [];
-
-  function read_number() {
-    const token = tokens[cursor];
-    assert.ok(token !== undefined && !/[a-zA-Z]/.test(token));
-    cursor += 1;
-    return Number(token);
-  }
-
-  function add_point(x, y, relative) {
-    current_x = relative ? current_x + x : x;
-    current_y = relative ? current_y + y : y;
-    x_values.push(current_x);
-  }
-
-  while (cursor < tokens.length) {
-    const token = tokens[cursor];
-    assert.ok(token !== undefined);
-    if (/[a-zA-Z]/.test(token)) {
-      command = token;
-      cursor += 1;
-      if (command === "Z" || command === "z") {
-        current_x = start_x;
-        x_values.push(current_x);
-      }
-      continue;
-    }
-    const relative = command === command.toLowerCase();
-    if (command === "M" || command === "m" || command === "L" || command === "l") {
-      add_point(read_number(), read_number(), relative);
-      if (command === "M" || command === "m") {
-        start_x = current_x;
-        command = relative ? "l" : "L";
-      }
-      continue;
-    }
-    if (command === "H" || command === "h") {
-      current_x = relative ? current_x + read_number() : read_number();
-      x_values.push(current_x);
-      continue;
-    }
-    if (command === "V" || command === "v") {
-      current_y = relative ? current_y + read_number() : read_number();
-      continue;
-    }
-    assert.fail(`Unsupported ball-surface path command: ${command}`);
-  }
-  assert.ok(x_values.length > 0);
-  return { min: Math.min(...x_values), max: Math.max(...x_values) };
 }
 
 test("interpolates pin positions into finite front-facing lane commands", () => {
@@ -554,93 +471,6 @@ test("interpolates a fallen pin axis across the PI boundary by its short arc", (
 
   assert.equal(pin.kind, "fallen_pin");
   assert.ok(angular_distance(pin.angle, Math.PI) < 0.001);
-});
-
-test("maps each supported ball pattern to the shared spherical draw design", () => {
-  const expected_command_counts = {
-    solid: 1,
-    single_band: 1,
-    double_band: 2,
-    chevron: 1,
-  };
-  for (const [pattern, expected_count] of Object.entries(expected_command_counts)) {
-    const design = normalize_ball_design({ pattern });
-    assert.equal(get_ball_pattern_commands(design.pattern).length, expected_count);
-  }
-});
-
-test("uses the seamless ball surface as a vertically repeated gameplay draw overlay", () => {
-  const image_draws = [];
-  const context = {
-    save() {},
-    restore() {},
-    beginPath() {},
-    ellipse() {},
-    clip() {},
-    fillRect() {},
-    fill() {},
-    stroke() {},
-    createLinearGradient() {
-      return { addColorStop() {} };
-    },
-    drawImage(...draw) {
-      image_draws.push(draw);
-    },
-    fillText() {},
-    moveTo() {},
-    lineTo() {},
-    set fillStyle(value) {},
-    set strokeStyle(value) {},
-    set lineWidth(value) {},
-    set globalAlpha(value) {},
-    set font(value) {},
-    set textAlign(value) {},
-    set textBaseline(value) {},
-  };
-  draw_ball(
-    context,
-    { x: 100, y: 100, width: 60, height: 60, roll_angle: 0, design: normalize_ball_design({}) },
-    {},
-  );
-  assert.equal(image_draws.length, 2);
-  assert.equal(image_draws[0][1], image_draws[1][1]);
-  assert.ok(image_draws[1][2] > image_draws[0][2]);
-  assert.equal(get_game_asset_urls().ball, "./assets/ball_surface.svg");
-});
-
-test("builds the ball surface from a seam-safe vertically repeated tile", () => {
-  const surface_url = new URL("../src/assets/ball_surface.svg", import.meta.url);
-  const surface_svg = readFileSync(surface_url, "utf8");
-  const svg_attributes = get_tag_attributes(surface_svg, "svg");
-  const view_box = get_attribute(svg_attributes, "viewBox").split(/\s+/).map(Number);
-  const root_width = view_box[2];
-  const root_height = view_box[3];
-  assert.ok(root_width !== undefined && root_height !== undefined);
-
-  const pattern_match = surface_svg.match(/<pattern\b([^>]*)>([\s\S]*?)<\/pattern>/);
-  assert.ok(pattern_match);
-  const pattern_attributes = pattern_match[1];
-  const pattern_body = pattern_match[2];
-  const tile_height = Number(get_attribute(pattern_attributes, "height"));
-  const tile_width = Number(get_attribute(pattern_attributes, "width"));
-  assert.equal(tile_width, root_width);
-  assert.ok(Number.isFinite(tile_height) && root_height / tile_height >= 2);
-  assert.equal(root_height % tile_height, 0);
-
-  const pattern_id = get_attribute(pattern_attributes, "id");
-  const outer_markup = surface_svg.slice(surface_svg.indexOf("</defs>") + "</defs>".length);
-  const outer_fill = get_url_reference(
-    get_attribute(get_tag_attributes(outer_markup, "rect"), "fill"),
-  );
-  assert.equal(outer_fill, pattern_id);
-
-  const path_match = pattern_body.match(/<path\b([^>]*)\/>/);
-  assert.ok(path_match);
-  const path_attributes = path_match[1];
-  const path_extent = get_path_x_extent(get_attribute(path_attributes, "d"));
-  const half_stroke_width = Number(get_attribute(path_attributes, "stroke-width")) / 2;
-  assert.ok(path_extent.min - half_stroke_width > 0);
-  assert.ok(path_extent.max + half_stroke_width < tile_width);
 });
 
 test("rolls finger holes over the spherical face instead of wiggling them sideways", () => {

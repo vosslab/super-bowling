@@ -140,7 +140,6 @@ export function Game(props: GameProps): JSX.Element {
   const [auto_running, set_auto_running] = createSignal(false);
   const [drawn_pin_count, set_drawn_pin_count] = createSignal(0);
   const [drawn_fallen_pin_count, set_drawn_fallen_pin_count] = createSignal(0);
-  const [draw_command_count, set_draw_command_count] = createSignal(0);
   const [drawn_ball, set_drawn_ball] = createSignal(false);
   const [drawn_aim_guide, set_drawn_aim_guide] = createSignal(false);
   const [drawn_ball_screen_x, set_drawn_ball_screen_x] = createSignal<number | undefined>();
@@ -430,7 +429,6 @@ export function Game(props: GameProps): JSX.Element {
       if (drawn_pin_count() !== pin_count) set_drawn_pin_count(pin_count);
       if (drawn_fallen_pin_count() !== fallen_pin_count)
         set_drawn_fallen_pin_count(fallen_pin_count);
-      if (draw_command_count() !== commands.length) set_draw_command_count(commands.length);
       if (drawn_ball() !== (ball !== undefined)) set_drawn_ball(ball !== undefined);
       if (drawn_aim_guide() !== (aim_guide !== undefined))
         set_drawn_aim_guide(aim_guide !== undefined);
@@ -673,7 +671,6 @@ export function Game(props: GameProps): JSX.Element {
       data-phase={match_state().phase}
       data-drawn-pin-count={drawn_pin_count()}
       data-drawn-fallen-pin-count={drawn_fallen_pin_count()}
-      data-draw-command-count={draw_command_count()}
       data-drawn-ball={drawn_ball() ? "true" : "false"}
       data-drawn-aim-guide={drawn_aim_guide() ? "true" : "false"}
       data-drawn-ball-screen-x={drawn_ball_screen_x()?.toFixed(2) ?? ""}

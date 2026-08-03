@@ -49,7 +49,6 @@ test("setup: a compact 16:10 board keeps match start visible and edits only the 
   await expect(page.getByRole("radio", { name: "Chevron" })).toBeChecked();
   await expect(page.getByRole("radio", { name: "Double band" })).not.toBeChecked();
 
-  await page.screenshot({ path: "test-results/setup_16_10_four_players.png", fullPage: true });
   await page
     .getByRole("button", { name: "Start 10 mode - 10 pins for 4 players", exact: true })
     .click();

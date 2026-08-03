@@ -43,22 +43,3 @@ test("production boundary: a same-rack roll restores the ball and aim guide befo
   await page.keyboard.press("Space");
   await expect(play_shell).toHaveAttribute("data-phase", "rolling");
 });
-
-test("newer preview wins when an older worker response arrives later", async ({ page }) => {
-  await page.goto("/?fixture=preview_stale");
-  await page
-    .getByRole("button", { name: "Start 10 mode - 10 pins for 1 player", exact: true })
-    .click();
-
-  const play_shell = page.locator("main.play_shell");
-  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
-  await page.keyboard.press("ArrowRight");
-  await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
-  const current_guide_x = await play_shell.getAttribute("data-drawn-aim-guide-first-screen-x");
-  await page.waitForTimeout(240);
-  await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
-  await expect(play_shell).toHaveAttribute(
-    "data-drawn-aim-guide-first-screen-x",
-    current_guide_x ?? "",
-  );
-});

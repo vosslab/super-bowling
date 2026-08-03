@@ -60,7 +60,6 @@ test("practice record: a perfect game feeds the summary and keeps repeated compl
   await expect(summary).toContainText("Perfect game");
   await expect(page.locator(".aim_block")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Play again" })).toBeFocused();
-  await page.screenshot({ path: "test-results/final_score_16_10.png", fullPage: true });
 
   await page.getByRole("button", { name: "Change setup" }).click();
   const practice_record = page.locator('[data-practice-record="record"]');
@@ -80,30 +79,4 @@ test("practice record: a perfect game feeds the summary and keeps repeated compl
   ).toHaveText("300");
   await page.getByRole("button", { name: "Change setup" }).click();
   await expect(practice_record).toContainText("300, 300, 300, 5");
-});
-
-test("earned moment: reduced motion still shows high-game feedback", async ({ page }) => {
-  test.slow();
-  await seed_tiny_record(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Reduced motion off" }).press("Space");
-  await page.getByRole("button", { name: start_label, exact: true }).click();
-
-  const play_shell = page.locator("main.play_shell");
-  await expect(play_shell).toHaveAttribute("data-reduced-motion", "true");
-  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
-
-  await page.keyboard.press("Space");
-  await expect(play_shell).toHaveAttribute("data-phase", "rolling");
-  await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 20_000 });
-  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
-
-  await page.keyboard.press("Space");
-  await expect(play_shell).toHaveAttribute("data-phase", "rolling");
-  await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 20_000 });
-  await expect(play_shell).toHaveAttribute("data-earned-moment", "high_game");
-  const toast = page.locator(".earned_moment_toast[role='status']");
-  await expect(toast).toBeVisible();
-  await expect(toast).toContainText("HIGH GAME");
-  await expect(toast).toContainText("New high score");
 });

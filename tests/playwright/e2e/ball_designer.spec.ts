@@ -18,7 +18,6 @@ test("fixture: every shared ball pattern has a static production preview", async
   for (const pattern of ["Solid", "Single band", "Double band", "Chevron"]) {
     await expect(page.getByRole("heading", { name: pattern })).toBeVisible();
   }
-  await page.screenshot({ path: "test-results/03_ball_patterns.png", fullPage: true });
   const solid_card = page.locator('[data-ball-pattern="solid"]');
   await solid_card.getByRole("radio", { name: "Chevron" }).check();
   await expect(solid_card.locator(".ball_designer_heading strong")).toHaveText("Chevron");

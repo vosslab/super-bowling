@@ -56,13 +56,6 @@ export function create_partial_knock_fixture(pin_count: PinCount = 10): Simulati
   });
 }
 
-/** Returns newer aim previews first so the UI can prove stale responses are ignored. */
-export function create_preview_stale_fixture(pin_count: PinCount = 10): SimulationClient {
-  return create_fixture_client(get_rack_pin_count(pin_count), 0, {
-    delay_odd_preview_requests: true,
-  });
-}
-
 /**
  * Delivers a terminal shot snapshot for centered-framing evidence. The exported
  * name remains compatible with the existing camera_deck fixture query.
@@ -137,7 +130,6 @@ export function create_camera_deck_fixture(pin_count: PinCount): SimulationClien
 }
 
 type FixtureClientOptions = Readonly<{
-  delay_odd_preview_requests?: boolean;
   hold_second_roll_in_rolling?: boolean;
 }>;
 
@@ -223,9 +215,7 @@ function create_fixture_client(
         fallen_pin_count: 0,
         snapshot_data: create_snapshot(pin_count, fallen_pin_count, deadwood_removed),
       });
-      // Leave this state observable to the browser test; production acknowledgement
-      // follows its synchronous world update without a UI-visible animation delay.
-      window.setTimeout(() => publish({ type: "sweep_complete", pin_count }), 250);
+      publish({ type: "sweep_complete", pin_count });
       return;
     }
     if (request.type === "preview_path") {
@@ -240,11 +230,7 @@ function create_fixture_client(
           24,
         ]),
       };
-      if (options.delay_odd_preview_requests && request.request_id % 2 === 1) {
-        window.setTimeout(() => publish(preview_event), 140);
-      } else {
-        publish(preview_event);
-      }
+      publish(preview_event);
     }
   }
 

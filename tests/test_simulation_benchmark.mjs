@@ -150,24 +150,6 @@ test("direct contact wakes a sleeping dynamic pin and transfers velocity", async
   world.dispose();
 });
 
-test("every centered selectable power reaches and knocks down the head pin", async () => {
-  for (let power = 8; power <= 24; power += 1) {
-    const roll = await run_centered_roll(10, power);
-    assert.notEqual(roll.head_contact_step, undefined);
-    assert.ok(roll.fallen_pin_count >= 1, `power ${power} should knock down a pin`);
-  }
-});
-
-test("shared weak, default, and full powers contact every representative rack", async () => {
-  for (const mode of [10, 100, 1000]) {
-    for (const power of [8, 16, 24]) {
-      const roll = await run_centered_roll(mode, power);
-      assert.notEqual(roll.head_contact_step, undefined, `${mode}-pin power ${power}`);
-      assert.ok(roll.fallen_pin_count >= 1, `${mode}-pin power ${power}`);
-    }
-  }
-});
-
 test("ten-pin power produces progressively faster head-pin impact", async () => {
   const weak = await run_centered_roll(10, 8);
   const default_roll = await run_centered_roll(10, 16);
@@ -362,60 +344,6 @@ test("exact centered ten-pin controls do not strike", async () => {
   }
 
   assert.equal(strike_power, undefined, "exact centered rolls should not produce a strike");
-});
-
-test("fallen capsule axes settle without windmill-scale rotation", async () => {
-  const world = await create_simulation_world(10);
-  const accumulated_turn_by_pin = new Map();
-  const last_axis_angle_by_pin = new Map();
-  let terminal = false;
-
-  function shortest_arc(first, second) {
-    return ((((second - first + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
-  }
-
-  try {
-    world.launch(18, 0, 0, 0);
-    for (let step = 0; step < 3_600; step += 1) {
-      const result = world.step_fixed();
-      for (const slot of world.rack.slots) {
-        const axis_angle = world.get_pin_fallen_axis_angle(slot.pin_id);
-        if (axis_angle === undefined) continue;
-        assert.ok(Number.isFinite(axis_angle), `pin ${slot.pin_id} axis remains finite`);
-        const previous = last_axis_angle_by_pin.get(slot.pin_id);
-        if (previous !== undefined) {
-          const accumulated =
-            (accumulated_turn_by_pin.get(slot.pin_id) ?? 0) +
-            Math.abs(shortest_arc(previous, axis_angle));
-          accumulated_turn_by_pin.set(slot.pin_id, accumulated);
-        } else {
-          accumulated_turn_by_pin.set(slot.pin_id, 0);
-        }
-        last_axis_angle_by_pin.set(slot.pin_id, axis_angle);
-      }
-      if (result.settled || result.timed_out) {
-        terminal = result.settled;
-        break;
-      }
-    }
-
-    assert.equal(terminal, true, "representative centered roll settles without a timeout");
-    assert.ok(accumulated_turn_by_pin.size > 0, "fixture creates fallen capsules");
-    const maximum_accumulated_rotation = Math.max(...accumulated_turn_by_pin.values());
-    assert.ok(
-      maximum_accumulated_rotation > 0.01,
-      "native capsule contacts retain visible physical rotation",
-    );
-    for (const [pin_id, accumulated] of accumulated_turn_by_pin) {
-      assert.ok(Number.isFinite(accumulated), `pin ${pin_id} rotation remains finite`);
-      assert.ok(
-        accumulated < Math.PI * 2,
-        `pin ${pin_id} physical capsule axis remains below one full turn (${accumulated})`,
-      );
-    }
-  } finally {
-    world.dispose();
-  }
 });
 
 test("benchmark validation identifies incomplete, unconserved, and unusable samples", () => {

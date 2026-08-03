@@ -56,13 +56,12 @@ export type LaneProjection = {
   gutter_width: number;
   camera: {
     depth_distance: number;
-    candidate: CameraState["candidate"];
     target_reveal_fraction: number;
     achieved_median_reveal_fraction: number;
     row_reveal_fractions: ReadonlyArray<number>;
     depth_exaggeration: number;
     calibration_clamped: boolean;
-    calibration_reason: "solved" | "not_105_pin_bakeoff" | "lower_bound" | "upper_bound";
+    calibration_reason: "solved" | "unsolved" | "lower_bound" | "upper_bound";
     head_pin_y: number;
     rack_top_target_fraction: number;
     achieved_rack_top_fraction: number;
@@ -75,7 +74,7 @@ export type LaneProjection = {
     reveal_residual_fraction: number;
     horizon_fraction: number;
     framing_clamped: boolean;
-    framing_reason: "solved" | "not_105_pin_bakeoff" | "lower_bound" | "upper_bound";
+    framing_reason: "solved" | "unsolved" | "lower_bound" | "upper_bound";
   };
   pixels_per_world_unit: number;
   horizon: ScreenPoint;
@@ -100,8 +99,8 @@ export type WorldPoint = { x: number; y: number; z: number };
 type ProjectedBody = { base: ScreenPoint; crown: ScreenPoint; width: number; base_depth: number };
 
 // Values below one compress the complete deck; values above one exaggerate it.
-// The finite interval is deliberately broad enough to solve the 3--10% reveal
-// hypotheses at every supported rack size without a candidate-specific factor.
+// The finite interval solves the shipped reveal target at every supported rack
+// size without a rack-specific factor.
 const deck_exaggeration_bounds = { minimum: 0.02, maximum: 12 } as const;
 
 const default_ball_design = normalize_ball_design({});
@@ -199,15 +198,14 @@ function create_projection(
     gutter_width,
     camera: {
       depth_distance,
-      candidate: camera.candidate,
       target_reveal_fraction,
       achieved_median_reveal_fraction: 0,
       row_reveal_fractions: [],
       depth_exaggeration,
       calibration_clamped: false,
-      calibration_reason: "not_105_pin_bakeoff",
+      calibration_reason: "unsolved",
       head_pin_y,
-      rack_top_target_fraction: camera_config.bakeoff_rack_top_fraction,
+      rack_top_target_fraction: camera_config.rack_top_fraction,
       achieved_rack_top_fraction: 0,
       achieved_aiming_ball_bottom_fraction: 0,
       maximum_launch_platform_screen_fraction:
@@ -219,7 +217,7 @@ function create_projection(
       reveal_residual_fraction: 0,
       horizon_fraction,
       framing_clamped: false,
-      framing_reason: "not_105_pin_bakeoff",
+      framing_reason: "unsolved",
     },
     pixels_per_world_unit: (width * camera_config.near_rail_half_width_fraction) / full_half_width,
     horizon: { x: width / 2, y: height * horizon_fraction },
@@ -269,7 +267,7 @@ function solve_rack_framing(
   // Keep the physical near lane edge at the foot of the canvas, then solve the
   // horizon from the rear crown. The aiming ball can now move forward without
   // pulling the lane edge up and creating a blank strip beneath it.
-  const crown_target_y = height * camera_config.bakeoff_rack_top_fraction;
+  const crown_target_y = height * camera_config.rack_top_fraction;
   const rear_horizon_weight = 1 - scale;
   const rear_target_with_crown = crown_target_y + 1.25 * unframed.pixels_per_world_unit * scale;
   const required_near_screen_y = height * camera_config.near_lane_y_fraction;
@@ -277,13 +275,13 @@ function solve_rack_framing(
     (rear_target_with_crown - required_near_screen_y * scale) / rear_horizon_weight;
   const requested_fraction = required_horizon_y / height;
   if (
-    requested_fraction < camera_config.bakeoff_horizon_fraction.minimum ||
-    requested_fraction > camera_config.bakeoff_horizon_fraction.maximum
+    requested_fraction < camera_config.horizon_fraction_bounds.minimum ||
+    requested_fraction > camera_config.horizon_fraction_bounds.maximum
   )
     throw new Error(
       `Camera framing is infeasible: required horizon ${requested_fraction.toFixed(4)} is outside ` +
-        `[${camera_config.bakeoff_horizon_fraction.minimum}, ` +
-        `${camera_config.bakeoff_horizon_fraction.maximum}].`,
+        `[${camera_config.horizon_fraction_bounds.minimum}, ` +
+        `${camera_config.horizon_fraction_bounds.maximum}].`,
     );
   // Do not clamp the horizon: the two-anchor solve is only valid when both
   // solved endpoints share this exact value. An infeasible request is rejected
@@ -435,7 +433,7 @@ export function create_camera_projection(
     throw new Error("Camera projection requires a finite positive canvas width.");
   if (!Number.isFinite(height) || height <= 0)
     throw new Error("Camera projection requires a finite positive canvas height.");
-  const composition = get_camera_composition(camera.rack_bounds.pin_count, camera.candidate);
+  const composition = get_camera_composition(camera.rack_bounds.pin_count);
   const depth_distance = composition.depth_distance;
   if (!Number.isFinite(depth_distance) || depth_distance <= 0)
     throw new Error("Camera projection requires a finite positive depth distance.");
@@ -490,7 +488,7 @@ export function create_camera_projection(
       row_reveal_fractions,
       calibration_clamped: solved.calibration_clamped,
       calibration_reason: solved.calibration_reason,
-      rack_top_target_fraction: camera_config.bakeoff_rack_top_fraction,
+      rack_top_target_fraction: camera_config.rack_top_fraction,
       achieved_rack_top_fraction,
       achieved_aiming_ball_bottom_fraction,
       maximum_launch_platform_screen_fraction:

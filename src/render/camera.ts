@@ -1,9 +1,4 @@
-import {
-  camera_candidates,
-  default_camera_candidate,
-  get_camera_composition,
-  type CameraCandidate,
-} from "../config/camera";
+import { get_camera_composition } from "../config/camera";
 import type { RackPinCount } from "../config/pin_counts";
 import { create_rack } from "../simulation/rack";
 import type { CameraState, RackBounds } from "./contracts";
@@ -24,41 +19,16 @@ export function create_rack_bounds(pin_count: RackPinCount): RackBounds {
   return create_bounds_from_rack(pin_count);
 }
 
-/**
- * Reads a bakeoff candidate only from the dedicated visual-capture fixture.
- * Normal games deliberately ignore this query so their camera stays fixed.
- */
-export function parse_camera_candidate_search(search: string): CameraCandidate | undefined {
-  const parameters = new URLSearchParams(search);
-  if (parameters.get("fixture") !== "camera_deck") return undefined;
-  const candidate = parameters.get("camera_candidate");
-  return camera_candidates.find((value) => value === candidate);
-}
-
-/**
- * Resolves the capture-only URL override without assuming a browser exists.
- * This remains a default: an explicit create_camera_state candidate wins.
- */
-export function resolve_default_camera_candidate(): CameraCandidate {
-  if (typeof window === "undefined") return default_camera_candidate;
-  return parse_camera_candidate_search(window.location.search) ?? default_camera_candidate;
-}
-
-export function create_camera_state(
-  pin_count: RackPinCount,
-  reduced_motion: boolean,
-  candidate?: CameraCandidate,
-): CameraState {
+export function create_camera_state(pin_count: RackPinCount, reduced_motion: boolean): CameraState {
   return {
     rack_bounds: create_rack_bounds(pin_count),
     shot_progress: 0,
     reduced_motion,
-    candidate: candidate ?? resolve_default_camera_candidate(),
   };
 }
 
 export function get_camera_depth_distance(camera: CameraState): number {
-  return get_camera_composition(camera.rack_bounds.pin_count, camera.candidate).depth_distance;
+  return get_camera_composition(camera.rack_bounds.pin_count).depth_distance;
 }
 
 /** Records travel for UI state only; projection and horizon remain fixed. */

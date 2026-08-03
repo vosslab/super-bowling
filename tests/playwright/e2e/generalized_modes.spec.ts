@@ -13,7 +13,6 @@ const rack_pin_counts: Record<number, number> = {
 };
 
 test.use({ viewport: { width: 1600, height: 1000 } });
-test.setTimeout(60_000);
 
 function pin_label(pin_count: number): string {
   return `${pin_count.toLocaleString()} mode - ${rack_pin_counts[pin_count]!.toLocaleString()} pins`;
@@ -41,15 +40,5 @@ for (const pin_count of pin_counts) {
       "data-drawn-pin-count",
       String(rack_pin_counts[pin_count]),
     );
-    await expect(page.locator("main.play_shell")).toHaveAttribute(
-      "data-draw-command-count",
-      String(rack_pin_counts[pin_count]! + 3),
-    );
-    if (pin_count === 50 || pin_count === 100 || pin_count === 1000) {
-      await page.screenshot({
-        path: `test-results/super_lane_${pin_count}_mode.png`,
-        fullPage: true,
-      });
-    }
   });
 }

@@ -11,13 +11,11 @@ import {
   create_camera_deck_fixture,
   create_partial_knock_fixture,
   create_perfect_game_fixture,
-  create_preview_stale_fixture,
   create_zero_knock_fixture,
 } from "./test_fixture";
 import { Setup } from "./setup";
 
-type FixtureMode =
-  "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | "preview_stale" | undefined;
+type FixtureMode = "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | undefined;
 
 type ActiveGame = {
   client: SimulationClient;
@@ -59,8 +57,7 @@ function read_fixture_mode(): FixtureMode {
   return fixture === "perfect_game" ||
     fixture === "zero_knock" ||
     fixture === "partial_knock" ||
-    fixture === "camera_deck" ||
-    fixture === "preview_stale"
+    fixture === "camera_deck"
     ? fixture
     : undefined;
 }
@@ -79,11 +76,9 @@ export function App(): JSX.Element {
           ? create_zero_knock_fixture(pin_count)
           : fixture_mode === "partial_knock"
             ? create_partial_knock_fixture(pin_count)
-            : fixture_mode === "preview_stale"
-              ? create_preview_stale_fixture(pin_count)
-              : fixture_mode === "camera_deck"
-                ? create_camera_deck_fixture(pin_count)
-                : create_simulation_client();
+            : fixture_mode === "camera_deck"
+              ? create_camera_deck_fixture(pin_count)
+              : create_simulation_client();
     return next_client;
   }
 

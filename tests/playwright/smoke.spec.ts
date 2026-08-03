@@ -45,7 +45,6 @@ test("smoke: the built app reaches a real ten-pin aiming state", async ({ page }
     const asset_response = await page.request.get(path);
     expect(asset_response.status()).toBe(200);
   }
-  await page.screenshot({ path: "test-results/00_initial.png", fullPage: true });
   expect(console_errors).toEqual([]);
   expect(page_errors).toEqual([]);
   expect(failed_responses).toEqual([]);

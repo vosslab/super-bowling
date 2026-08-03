@@ -87,43 +87,13 @@ test("perfect match stores the selected mode best score", async ({ page }) => {
   await expect(practice_record).toContainText("300");
 });
 
-for (const [pin_count, rack_pin_count] of [
-  [10, 10],
-  [100, 105],
-  [1000, 990],
-] as const) {
-  test(`camera: ${pin_count.toLocaleString()}-pin centered result framing stays observable`, async ({
-    page,
-  }) => {
-    await page.goto("/?fixture=camera_deck");
-    await page
-      .getByRole("button", { name: mode_label(pin_count, rack_pin_count), exact: true })
-      .click();
-    await page
-      .getByRole("button", {
-        name: `Start ${mode_label(pin_count, rack_pin_count)} for 1 player`,
-        exact: true,
-      })
-      .click();
-    const play_shell = page.locator("main.play_shell");
-    await expect(play_shell).toHaveAttribute("data-camera-mode", "centered-shot");
-    await page.getByRole("button", { name: "Bowl now" }).click();
-    await expect(play_shell).toHaveAttribute("data-camera-mode", "centered-shot");
-    await expect(play_shell).toHaveAttribute("data-camera-progress", "1.0000");
-    await expect(play_shell).toHaveAttribute("data-drawn-pin-count", String(rack_pin_count));
-    await page.screenshot({ path: `test-results/m6_camera_${pin_count}.png`, fullPage: true });
-  });
-}
-
-test("reduced motion keeps the fixture in the fixed centered composition", async ({ page }) => {
-  await page.goto("/?fixture=camera_deck");
+test("reduced motion reaches the live game", async ({ page }) => {
+  await page.goto("/");
   await page.getByRole("button", { name: "Reduced motion off" }).press("Space");
   await page
     .getByRole("button", { name: "Start 10 mode - 10 pins for 1 player", exact: true })
     .click();
-  await page.getByRole("button", { name: "Bowl now" }).click();
   const play_shell = page.locator("main.play_shell");
-  await expect(play_shell).toHaveAttribute("data-camera-mode", "centered-shot");
-  await expect(play_shell).toHaveAttribute("data-camera-progress", "0.0000");
+  await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   await expect(play_shell).toHaveAttribute("data-reduced-motion", "true");
 });

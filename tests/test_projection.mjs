@@ -17,9 +17,7 @@ import {
   snapshot_y_offset,
 } from "../src/simulation/protocol.ts";
 
-// Frozen 1600 x 1000 desktop side-panel layout: the renderer receives this
-// measured lane rectangle, not the viewport or the retired bottom-deck size.
-const canvas = { width: 1248, height: 884 };
+const canvas = { width: 1600, height: 1000 };
 const rack_pin_counts = supported_pin_counts.map(get_rack_pin_count);
 
 function create_snapshot(pin_count) {

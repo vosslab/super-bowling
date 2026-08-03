@@ -30,10 +30,19 @@
 - Updated result and deadwood browser journeys to advance through the visible
   Continue action and assert the stable next-aim state instead of depending on
   a brief automatic sweep transition.
-- Added pure centered-slider invariants and a six-mode browser journey that
-  drives every slider to both native endpoints. Added a 12% maximum launch-
-  platform budget across every camera mode plus a live 21-pin composition check
-  and original-resolution aiming capture.
+- Added pure centered-slider invariants and retained one representative browser
+  control journey plus the six-mode worker-and-canvas journey. The 21-pin browser
+  check now requires a ready, playable lane without freezing presentation ratios.
+- Reduced the permanent Node suite from 191 tests taking about 26 seconds to 165
+  tests taking about one second. Removed exhaustive physics envelopes, live strike
+  sweeps, frozen diagnostic reports, SVG-markup parsing, and implementation-count
+  assertions that duplicated behavior or belonged in maintainer probes.
+- Replaced exact desktop dimensions, percentage budgets, camera progress strings,
+  fixed waits, and test-generated screenshots with containment, ordering,
+  readiness, accessibility, and clipping checks.
+- Removed the temporary camera-candidate query seam and camera-bakeoff capture
+  mode after selection. The renderer now exposes only the shipped composition;
+  the maintained milestone capture remains available for deliberate visual review.
 
 ### Decisions and Failures
 
@@ -51,11 +60,18 @@
   86% merely moved it within the same oversized foreground. The durable model
   makes launch-platform depth and ball position within that platform explicit,
   anchors its foot at 99%, and measures the platform's screen share directly.
+- Classified full physics rolls, the 990-pin browser benchmark, camera comparisons,
+  and screenshot generation as maintainer evidence rather than permanent browser
+  regressions. Fast unit tests retain conservation and projection invariants;
+  browser tests retain only distinct player-visible integration contracts.
 
 ### Developer Tests and Notes
 
-- `./check_codebase.sh` passed with 191 Node tests, `pytest tests/` passed 676,
-  and the full Playwright suite passed 36/36.
+- After the permanent-test audit, `./check_codebase.sh` passed with 165 Node tests
+  in about one second, `pytest tests/` passed 670, and the full Playwright suite
+  passed 26/26 in 14.2 seconds with every individual browser test below two
+  seconds. The focused persistence browser suite also passed 5/5 after an earlier
+  full-run server process briefly served a directory listing instead of `dist/`.
 - Focused Playwright checks passed 13/13 before the full run, then the updated
   result and layout journeys passed 7/7. Original-resolution review accepted
   the 1600 x 1000 aiming and final-score captures.

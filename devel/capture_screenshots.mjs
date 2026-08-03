@@ -30,7 +30,7 @@ import { create_rack } from "../src/simulation/rack.ts";
 
 const viewport = { width: 1600, height: 1000 };
 const documentation_roll_timeout_ms = 30_000;
-const valid_modes = new Set(["documentation", "milestone", "camera-bakeoff", "all"]);
+const valid_modes = new Set(["documentation", "milestone", "all"]);
 const live_source_closure_seeds = ["src/main.ts", "src/simulation/worker.ts"];
 const required_live_source_closure_paths = [
   "src/simulation/hook.ts",
@@ -357,9 +357,8 @@ function complete_rack_framing_source(pin_count) {
 }
 
 /**
- * Records the exact production projection used for a live canvas. Both the
- * bakeoff and lane-state matrix use this one helper, making its backing-store
- * dimensions and full-rack source straightforward to compare in the manifest.
+ * Records the exact production projection used for a live canvas. Its backing-store
+ * dimensions and full-rack source make the capture straightforward to inspect.
  */
 function camera_projection_diagnostics(camera, game_canvas) {
   const { width, height } = game_canvas.backing_store_dimensions;
@@ -369,9 +368,7 @@ function camera_projection_diagnostics(camera, game_canvas) {
     full_rack_framing_source: complete_rack_framing_source(camera.rack_bounds.pin_count),
     camera: {
       ...projection.camera,
-      // These aliases make the report self-describing for reviewers who are
-      // comparing a candidate's requested rear-row reveal with every actual
-      // projected adjacent-row measurement.
+      // These aliases make the report self-describing for visual review.
       target_rear_row_reveal_fraction: projection.camera.target_reveal_fraction,
       achieved_rear_row_reveal_fraction: projection.camera.achieved_median_reveal_fraction,
       measured_local_reveal_by_row_pair: projection.camera.row_reveal_fractions,
@@ -396,10 +393,6 @@ function camera_projection_diagnostics(camera, game_canvas) {
       },
     },
   };
-}
-
-function camera_bakeoff_projection_diagnostics(candidate, game_canvas) {
-  return camera_projection_diagnostics(create_camera_state(105, false, candidate), game_canvas);
 }
 
 async function camera_source_provenance() {
@@ -642,125 +635,6 @@ async function capture_milestone_decks(browser, base_url, output_directory) {
     }
   }
   return states;
-}
-
-function fixture_url(base_url, fixture, camera_candidate) {
-  const url = new URL(base_url);
-  url.searchParams.set("fixture", fixture);
-  if (camera_candidate !== undefined) {
-    url.searchParams.set("camera_candidate", camera_candidate);
-  }
-  return url.toString();
-}
-
-async function live_layout_boxes(page) {
-  const boxes = await page.evaluate(() => {
-    const selectors = {
-      play_shell: "main.play_shell",
-      play_header: ".play_header",
-      score_strip: ".score_strip",
-      lane_panel: ".lane_panel",
-      control_deck: ".control_deck",
-    };
-    const rectangle = (element) => {
-      const bounds = element.getBoundingClientRect();
-      return {
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-        top: bounds.top,
-        right: bounds.right,
-        bottom: bounds.bottom,
-        left: bounds.left,
-      };
-    };
-    return Object.fromEntries(
-      Object.entries(selectors).map(([name, selector]) => {
-        const element = document.querySelector(selector);
-        if (element === null) throw new Error(`Missing live layout element: ${selector}.`);
-        return [name, rectangle(element)];
-      }),
-    );
-  });
-  return boxes;
-}
-
-async function wait_for_camera_bakeoff_aiming(page) {
-  const play_shell = await wait_for_aiming(page, 105);
-  // The camera fixture deliberately controls the simulation client, so its
-  // preview may be pending. The live aiming phase plus the fully drawn 105-pin
-  // deck is the state this bakeoff needs; preview diagnostics are recorded.
-  await page.evaluate(() => new Promise(requestAnimationFrame));
-  return play_shell;
-}
-
-/**
- * Captures three real browser compositions for independent visual selection.
- * This is deliberately evidence-only: it records the candidate identity and
- * live geometry but makes no aesthetic or reveal measurement decision.
- */
-async function capture_camera_bakeoff(browser, base_url) {
-  const output_directory = "test-results";
-  const candidates = ["dense", "balanced", "open"];
-  const mode_label = "100 mode - 105 pins";
-  const start_label = "Start 100 mode - 105 pins for 1 player";
-  await mkdir(output_directory, { recursive: true });
-  const captures = [];
-  for (const candidate of candidates) {
-    console.log(`==> Capturing fresh 105-pin camera bakeoff candidate: ${candidate}`);
-    const context = await browser.newContext({ viewport });
-    const page = await context.newPage();
-    page.setDefaultTimeout(15_000);
-    try {
-      const route = fixture_url(base_url, "camera_deck", candidate);
-      await page.goto(route, { waitUntil: "networkidle" });
-      await page.getByRole("button", { name: mode_label, exact: true }).click();
-      await page.getByRole("button", { name: start_label, exact: true }).click();
-      const play_shell = await wait_for_camera_bakeoff_aiming(page);
-      const artifact_name = `camera_bakeoff_105_aiming_${candidate}.png`;
-      const path = join(output_directory, artifact_name);
-      const game_canvas = await live_canvas_geometry(page);
-      const projection = camera_bakeoff_projection_diagnostics(candidate, game_canvas);
-      const capture = await capture_live_screenshot(page, path, "aiming", 105, game_canvas);
-      captures.push({
-        evidence_kind: "camera_bakeoff_live_aiming",
-        candidate,
-        route: page.url(),
-        artifact_name,
-        phase: await play_shell.getAttribute("data-phase"),
-        drawn_pin_count: numeric_attribute(
-          await play_shell.getAttribute("data-drawn-pin-count"),
-          "data-drawn-pin-count",
-        ),
-        readiness: {
-          preview_status: await play_shell.getAttribute("data-preview-status"),
-          aim_guide: await play_shell.getAttribute("data-aim-guide"),
-        },
-        projection,
-        layout_boxes: await live_layout_boxes(page),
-        fresh_browser_context: true,
-        fresh_match: true,
-        ...capture,
-      });
-    } finally {
-      await context.close();
-    }
-  }
-  const report = {
-    capture_report_format: 1,
-    evidence_kind: "camera_bakeoff_live_browser_capture",
-    full_page_viewport: viewport,
-    fixture: "camera_deck",
-    pin_count: 105,
-    candidates,
-    captures,
-  };
-  await writeFile(
-    join(output_directory, "camera_bakeoff_105.json"),
-    `${JSON.stringify(report, null, 2)}\n`,
-  );
-  return report;
 }
 
 const lane_state_matrix_cases = [
@@ -1754,9 +1628,6 @@ async function main() {
       }
       if (options.mode === "milestone" || options.mode === "all") {
         report.milestone = await capture_milestone(browser, options.base_url);
-      }
-      if (options.mode === "camera-bakeoff") {
-        report.camera_bakeoff = await capture_camera_bakeoff(browser, options.base_url);
       }
       console.log(JSON.stringify(report, null, 2));
     })();

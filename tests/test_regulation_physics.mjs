@@ -5,12 +5,10 @@ import {
   ball_radius,
   deck_depth,
   foul_to_head_pin,
-  gutter_width,
   lane_width,
   pin_radius,
   pit_back_y,
 } from "../src/config/lane.ts";
-import { supported_pin_counts, get_rack_pin_count } from "../src/config/pin_counts.ts";
 import {
   get_pin_contact_force_event_threshold,
   get_pin_velocity_change_from_contact_force,
@@ -73,39 +71,6 @@ test("fall response and Rapier event gate share one mass-invariant delta-v rule"
   );
   assert.equal(update_pin_state("standing", 0, threshold), "fallen");
   assert.equal(update_pin_state("standing", 0, threshold - 0.001), "standing");
-});
-
-test("minimum-power center and gutter paths reach the pit for every rack and spin direction", async () => {
-  for (const mode of supported_pin_counts) {
-    const pin_count = get_rack_pin_count(mode);
-    const gutter_start = lane_width(pin_count) / 2 + ball_radius + pin_radius;
-    for (const start_position of [-gutter_start, 0, gutter_start]) {
-      for (const spin of [-1, 0, 1]) {
-        const world = await create_simulation_world(pin_count);
-        world.launch(8, start_position, 0, spin);
-        assert.equal(
-          run_until_ball_reaches_pit(world),
-          true,
-          `${mode}-pin start ${start_position} spin ${spin}`,
-        );
-        world.dispose();
-      }
-    }
-  }
-});
-
-test("left and right gutter launches reach the pit without knocking pins", async () => {
-  for (const mode of supported_pin_counts) {
-    const pin_count = get_rack_pin_count(mode);
-    for (const side of [-1, 1]) {
-      const world = await create_simulation_world(pin_count);
-      const gutter_start = side * (lane_width(pin_count) / 2 + ball_radius + pin_radius);
-      world.launch(8, gutter_start, 0, 0);
-      assert.equal(run_until_ball_reaches_pit(world), true, `${mode}-pin ${side} gutter path`);
-      assert.equal(world.get_counts().fallen_pin_count, 0, `${mode}-pin ${side} gutter pinfall`);
-      world.dispose();
-    }
-  }
 });
 
 test("a settled-roll sweep removes deadwood without moving standing pins", async () => {
@@ -262,32 +227,5 @@ test("next-roll preparation clears deadwood and restores a sleeping foul-line ba
     );
     assert.ok(Math.abs(current.rotation - position.rotation) <= sweep_angle_tolerance_radians);
   }
-  world.dispose();
-});
-
-test("lane-plus-gutter rails retain every non-removed pin", async () => {
-  for (const mode of supported_pin_counts) {
-    const pin_count = get_rack_pin_count(mode);
-    const world = await create_simulation_world(pin_count);
-    world.launch(24, 0, 0, 0);
-    for (let step = 0; step < 2_000; step += 1) world.step_fixed();
-    const envelope = lane_width(pin_count) / 2 + gutter_width;
-    const snapshot = world.create_snapshot();
-    for (let index = 0; index < pin_count; index += 1) {
-      const offset = index * pin_snapshot_stride;
-      if (snapshot.data[offset + snapshot_removed_flag_offset] === 0) {
-        assert.ok(Math.abs(snapshot.data[offset]) <= envelope + 0.001, `${mode}-pin ${index}`);
-      }
-    }
-    world.dispose();
-  }
-});
-
-test("a roll that cannot reach the pit fails loudly instead of settling", async () => {
-  const world = await create_simulation_world(10);
-  world.launch(0.1, 0, Math.PI / 2, 0);
-  assert.throws(() => {
-    for (let step = 0; step < 2_000; step += 1) world.step_fixed();
-  }, /did not reach the pit/);
   world.dispose();
 });

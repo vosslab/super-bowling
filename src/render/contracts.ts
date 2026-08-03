@@ -1,4 +1,3 @@
-import type { CameraCandidate } from "../config/camera";
 import type { BallDesign } from "../designer/ball_design";
 import type { RackPinCount } from "../config/pin_counts";
 
@@ -19,8 +18,6 @@ export type CameraState = {
   /** Monotonic travel metadata; it never changes the fixed composition. */
   shot_progress: number;
   reduced_motion: boolean;
-  /** Capture-safe bounded bakeoff profile, defaulting to the dense middle sample. */
-  candidate: CameraCandidate;
 };
 
 export type RenderSnapshotPair = {

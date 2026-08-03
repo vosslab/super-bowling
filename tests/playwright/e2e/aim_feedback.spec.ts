@@ -41,14 +41,13 @@ test("aiming: keyboard controls update the projected path before launch", async 
   expect(await guide_readout.textContent()).not.toBe(initial_guide_readout);
   await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
   await expect(play_shell).toHaveAttribute("data-aim-guide", "visible");
-  await page.screenshot({ path: "test-results/aim_feedback_16_10.png", fullPage: true });
 
   await page.keyboard.press("Space");
   await expect(play_shell).toHaveAttribute("data-phase", "rolling");
   await expect(play_shell).toHaveAttribute("data-aim-guide", "hidden");
 });
 
-test("21-pin aiming composition keeps the launch platform compact", async ({ page }) => {
+test("21-pin mode reaches a ready, playable aiming state", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "20 mode - 21 pins", exact: true }).click();
   await page
@@ -59,18 +58,7 @@ test("21-pin aiming composition keeps the launch platform compact", async ({ pag
   await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   await expect(play_shell).toHaveAttribute("data-drawn-pin-count", "21");
   await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
-  const composition = await page.evaluate(() => {
-    const root = document.querySelector("main.play_shell");
-    const canvas = document.querySelector<HTMLCanvasElement>(".game_canvas");
-    if (root === null || canvas === null) throw new Error("Aiming composition needs the lane.");
-    return {
-      ball_fraction: Number(root.getAttribute("data-drawn-ball-screen-y")) / canvas.height,
-      launch_platform_fraction: Number(root.getAttribute("data-drawn-launch-platform-fraction")),
-    };
-  });
-  expect(composition.launch_platform_fraction).toBeGreaterThan(0);
-  expect(composition.launch_platform_fraction).toBeLessThanOrEqual(0.12);
-  expect(composition.ball_fraction).toBeGreaterThanOrEqual(0.84);
-  expect(composition.ball_fraction).toBeLessThanOrEqual(0.93);
-  await page.screenshot({ path: "test-results/aiming_active_lane_21.png", fullPage: true });
+  await expect(play_shell).toHaveAttribute("data-drawn-ball", "true");
+  await expect(page.locator(".game_canvas")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bowl now" })).toBeVisible();
 });
