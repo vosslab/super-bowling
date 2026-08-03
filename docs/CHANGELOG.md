@@ -24,6 +24,9 @@
   their new V4 match history empty.
 - The setup and game surfaces show shared score labels and bowling terms, with
   `-` continuing to represent an unbowled value rather than a zero score.
+- Rebuilt the ten-frame strip as a real bowling scorecard: every roll has a
+  bordered box above a separate cumulative total, frame 10 carries its extra
+  box, and configurable Super frames keep one readable box per available bowl.
 - Reclaimed the 1600 x 1000 play surface with a 116 px top chrome, a 352 px
   side control panel, and a 1248 x 884 lane canvas instead of a bottom control
   deck. The compact score and player chrome leave the lane at least 75% of the
@@ -73,7 +76,7 @@
 
 ### Developer Tests and Notes
 
-- `./check_codebase.sh` passed with 181 Node tests. The full Playwright suite
+- `./check_codebase.sh` passed with 182 Node tests. The full Playwright suite
   passed 33/33 (including the `run_web_server.sh` front door), focused
   practice-record coverage passed 2/2, and `pytest tests/` passed 667.
 - One-time browser and capture review confirmed the live BEST FRAME toast and

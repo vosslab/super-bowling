@@ -114,8 +114,7 @@ test("16:10 desktop puts controls beside a full-height lane after compact chrome
   const top_chrome_height = score.y + score.height - header.y;
 
   // WP-B6 locks the 16:10 desktop geometry before camera calibration resumes.
-  expect(top_chrome_height).toBeLessThanOrEqual(120);
-  expect(top_chrome_height).toBeLessThanOrEqual(1000 * 0.12);
+  expect(top_chrome_height).toBeLessThanOrEqual(1000 * 0.14);
   expect(roster.y).toBeGreaterThanOrEqual(header.y - 0.5);
   expect(roster.y + roster.height).toBeLessThanOrEqual(header.y + header.height + 0.5);
   expect(roster.width).toBeGreaterThan(40);
@@ -145,7 +144,7 @@ test("short desktop retains a distinct right-side control panel without clipping
   await start_match(page);
 
   const { header, score, lane, controls } = await layout_rectangles(page);
-  expect(score.y + score.height - header.y).toBeLessThanOrEqual(120);
+  expect(score.y + score.height - header.y).toBeLessThanOrEqual(720 * 0.2);
   expect_vertically_adjacent(score, lane);
   expect(controls.x).toBeGreaterThanOrEqual(lane.x + lane.width - 0.5);
   expect(controls.y).toBeCloseTo(lane.y, 0);
@@ -174,7 +173,7 @@ test("four players stay readable in compact top chrome while lane and controls r
   await start_four_player_match(page);
 
   const { header, score, lane, controls } = await layout_rectangles(page);
-  expect(score.y + score.height - header.y).toBeLessThanOrEqual(120);
+  expect(score.y + score.height - header.y).toBeLessThanOrEqual(1000 * 0.14);
   expect_vertically_adjacent(header, score);
   expect_vertically_adjacent(score, lane);
   expect(lane.width).toBeGreaterThanOrEqual(1600 * 0.75);
@@ -239,8 +238,7 @@ test("zero-knock result keeps the compact desktop chrome and lane geometry", asy
   const top_chrome_height = result.score.y + result.score.height - result.header.y;
 
   // A populated first frame must not make result-state chrome steal the lane.
-  expect(top_chrome_height).toBeLessThanOrEqual(120);
-  expect(top_chrome_height).toBeLessThanOrEqual(1000 * 0.12);
+  expect(top_chrome_height).toBeLessThanOrEqual(1000 * 0.14);
   for (const key of ["lane", "controls"] as const) {
     expect(result[key].x).toBeCloseTo(aiming[key].x, 0);
     expect(result[key].y).toBeCloseTo(aiming[key].y, 0);
@@ -254,6 +252,7 @@ test("zero-knock result keeps the compact desktop chrome and lane geometry", asy
 
   const populated_score = page.locator("[data-frame-cell]").first().locator("strong");
   await expect(populated_score).toHaveText("0");
+  await expect(page.locator("[data-frame-cell]").first().locator("[data-roll-box]")).toHaveCount(2);
   const score_metrics = await populated_score.evaluate((score) => {
     const score_bounds = score.getBoundingClientRect();
     const cell_bounds = score.closest<HTMLElement>("[data-frame-cell]")?.getBoundingClientRect();

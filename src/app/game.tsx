@@ -1,4 +1,13 @@
-import { For, Show, createEffect, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import {
+  For,
+  Index,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+  type JSX,
+} from "solid-js";
 
 import { get_rack_pin_count } from "../config/pin_counts";
 import type {
@@ -28,7 +37,7 @@ import {
   with_reduced_motion,
 } from "../render/camera";
 import type { CameraState } from "../render/contracts";
-import { format_frame_roll_marks } from "../game/score_display";
+import { format_frame_roll_slots } from "../game/score_display";
 import { bowls_per_frame_rule_text } from "../game/bowls_per_frame";
 import type { ModeRecord } from "../save/contracts";
 import { create_game_renderer, type GameRenderer } from "../render/game_renderer";
@@ -609,6 +618,7 @@ export function Game(props: GameProps): JSX.Element {
       <section
         class="score_strip"
         aria-label={`Ten-frame ${match_state().pin_count.toLocaleString()}-pin score card for ${active_player().name}`}
+        data-score-digits={String(match_state().pin_count).length}
       >
         <For each={Array.from({ length: 10 }, (_, frame_index) => frame_index)}>
           {(frame_index): JSX.Element => {
@@ -622,27 +632,34 @@ export function Game(props: GameProps): JSX.Element {
               >
                 <span class="frame_number">{frame_index + 1}</span>
                 <span class="frame_rolls">
-                  <For
-                    each={
-                      frame() === undefined
-                        ? []
-                        : format_frame_roll_marks(
-                            frame()!,
-                            match_state().pin_count,
-                            match_state().bowls_per_frame,
-                          )
-                    }
+                  <Index
+                    each={format_frame_roll_slots(
+                      frame_index,
+                      frame(),
+                      match_state().pin_count,
+                      match_state().bowls_per_frame,
+                    )}
                   >
                     {(mark) => (
                       <span
-                        data-roll-mark={mark === "X" ? "strike" : mark === "/" ? "spare" : "roll"}
+                        class="frame_roll_box"
+                        data-roll-box
+                        data-roll-mark={
+                          mark() === undefined
+                            ? "empty"
+                            : mark() === "X"
+                              ? "strike"
+                              : mark() === "/"
+                                ? "spare"
+                                : "roll"
+                        }
                       >
-                        {mark}
+                        {mark() ?? ""}
                       </span>
                     )}
-                  </For>
+                  </Index>
                 </span>
-                <strong>{score_text(frame()?.score)}</strong>
+                <strong class="frame_total">{score_text(frame()?.score)}</strong>
               </div>
             );
           }}
