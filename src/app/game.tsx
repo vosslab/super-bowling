@@ -6,10 +6,13 @@ import type {
   MatchEffect,
   MatchSetup,
   MatchState,
+  PlayerMatchSummary,
   PlayerSetup,
 } from "../game/contracts";
 import { create_audio_controller, type AudioController, type ResultSound } from "../audio/audio";
 import { create_match_state, reduce_match, type MatchAction } from "../game/match";
+import { fold_match_summaries, type MatchRecordValues } from "../game/match_stats";
+import { is_perfect_game, scoreboard_labels, strike_run_term } from "../game/bowling_terms";
 import {
   aim_limits,
   aim_control_steps,
@@ -27,6 +30,7 @@ import {
 import type { CameraState } from "../render/contracts";
 import { format_frame_roll_marks } from "../game/score_display";
 import { bowls_per_frame_rule_text } from "../game/bowls_per_frame";
+import type { ModeRecord } from "../save/contracts";
 import { create_game_renderer, type GameRenderer } from "../render/game_renderer";
 import {
   pin_snapshot_stride,
@@ -34,6 +38,7 @@ import {
   type SimulationEvent,
 } from "../simulation/protocol";
 import { create_input_controller, type InputController } from "./input_controller";
+import { earned_moment, earned_moment_state, type EarnedMoment } from "./earned_moments";
 import type { SimulationClient } from "./simulation_client";
 
 type SnapshotHolder = {
@@ -50,12 +55,9 @@ export type GameProps = {
   reduced_motion(): boolean;
   on_set_mute(mute_enabled: boolean): void;
   on_set_reduced_motion(reduced_motion: boolean): void;
-  on_match_complete(
-    pin_count: MatchSetup["pin_count"],
-    bowls_per_frame: number,
-    scores: Readonly<Record<number, number>>,
-  ): void;
+  on_match_complete(summaries: readonly PlayerMatchSummary[]): void;
   on_exit(): void;
+  previous_record(): ModeRecord | undefined;
 };
 
 function phase_label(phase: MatchState["phase"]): string {
@@ -75,6 +77,14 @@ function phase_label(phase: MatchState["phase"]): string {
 
 function score_text(score: number | undefined): string {
   return score === undefined ? "-" : String(score);
+}
+
+function earned_moment_label(moment: EarnedMoment): string {
+  return moment.kind === "high_game" ? scoreboard_labels.high_game : moment.term.toUpperCase();
+}
+
+function earned_moment_support_text(moment: EarnedMoment): string | undefined {
+  return moment.kind === "high_game" ? `New high score: ${moment.score}` : undefined;
 }
 
 function find_player(state: MatchState, player_id: number): PlayerSetup {
@@ -100,6 +110,10 @@ export function Game(props: GameProps): JSX.Element {
   const [camera_progress, set_camera_progress] = createSignal(0);
   const [ball_in_pit, set_ball_in_pit] = createSignal(false);
   const [preview_path, set_preview_path] = createSignal<Float32Array | undefined>();
+  const [current_earned_moment, set_current_earned_moment] = createSignal<
+    EarnedMoment | undefined
+  >();
+  const [final_record, set_final_record] = createSignal<MatchRecordValues | undefined>();
   const snapshot_holder: SnapshotHolder = {
     previous: undefined,
     current: undefined,
@@ -113,11 +127,13 @@ export function Game(props: GameProps): JSX.Element {
   let previous_fallen_pin_count = 0;
   let animation_frame = 0;
   let result_timer: number | undefined;
+  let earned_moment_timer: number | undefined;
   let preview_timer: number | undefined;
   let preview_request_id = 0;
   let expected_preview_request_id: number | undefined;
   let input_controller: InputController | undefined;
   let unsubscribe: (() => void) | undefined;
+  let high_game_already_fired = false;
 
   function apply_camera(next_camera: CameraState): void {
     camera = next_camera;
@@ -153,21 +169,49 @@ export function Game(props: GameProps): JSX.Element {
       props.client.send({ type: "prepare_next_roll" });
     }
     if (effect.type === "launch") audio?.start_roll();
-    // M1 removes rolling-ball steering from the worker protocol. M2 replaces this
-    // transitional local input state with the four pre-roll controls.
-    if (effect.type === "match_complete")
-      props.on_match_complete(
-        props.setup.pin_count,
-        match_state().bowls_per_frame,
-        effect.best_scores,
-      );
+    if (effect.type === "match_complete") {
+      set_final_record(fold_match_summaries(effect.summaries));
+      props.on_match_complete(effect.summaries);
+    }
   }
 
   function dispatch(action: MatchAction): MatchState {
+    if (action.type === "start") high_game_already_fired = false;
     const transition = reduce_match(match_state(), action);
     set_match_state(transition.state);
     for (const effect of transition.effects) execute_effect(effect);
     return transition.state;
+  }
+
+  function show_earned_moment(moment: EarnedMoment): void {
+    set_current_earned_moment(moment);
+    if (earned_moment_timer !== undefined) window.clearTimeout(earned_moment_timer);
+    earned_moment_timer = window.setTimeout(() => {
+      earned_moment_timer = undefined;
+      set_current_earned_moment(undefined);
+    }, 1800);
+  }
+
+  function evaluate_earned_moment(before: MatchState, next: MatchState): void {
+    const player_id = before.active_player_id;
+    const previous_card = before.score_cards[player_id];
+    const current_card = next.score_cards[player_id];
+    if (previous_card === undefined || current_card === undefined) return;
+
+    const moment = earned_moment({
+      previous_record: props.previous_record(),
+      previous_state: earned_moment_state(
+        previous_card.frames,
+        before.pin_count,
+        before.bowls_per_frame,
+      ),
+      current_state: earned_moment_state(current_card.frames, next.pin_count, next.bowls_per_frame),
+      high_game_already_fired,
+    });
+    if (moment === undefined) return;
+
+    if (moment.kind === "high_game") high_game_already_fired = true;
+    show_earned_moment(moment);
   }
 
   function schedule_result_advance(state: MatchState): void {
@@ -250,6 +294,7 @@ export function Game(props: GameProps): JSX.Element {
         const next = dispatch({ type: "settled", settled_roll: event });
         audio?.flush_collisions(performance.now());
         audio?.stop_roll();
+        evaluate_earned_moment(before, next);
         const result = select_result_sound(before, next, event);
         audio?.play_result(result);
         schedule_result_advance(next);
@@ -423,6 +468,7 @@ export function Game(props: GameProps): JSX.Element {
 
   onCleanup(() => {
     if (result_timer !== undefined) window.clearTimeout(result_timer);
+    if (earned_moment_timer !== undefined) window.clearTimeout(earned_moment_timer);
     if (preview_timer !== undefined) window.clearTimeout(preview_timer);
     cancelAnimationFrame(animation_frame);
     input_controller?.dispose();
@@ -449,6 +495,27 @@ export function Game(props: GameProps): JSX.Element {
           next: find_player(match_state(), handoff.next_player_id),
         };
   };
+  const final_best_run_label = (): string => {
+    const state = match_state();
+    const has_perfect_game = Object.values(state.score_cards).some((card) =>
+      is_perfect_game(card.frames, state.pin_count, state.bowls_per_frame),
+    );
+    if (has_perfect_game) return "Perfect game";
+
+    const best_run = final_record()?.longest_strike_streak;
+    return best_run === undefined ? "No named run" : (strike_run_term(best_run) ?? "No named run");
+  };
+  const final_delta_text = (): string => {
+    const previous_record = props.previous_record();
+    const completed_record = final_record();
+    if (previous_record === undefined || completed_record === undefined) {
+      return "First result - your record starts here.";
+    }
+
+    const delta = completed_record.top_score - previous_record.best_score;
+    const signed_delta = delta >= 0 ? `+${delta}` : String(delta);
+    return `High game delta: ${signed_delta}`;
+  };
 
   return (
     <main
@@ -467,6 +534,7 @@ export function Game(props: GameProps): JSX.Element {
       data-camera-progress={camera_progress().toFixed(4)}
       data-camera-zoom="0.0000"
       data-ball-in-pit={ball_in_pit() ? "true" : "false"}
+      data-earned-moment={current_earned_moment()?.kind ?? ""}
       data-reduced-motion={props.reduced_motion() ? "true" : "false"}
       data-aim-guide={
         match_state().phase === "aiming" && preview_path() !== undefined ? "visible" : "hidden"
@@ -480,6 +548,16 @@ export function Game(props: GameProps): JSX.Element {
           : "idle"
       }
     >
+      <Show when={current_earned_moment()}>
+        {(moment) => (
+          <section class="earned_moment_toast" role="status">
+            <strong>{earned_moment_label(moment())}</strong>
+            <Show when={earned_moment_support_text(moment())}>
+              {(support_text) => <p>{support_text()}</p>}
+            </Show>
+          </section>
+        )}
+      </Show>
       <header class="play_header">
         <button class="back_button" type="button" onClick={() => props.on_exit()}>
           New match
@@ -727,13 +805,23 @@ export function Game(props: GameProps): JSX.Element {
           </button>
         </Show>
         <Show when={match_state().phase === "final"}>
-          <div class="final_result" role="status">
+          <div class="final_result match_summary" role="status">
             <p>Final score</p>
-            <strong>
-              {score_text(
-                match_state().score_cards[match_state().active_player_id]?.frames[9]?.score,
-              )}
-            </strong>
+            <strong>{score_text(final_record()?.top_score)}</strong>
+            <dl class="match_summary_details">
+              <div>
+                <dt>Previous high game</dt>
+                <dd>{props.previous_record()?.best_score ?? "First result"}</dd>
+              </div>
+              <div>
+                <dt>Record change</dt>
+                <dd>{final_delta_text()}</dd>
+              </div>
+              <div>
+                <dt>Best run</dt>
+                <dd>{final_best_run_label()}</dd>
+              </div>
+            </dl>
           </div>
         </Show>
         <Show when={match_state().phase === "fatal"}>

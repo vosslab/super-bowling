@@ -1,11 +1,10 @@
 import { Show, createSignal, type JSX } from "solid-js";
 
-import type { PinCount } from "../config/pin_counts";
-import type { MatchSetup } from "../game/contracts";
+import type { MatchSetup, PlayerMatchSummary } from "../game/contracts";
+import { fold_match_summaries } from "../game/match_stats";
 import { create_save_settings, type SaveSettingsController } from "../save/settings";
 import { save_storage_key } from "../save/save_file";
-import type { SaveFileV3, StorageLike } from "../save/contracts";
-import { best_score_key } from "../save/save_file";
+import type { ModeRecord, SaveFileV4, StorageLike } from "../save/contracts";
 import { Game } from "./game";
 import { create_simulation_client, type SimulationClient } from "./simulation_client";
 import {
@@ -63,11 +62,15 @@ function read_fixture_mode(): FixtureMode {
 export function App(): JSX.Element {
   const fixture_mode = read_fixture_mode();
   const settings = create_app_settings(get_browser_storage());
-  const [saved, set_saved] = createSignal<SaveFileV3>(settings.get_save());
+  const [saved, set_saved] = createSignal<SaveFileV4>(settings.get_save());
   const [setup, set_setup] = createSignal<MatchSetup>();
   const [client, set_client] = createSignal<SimulationClient>();
+  const [previous_record, set_previous_record] = createSignal<ModeRecord>();
 
   function on_start(next_setup: MatchSetup): void {
+    set_previous_record(
+      settings.get_mode_record(next_setup.pin_count, next_setup.bowls_per_frame ?? 2),
+    );
     set_saved(
       settings.set_recent_setup({
         bowls_per_frame: next_setup.bowls_per_frame ?? 2,
@@ -102,16 +105,20 @@ export function App(): JSX.Element {
     set_saved(settings.set_reduced_motion(reduced_motion));
   }
 
-  function record_completed_scores(
-    pin_count: PinCount,
-    bowls_per_frame: number,
-    scores: Readonly<Record<number, number>>,
-  ): void {
-    const best_score = Math.max(...Object.values(scores));
-    set_saved(settings.record_completed_score(pin_count, bowls_per_frame, best_score));
+  function record_completed_match(summaries: readonly PlayerMatchSummary[]): void {
+    const completed_setup = setup();
+    if (completed_setup === undefined) throw new Error("A completed match must retain its setup.");
+    set_saved(
+      settings.record_completed_match(
+        completed_setup.pin_count,
+        completed_setup.bowls_per_frame ?? 2,
+        fold_match_summaries(summaries),
+      ),
+    );
   }
 
   function exit_game(): void {
+    set_previous_record(undefined);
     set_setup(undefined);
     set_client(undefined);
   }
@@ -126,8 +133,8 @@ export function App(): JSX.Element {
           initial_setup={() => saved().recent_setup}
           mute_enabled={() => saved().mute_enabled}
           reduced_motion={() => saved().reduced_motion}
-          best_score={(pin_count, bowls_per_frame) =>
-            saved().best_scores[best_score_key(pin_count, bowls_per_frame)]
+          mode_record={(pin_count, bowls_per_frame) =>
+            settings.get_mode_record(pin_count, bowls_per_frame)
           }
           on_set_mute={set_mute_enabled}
           on_set_reduced_motion={set_reduced_motion}
@@ -142,8 +149,9 @@ export function App(): JSX.Element {
         reduced_motion={() => saved().reduced_motion}
         on_set_mute={set_mute_enabled}
         on_set_reduced_motion={set_reduced_motion}
-        on_match_complete={record_completed_scores}
+        on_match_complete={record_completed_match}
         on_exit={exit_game}
+        previous_record={previous_record}
       />
     </Show>
   );

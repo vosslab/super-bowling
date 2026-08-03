@@ -3,18 +3,14 @@ import type {
   MatchSetup,
   MatchState,
   MatchTransition,
+  PlayerMatchSummary,
   PlayerScoreCard,
   SettledRoll,
 } from "./contracts";
-import {
-  append_roll,
-  create_empty_score_card,
-  is_frame_complete,
-  score_card,
-  total_score,
-} from "./scoring";
+import { append_roll, create_empty_score_card, is_frame_complete, score_card } from "./scoring";
 import { default_bowls_per_frame, is_valid_bowls_per_frame } from "./bowls_per_frame";
 import { default_aim, normalize_aim, type AimValues } from "./aim";
+import { match_statistics } from "./match_stats";
 
 export type MatchAction =
   | { type: "start" }
@@ -69,18 +65,26 @@ function current_player_index(state: MatchState): number {
 }
 
 function complete_match(state: MatchState): MatchTransition {
-  const best_scores: Record<number, number> = {};
+  const summaries: PlayerMatchSummary[] = [];
   for (const player of state.players) {
-    const score = total_score(
-      state.score_cards[player.player_id]?.frames ?? [],
-      state.pin_count,
-      state.bowls_per_frame,
-    );
-    best_scores[player.player_id] = score ?? 0;
+    const score_card = state.score_cards[player.player_id];
+    if (score_card === undefined) {
+      throw new Error("A completed match must include every player's score card.");
+    }
+    const statistics = match_statistics(score_card.frames, state.pin_count, state.bowls_per_frame);
+    if (statistics.total_score === undefined || statistics.best_frame_score === undefined) {
+      throw new Error("A completed match must have fully resolved player statistics.");
+    }
+    summaries.push({
+      player_id: player.player_id,
+      total_score: statistics.total_score,
+      best_frame_score: statistics.best_frame_score,
+      longest_strike_streak: statistics.longest_strike_streak,
+    });
   }
   return {
     state: { ...state, phase: "final" },
-    effects: [{ type: "match_complete", best_scores }],
+    effects: [{ type: "match_complete", summaries }],
   };
 }
 

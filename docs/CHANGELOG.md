@@ -2,6 +2,10 @@
 
 ### Additions and New Features
 
+- Added V4 per-mode practice records: bounded recent completed scores, high game,
+  best frame, best strike run, and a compatibility migration from V1, V2, and V3 saves.
+- Added practice-record cards, earned-moment toasts, and an end-of-match summary
+  that compares a completed game with the pre-match record when one exists.
 - Added configurable bowls per frame for `B = 1` through `B = 5`, with Super
   frame ten-frame play set to exactly `B + 1` bowls and Classic `B = 2`
   retaining its conditional fill ball.
@@ -10,6 +14,11 @@
 
 ### Behavior or Interface Changes
 
+- Completed matches now update their selected mode's record only after the score
+  is final. Legacy saves retain compatible settings while the migration starts
+  their new V4 match history empty.
+- The setup and game surfaces show shared score labels and bowling terms, with
+  `-` continuing to represent an unbowled value rather than a zero score.
 - Reclaimed the 1600 x 1000 play surface with a 116 px top chrome, a 352 px
   side control panel, and a 1248 x 884 lane canvas instead of a bottom control
   deck. The compact score and player chrome leave the lane at least 75% of the
@@ -34,6 +43,12 @@
 
 ### Decisions and Failures
 
+- Derived match statistics from completed summaries instead of tracking parallel
+  mutable counters. Generalized earned terminology uses Double through Six-pack,
+  then `N-bagger`, based on USBC and Bowl.com terminology references.
+- Kept the Turkey toast's unpainted auto-fixture transition out of the permanent
+  browser suite: the fixture skips render turns, while focused Node tests cover
+  that transition directly. This is test-scope evidence, not a product failure.
 - Rejected the earlier tiny centered lane-and-rack island and the later
   empty-space-heavy composition as visual evidence: both consumed the 16:10
   play area without making the deep rack more readable. The side panel and
@@ -44,6 +59,10 @@
 
 ### Developer Tests and Notes
 
+- `./check_codebase.sh` passed. The full Playwright suite passed 33/33, focused
+  practice-record coverage passed 2/2, and Python hygiene passed 665 tests.
+- One-time browser and capture review confirmed the new toast and final-summary
+  surfaces without imposing pixel-equivalence or committed screenshot gates.
 - Verified focused camera tests (39/39), settled-orientation tests (33/33),
   and physics tests (21/21). The Playwright suite reached 31 tests with no
   reported failures, and maintained captures completed. `./check_codebase.sh`

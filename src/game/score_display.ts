@@ -19,6 +19,7 @@ export function format_frame_roll_marks(
     ) {
       return "/";
     }
+    if (roll === 0) return "-";
     return String(roll);
   });
 }

@@ -16,7 +16,14 @@ import {
   minimum_bowls_per_frame,
   normalize_bowls_per_frame,
 } from "../game/bowls_per_frame";
-import type { BestScoreKey, RecentMatchSetup, RecentPlayerSetup, SaveFileV3 } from "./contracts";
+import type {
+  BestScoreKey,
+  MatchRecordValues,
+  ModeRecord,
+  RecentMatchSetup,
+  RecentPlayerSetup,
+  SaveFileV4,
+} from "./contracts";
 
 export const save_storage_key = "super_bowling.save";
 
@@ -92,9 +99,83 @@ function normalize_recent_setup(value: unknown): RecentMatchSetup {
   };
 }
 
-function normalize_best_scores(value: unknown): Partial<Record<BestScoreKey, number>> {
+function create_mode_record(best_score: number): ModeRecord {
+  return {
+    best_score,
+    recent_scores: [],
+    best_frame_score: 0,
+    best_strike_streak: 0,
+    matches_played: 1,
+  };
+}
+
+function normalize_mode_records(value: unknown): Partial<Record<BestScoreKey, ModeRecord>> {
   if (!is_record(value)) return {};
-  const best_scores: Partial<Record<BestScoreKey, number>> = {};
+  const mode_records: Partial<Record<BestScoreKey, ModeRecord>> = {};
+  for (const pin_count of supported_pin_counts) {
+    for (
+      let bowls_per_frame = minimum_bowls_per_frame;
+      bowls_per_frame <= maximum_bowls_per_frame;
+      bowls_per_frame += 1
+    ) {
+      const key = best_score_key(pin_count, bowls_per_frame);
+      const mode_record = normalize_mode_record(value[key], pin_count, bowls_per_frame);
+      if (mode_record !== undefined) mode_records[key] = mode_record;
+    }
+  }
+  return mode_records;
+}
+
+function normalize_mode_record(
+  value: unknown,
+  pin_count: PinCount,
+  bowls_per_frame: number,
+): ModeRecord | undefined {
+  if (!is_record(value)) return undefined;
+  if (!is_valid_score(value.best_score, pin_count, bowls_per_frame)) return undefined;
+  if (!is_valid_score(value.best_frame_score, pin_count, bowls_per_frame)) return undefined;
+  if (!is_non_negative_integer(value.best_strike_streak)) return undefined;
+  if (!is_non_negative_integer(value.matches_played)) return undefined;
+  const recent_scores = normalize_recent_scores(value.recent_scores, pin_count, bowls_per_frame);
+  const mode_record: ModeRecord = {
+    best_score: value.best_score,
+    recent_scores,
+    best_frame_score: value.best_frame_score,
+    best_strike_streak: value.best_strike_streak,
+    matches_played: value.matches_played,
+  };
+  return mode_record;
+}
+
+function normalize_recent_scores(
+  value: unknown,
+  pin_count: PinCount,
+  bowls_per_frame: number,
+): number[] {
+  if (!Array.isArray(value)) return [];
+  const recent_scores: number[] = [];
+  for (const score of value) {
+    if (recent_scores.length === 5) break;
+    if (is_valid_score(score, pin_count, bowls_per_frame)) recent_scores.push(score);
+  }
+  return recent_scores;
+}
+
+function migrate_v2_mode_records(value: unknown): Partial<Record<BestScoreKey, ModeRecord>> {
+  if (!is_record(value)) return {};
+  const mode_records: Partial<Record<BestScoreKey, ModeRecord>> = {};
+  for (const pin_count of supported_pin_counts) {
+    const score = value[String(pin_count)];
+    if (is_valid_score(score, pin_count, 2)) {
+      mode_records[best_score_key(pin_count, 2)] = create_mode_record(score);
+    }
+  }
+  return mode_records;
+}
+
+function migrate_v3_mode_records(value: unknown): Partial<Record<BestScoreKey, ModeRecord>> {
+  if (!is_record(value)) return {};
+  const mode_records: Partial<Record<BestScoreKey, ModeRecord>> = {};
   for (const pin_count of supported_pin_counts) {
     for (
       let bowls_per_frame = minimum_bowls_per_frame;
@@ -103,61 +184,59 @@ function normalize_best_scores(value: unknown): Partial<Record<BestScoreKey, num
     ) {
       const key = best_score_key(pin_count, bowls_per_frame);
       const score = value[key];
-      if (is_valid_score(score, pin_count, bowls_per_frame)) {
-        best_scores[key] = score;
-      }
+      if (is_valid_score(score, pin_count, bowls_per_frame))
+        mode_records[key] = create_mode_record(score);
     }
   }
-  return best_scores;
+  return mode_records;
 }
 
-function migrate_v2_best_scores(value: unknown): Partial<Record<BestScoreKey, number>> {
-  if (!is_record(value)) return {};
-  const best_scores: Partial<Record<BestScoreKey, number>> = {};
-  for (const pin_count of supported_pin_counts) {
-    const score = value[String(pin_count)];
-    if (is_valid_score(score, pin_count, 2)) best_scores[best_score_key(pin_count, 2)] = score;
-  }
-  return best_scores;
-}
-
-export function create_default_save(): SaveFileV3 {
+export function create_default_save(): SaveFileV4 {
   return {
-    version: 3,
+    version: 4,
     mute_enabled: false,
     reduced_motion: false,
     recent_setup: create_default_recent_setup(),
-    best_scores: {},
+    mode_records: {},
   };
 }
 
-export function normalize_save_file(value: unknown): SaveFileV3 {
+export function normalize_save_file(value: unknown): SaveFileV4 {
   if (!is_record(value)) return create_default_save();
   if (value.version === 1) {
     return {
-      version: 3,
+      version: 4,
       mute_enabled: value.mute_enabled === true,
       reduced_motion: value.reduced_motion === true,
       recent_setup: { ...normalize_recent_setup(value.recent_setup), bowls_per_frame: 2 },
-      best_scores: {},
+      mode_records: {},
     };
   }
   if (value.version === 2) {
     return {
-      version: 3,
+      version: 4,
       mute_enabled: value.mute_enabled === true,
       reduced_motion: value.reduced_motion === true,
       recent_setup: { ...normalize_recent_setup(value.recent_setup), bowls_per_frame: 2 },
-      best_scores: migrate_v2_best_scores(value.best_scores),
+      mode_records: migrate_v2_mode_records(value.best_scores),
     };
   }
-  if (value.version !== 3) return create_default_save();
+  if (value.version === 3) {
+    return {
+      version: 4,
+      mute_enabled: value.mute_enabled === true,
+      reduced_motion: value.reduced_motion === true,
+      recent_setup: normalize_recent_setup(value.recent_setup),
+      mode_records: migrate_v3_mode_records(value.best_scores),
+    };
+  }
+  if (value.version !== 4) return create_default_save();
   return {
-    version: 3,
+    version: 4,
     mute_enabled: value.mute_enabled === true,
     reduced_motion: value.reduced_motion === true,
     recent_setup: normalize_recent_setup(value.recent_setup),
-    best_scores: normalize_best_scores(value.best_scores),
+    mode_records: normalize_mode_records(value.mode_records),
   };
 }
 
@@ -175,20 +254,47 @@ function is_valid_score(
   );
 }
 
-export function update_best_score(
-  save: SaveFileV3,
+function is_non_negative_integer(value: unknown): value is number {
+  return (
+    typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+  );
+}
+
+export function record_completed_match(
+  save: SaveFileV4,
   pin_count: PinCount,
   bowls_per_frame: number,
-  score: number,
-): SaveFileV3 {
+  record_values: MatchRecordValues,
+): SaveFileV4 {
   const normalized_save = normalize_save_file(save);
   const normalized_bowls_per_frame = normalize_bowls_per_frame(bowls_per_frame);
-  if (!is_valid_score(score, pin_count, normalized_bowls_per_frame)) return normalized_save;
+  if (!is_valid_score(record_values.top_score, pin_count, normalized_bowls_per_frame))
+    return normalized_save;
+  if (!is_valid_score(record_values.best_frame_score, pin_count, normalized_bowls_per_frame)) {
+    return normalized_save;
+  }
+  if (!is_non_negative_integer(record_values.longest_strike_streak)) return normalized_save;
   const key = best_score_key(pin_count, normalized_bowls_per_frame);
-  const current_score = normalized_save.best_scores[key];
-  if (current_score !== undefined && current_score >= score) return normalized_save;
+  const previous_record = normalized_save.mode_records[key];
+  const current_record = previous_record ?? {
+    best_score: 0,
+    recent_scores: [],
+    best_frame_score: 0,
+    best_strike_streak: 0,
+    matches_played: 0,
+  };
+  const mode_record: ModeRecord = {
+    best_score: Math.max(current_record.best_score, record_values.top_score),
+    recent_scores: [record_values.top_score, ...current_record.recent_scores].slice(0, 5),
+    best_frame_score: Math.max(current_record.best_frame_score, record_values.best_frame_score),
+    best_strike_streak: Math.max(
+      current_record.best_strike_streak,
+      record_values.longest_strike_streak,
+    ),
+    matches_played: current_record.matches_played + 1,
+  };
   return {
     ...normalized_save,
-    best_scores: { ...normalized_save.best_scores, [key]: score },
+    mode_records: { ...normalized_save.mode_records, [key]: mode_record },
   };
 }

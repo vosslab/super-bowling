@@ -9,8 +9,9 @@ import {
   is_valid_bowls_per_frame,
   supported_bowls_per_frame,
 } from "../game/bowls_per_frame";
+import { scoreboard_labels, strike_run_term } from "../game/bowling_terms";
 import type { MatchSetup } from "../game/contracts";
-import type { RecentMatchSetup } from "../save/contracts";
+import type { ModeRecord, RecentMatchSetup } from "../save/contracts";
 
 type PlayerDraft = {
   name: string;
@@ -77,7 +78,7 @@ export type SetupProps = {
   initial_setup(): RecentMatchSetup;
   mute_enabled(): boolean;
   reduced_motion(): boolean;
-  best_score(pin_count: PinCount, bowls_per_frame: number): number | undefined;
+  mode_record(pin_count: PinCount, bowls_per_frame: number): ModeRecord | undefined;
   on_set_mute(mute_enabled: boolean): void;
   on_set_reduced_motion(reduced_motion: boolean): void;
   fixture_mode?: "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | "preview_stale";
@@ -94,6 +95,9 @@ export function Setup(props: SetupProps): JSX.Element {
   });
   const [selected_player_index, set_selected_player_index] = createSignal(0);
   const selected_player = createMemo(() => draft().players[selected_player_index()]);
+  const mode_record = createMemo(() =>
+    props.mode_record(draft().pin_count, draft().bowls_per_frame),
+  );
 
   function update_player(index: number, update: Partial<PlayerDraft>): void {
     const next_players = draft().players.map((player, player_index) =>
@@ -167,8 +171,7 @@ export function Setup(props: SetupProps): JSX.Element {
               </div>
             </fieldset>
             <p class="best_score" aria-live="polite">
-              Best for {get_mode_label(draft().pin_count)}:{" "}
-              {props.best_score(draft().pin_count, draft().bowls_per_frame) ?? "-"}
+              Best for {get_mode_label(draft().pin_count)}: {mode_record()?.best_score ?? "-"}
             </p>
             <fieldset class="bowls_per_frame_picker">
               <legend>Bowls per frame</legend>
@@ -190,6 +193,54 @@ export function Setup(props: SetupProps): JSX.Element {
                 {bowls_per_frame_rule_text(draft().bowls_per_frame)}
               </p>
             </fieldset>
+            <section
+              class="practice_record"
+              aria-label="Practice record"
+              data-practice-record={mode_record() === undefined ? "empty" : "record"}
+            >
+              <h2 class="practice_record_heading">Practice record</h2>
+              <Show
+                when={mode_record()}
+                fallback={
+                  <p class="practice_record_empty">
+                    Finish your first game to start this mode&apos;s record.
+                  </p>
+                }
+              >
+                {(record) => (
+                  <dl class="practice_record_stats">
+                    <div>
+                      <dt>{scoreboard_labels.high_game}</dt>
+                      <dd>{record().best_score}</dd>
+                    </div>
+                    <div>
+                      <dt>{scoreboard_labels.last_5_games}</dt>
+                      <dd>
+                        {record().recent_scores.length === 0
+                          ? "No saved game scores yet."
+                          : record().recent_scores.join(", ")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{scoreboard_labels.best_frame}</dt>
+                      <dd>{record().best_frame_score}</dd>
+                    </div>
+                    <div>
+                      <dt>{scoreboard_labels.best_run}</dt>
+                      <dd>{strike_run_term(record().best_strike_streak) ?? "No named run yet"}</dd>
+                    </div>
+                    <div>
+                      <dt>{scoreboard_labels.games_bowled}</dt>
+                      <dd>
+                        {record().recent_scores.length === 0 && record().matches_played >= 1
+                          ? "1+"
+                          : record().matches_played}
+                      </dd>
+                    </div>
+                  </dl>
+                )}
+              </Show>
+            </section>
             <section class="player_roster" aria-label="Players">
               <header class="roster_heading">
                 <div>

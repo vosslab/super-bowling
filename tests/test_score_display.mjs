@@ -18,3 +18,7 @@ test("uses numeric marks for super frames", () => {
   assert.deepEqual(format_frame_roll_marks({ frame_index: 0, rolls: [10] }, 10, 3), ["10"]);
   assert.deepEqual(format_frame_roll_marks({ frame_index: 1, rolls: [6, 4] }, 10, 3), ["6", "4"]);
 });
+
+test("marks a missed roll with a dash", () => {
+  assert.deepEqual(format_frame_roll_marks({ frame_index: 0, rolls: [0, 9] }, 10), ["-", "9"]);
+});

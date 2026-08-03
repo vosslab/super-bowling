@@ -164,7 +164,19 @@ test("resets tenth-frame strike bonuses only when their next roll starts fresh",
 
   assert.deepEqual(first_strike.effects, [{ type: "reset_rack", pin_count: 10 }]);
   assert.deepEqual(first_bonus_strike.effects, [{ type: "reset_rack", pin_count: 10 }]);
-  assert.deepEqual(final_bonus.effects, [{ type: "match_complete", best_scores: { 0: 30 } }]);
+  assert.deepEqual(final_bonus.effects, [
+    {
+      type: "match_complete",
+      summaries: [
+        {
+          player_id: create_player_id(0),
+          total_score: 30,
+          best_frame_score: 30,
+          longest_strike_streak: 3,
+        },
+      ],
+    },
+  ]);
 });
 
 test("keeps a partial tenth-frame strike bonus on its existing rack", () => {
@@ -178,7 +190,19 @@ test("keeps a partial tenth-frame strike bonus on its existing rack", () => {
   assert.deepEqual(partial_bonus.effects, [{ type: "prepare_next_roll" }]);
   assert.equal(partial_bonus.state.phase, "sweeping");
   assert.equal(partial_bonus.state.standing_pin_count, 3);
-  assert.deepEqual(final_bonus.effects, [{ type: "match_complete", best_scores: { 0: 20 } }]);
+  assert.deepEqual(final_bonus.effects, [
+    {
+      type: "match_complete",
+      summaries: [
+        {
+          player_id: create_player_id(0),
+          total_score: 20,
+          best_frame_score: 20,
+          longest_strike_streak: 1,
+        },
+      ],
+    },
+  ]);
 });
 
 test("resets a tenth-frame spare before its single bonus", () => {
@@ -315,7 +339,19 @@ test("uses a super-frame tenth fresh rack after clears and never grants a fifth 
   }
   const final = advance_result(settle_roll(state, 0).state);
   assert.equal(final.state.phase, "final");
-  assert.deepEqual(final.effects, [{ type: "match_complete", best_scores: { 0: 130 } }]);
+  assert.deepEqual(final.effects, [
+    {
+      type: "match_complete",
+      summaries: [
+        {
+          player_id: create_player_id(0),
+          total_score: 130,
+          best_frame_score: 40,
+          longest_strike_streak: 4,
+        },
+      ],
+    },
+  ]);
 });
 
 test("keeps a super-frame tenth on its partial rack through its fourth bowl", () => {
@@ -337,7 +373,19 @@ test("keeps a super-frame tenth on its partial rack through its fourth bowl", ()
   assert.deepEqual(third.effects, [{ type: "prepare_next_roll" }]);
   const final = advance_result(settle_roll(complete_sweep(third.state), 1).state);
   assert.equal(final.state.phase, "final");
-  assert.deepEqual(final.effects, [{ type: "match_complete", best_scores: { 0: 99 } }]);
+  assert.deepEqual(final.effects, [
+    {
+      type: "match_complete",
+      summaries: [
+        {
+          player_id: create_player_id(0),
+          total_score: 99,
+          best_frame_score: 10,
+          longest_strike_streak: 0,
+        },
+      ],
+    },
+  ]);
 });
 
 test("does not hand off a super frame before a clear or its final bowl", () => {

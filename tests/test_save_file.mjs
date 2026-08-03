@@ -4,10 +4,11 @@ import test from "node:test";
 import {
   create_default_save,
   normalize_save_file,
-  update_best_score,
+  record_completed_match,
 } from "../src/save/save_file.ts";
+import { create_save_settings } from "../src/save/settings.ts";
 
-test("migrates a literal version-one save and clears incomparable best scores", () => {
+test("migrates a literal version-one save and clears incomparable records", () => {
   const save = normalize_save_file({
     version: 1,
     mute_enabled: true,
@@ -62,8 +63,8 @@ test("migrates a literal version-one save and clears incomparable best scores", 
       },
     ],
   });
-  assert.equal(save.version, 3);
-  assert.deepEqual(save.best_scores, {});
+  assert.equal(save.version, 4);
+  assert.deepEqual(save.mode_records, {});
 });
 
 test("returns useful defaults for missing or obsolete save schemas", () => {
@@ -71,7 +72,7 @@ test("returns useful defaults for missing or obsolete save schemas", () => {
   assert.deepEqual(normalize_save_file({ version: 9 }), create_default_save());
 });
 
-test("migrates version-two best scores to the classic rule partition", () => {
+test("migrates version-two best scores to classic mode records", () => {
   const save = normalize_save_file({
     version: 2,
     mute_enabled: false,
@@ -79,41 +80,136 @@ test("migrates version-two best scores to the classic rule partition", () => {
     recent_setup: { pin_count: 10, players: [] },
     best_scores: { 10: 300 },
   });
-  assert.equal(save.best_scores["10:2"], 300);
+  assert.deepEqual(save.mode_records["10:2"], {
+    best_score: 300,
+    recent_scores: [],
+    best_frame_score: 0,
+    best_strike_streak: 0,
+    matches_played: 1,
+  });
   assert.equal(save.recent_setup.bowls_per_frame, 2);
 });
 
-test("records legal best scores independently for every bowls rule", () => {
-  const saved_200 = update_best_score(create_default_save(), 10, 2, 200);
-  const kept_200 = update_best_score(saved_200, 10, 2, 150);
-  const saved_300 = update_best_score(kept_200, 10, 2, 300);
-  const custom = update_best_score(saved_300, 10, 3, 130);
-  const rejected = update_best_score(custom, 10, 3, 131);
+test("migrates version-three best scores without fabricating recent results", () => {
+  const save = normalize_save_file({
+    version: 3,
+    mute_enabled: true,
+    reduced_motion: false,
+    recent_setup: { bowls_per_frame: 3, pin_count: 10, players: [] },
+    best_scores: { "10:2": 300, "10:3": 130 },
+  });
 
-  assert.equal(rejected.best_scores["10:2"], 300);
-  assert.equal(rejected.best_scores["10:3"], 130);
-  assert.deepEqual(rejected.best_scores, { "10:2": 300, "10:3": 130 });
+  assert.deepEqual(save.mode_records, {
+    "10:2": {
+      best_score: 300,
+      recent_scores: [],
+      best_frame_score: 0,
+      best_strike_streak: 0,
+      matches_played: 1,
+    },
+    "10:3": {
+      best_score: 130,
+      recent_scores: [],
+      best_frame_score: 0,
+      best_strike_streak: 0,
+      matches_played: 1,
+    },
+  });
 });
 
 test("falls back to two bowls and rejects custom scores over their real ceiling", () => {
   const malformed = normalize_save_file({
-    version: 3,
+    version: 4,
     recent_setup: { bowls_per_frame: 9, pin_count: 10, players: [] },
-    best_scores: { "10:5": 151 },
+    mode_records: {
+      "10:5": {
+        best_score: 151,
+        recent_scores: [],
+        best_frame_score: 0,
+        best_strike_streak: 0,
+        matches_played: 1,
+      },
+    },
   });
   assert.equal(malformed.recent_setup.bowls_per_frame, 2);
-  assert.deepEqual(malformed.best_scores, {});
+  assert.deepEqual(malformed.mode_records, {});
 });
 
-test("keeps endpoint bowl-rule setup and best-score partitions independent", () => {
-  const normalized = normalize_save_file({
-    version: 3,
+test("repairs score histories while dropping only corrupt mode records", () => {
+  const save = normalize_save_file({
+    version: 4,
     recent_setup: { bowls_per_frame: 1, pin_count: 10, players: [] },
-    best_scores: { "10:1": 110, "10:5": 150 },
+    mode_records: {
+      "10:1": {
+        best_score: 110,
+        recent_scores: [110, "bad", 100, 90, 80, 70, 60],
+        best_frame_score: 10,
+        best_strike_streak: 3,
+        matches_played: 4,
+      },
+      "10:5": {
+        best_score: 150,
+        recent_scores: [],
+        best_frame_score: 10,
+        best_strike_streak: 2.5,
+        matches_played: 1,
+      },
+    },
   });
-  const with_five_bowls = update_best_score(normalized, 10, 5, 151);
 
-  assert.equal(normalized.recent_setup.bowls_per_frame, 1);
-  assert.equal(with_five_bowls.best_scores["10:1"], 110);
-  assert.equal(with_five_bowls.best_scores["10:5"], 150);
+  assert.deepEqual(save.mode_records["10:1"]?.recent_scores, [110, 100, 90, 80, 70]);
+  assert.equal(save.mode_records["10:5"], undefined);
+});
+
+test("records completed match values with a five-game newest-first history", () => {
+  let save = create_default_save();
+  for (const top_score of [100, 110, 120, 130, 140, 150]) {
+    save = record_completed_match(save, 10, 2, {
+      top_score,
+      best_frame_score: 30,
+      longest_strike_streak: 3,
+    });
+  }
+
+  assert.deepEqual(save.mode_records["10:2"], {
+    best_score: 150,
+    recent_scores: [150, 140, 130, 120, 110],
+    best_frame_score: 30,
+    best_strike_streak: 3,
+    matches_played: 6,
+  });
+});
+
+test("rejects corrupt completed-match scalars without changing a record", () => {
+  const save = record_completed_match(create_default_save(), 10, 2, {
+    top_score: 200,
+    best_frame_score: 30,
+    longest_strike_streak: 4,
+  });
+  const unchanged = record_completed_match(save, 10, 2, {
+    top_score: 201,
+    best_frame_score: 30.5,
+    longest_strike_streak: 5,
+  });
+
+  assert.deepEqual(unchanged, save);
+});
+
+test("commits completed matches through the settings controller", () => {
+  let stored_value = null;
+  const settings = create_save_settings({
+    getItem: () => stored_value,
+    setItem: (_key, value) => {
+      stored_value = value;
+    },
+  });
+
+  const saved = settings.record_completed_match(10, 2, {
+    top_score: 210,
+    best_frame_score: 30,
+    longest_strike_streak: 4,
+  });
+
+  assert.equal(settings.get_mode_record(10, 2)?.best_score, 210);
+  assert.deepEqual(JSON.parse(stored_value), saved);
 });

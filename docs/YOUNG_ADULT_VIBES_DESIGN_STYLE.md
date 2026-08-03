@@ -139,6 +139,13 @@ angle, power, and spin to create a productive entry, rather than discovering
 that the least expressive input is optimal. Difficulty is therefore a skill to
 learn and communicate, not a toll before a coin reward.
 
+Practice records make that improvement legible in the setup without turning it
+into a wall of zeroes: an empty record invites the first game, while earned
+moments name a new high game or scoring run as it happens. The brief toast does
+not block the next attempt, and the final comparison explains the result
+against the previous record. When reduced motion is enabled, the same text
+remains visible without relying on animation.
+
 ## Engineering rules for tone
 
 - Keep one authoritative model for gameplay and preview behavior. Separate

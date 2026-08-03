@@ -46,6 +46,14 @@ export type PlayerScoreCard = {
   frames: readonly FrameScore[];
 };
 
+/** Statistics from one completed player's score card. */
+export type PlayerMatchSummary = {
+  player_id: PlayerId;
+  total_score: number;
+  best_frame_score: number;
+  longest_strike_streak: number;
+};
+
 export type MatchState = {
   active_player_id: PlayerId;
   aim: AimState;
@@ -68,7 +76,7 @@ export type MatchEffect =
   | { type: "sweep_deadwood" }
   | { type: "prepare_next_roll" }
   | { type: "launch"; power: number; start_position: number; angle: number; spin: number }
-  | { type: "match_complete"; best_scores: Readonly<Record<number, number>> };
+  | { type: "match_complete"; summaries: readonly PlayerMatchSummary[] };
 
 export type MatchTransition = {
   state: MatchState;

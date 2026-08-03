@@ -32,6 +32,8 @@ silhouette stays familiar while the selected surface pattern visibly rolls.
   sound built for a 16:10 landscape browser.
 - Keep the next local session ready with recent-player restore, per-rack best scores, mute,
   and reduced-motion preferences.
+- Build a practice record for each rack and bowls-per-frame choice: high game, last five scores,
+  best frame, best named strike run, and games bowled stay with the mode that earned them.
 
 | Scale label | Actual pins |
 | ----------: | ----------: |
@@ -50,6 +52,11 @@ the lane. The four pre-roll controls set power, start position, angle, and spin;
 preview shows the same free path the roll will follow before its first pin contact. A focused
 pass-the-keyboard card advances each hot-seat turn while the score strip and phase feedback stay
 visible.
+
+When a player earns it, the game calls out a new high game or a named strike run such as a
+Double or Turkey without stopping the next turn. At match end, each player sees the final score,
+the prior high game for that practice mode, the difference, and their best run before returning to
+setup, where the updated record is ready for the next match.
 
 ## Quick start
 
@@ -87,8 +94,9 @@ The completed match follows classic strikes, spares, and tenth-frame bonus rolls
 The shared [docs/GAME_RULES.md](docs/GAME_RULES.md) contract generalizes the same rules to
 every supported rack: a perfect game scores `30 * pin_count`.
 Here `pin_count` is the displayed actual total, rather than the convenient scale label.
-Existing V1 local saves keep player details and preferences but clear best scores once, because
-the rebuilt lane and controls make those old records incomparable.
+V4 local saves keep compatible V2 and V3 high scores with their matching practice mode. Older V1
+saves keep player details and preferences but start fresh records because the rebuilt lane and
+controls made those old scores incomparable.
 
 ## Verify and build
 
@@ -131,10 +139,10 @@ The workflow checks the codebase, builds `dist/`, and deploys the uploaded Pages
 ## Roadmap status
 
 The regulation-lane rebuild is delivered: fixed lane geometry, real worker previews, four
-pre-roll controls, same-rack fallen-pin cleanup, and V2 score migration are part of the playable
-build. Retained front doors cover code checks, Pages builds, headless browser journeys, and the
-simulation benchmark. The active plan records the current evidence, including the final
-browser-run caveat; the README screenshots were visually inspected at the 1600 x 1000 target
-viewport.
+pre-roll controls, same-rack fallen-pin cleanup, and V4 practice-record migration are part of
+the playable build. Retained front doors cover code checks, Pages builds, headless browser
+journeys, and the simulation benchmark. The active plan records the current evidence, including
+the final browser-run caveat; the README screenshots were visually inspected at the 1600 x 1000
+target viewport.
 
 The active plan is the source of truth for milestone status and evidence.

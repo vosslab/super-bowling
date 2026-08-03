@@ -39,7 +39,32 @@ export type SaveFileV3 = {
   best_scores: Partial<Record<BestScoreKey, number>>;
 };
 
-export type SaveFile = SaveFileV3;
+export type ModeRecord = {
+  best_score: number;
+  /** Newest-first, limited to the five most recent completed matches. */
+  recent_scores: number[];
+  best_frame_score: number;
+  best_strike_streak: number;
+  matches_played: number;
+};
+
+/** Values folded across every player in one completed match. */
+export type MatchRecordValues = {
+  top_score: number;
+  best_frame_score: number;
+  longest_strike_streak: number;
+};
+
+export type SaveFileV4 = {
+  version: 4;
+  mute_enabled: boolean;
+  reduced_motion: boolean;
+  recent_setup: RecentMatchSetup;
+  /** Practice records are partitioned by rack mode and bowls-per-frame rule. */
+  mode_records: Partial<Record<BestScoreKey, ModeRecord>>;
+};
+
+export type SaveFile = SaveFileV4;
 
 export type SaveSettings = {
   mute_enabled: boolean;

@@ -1,7 +1,7 @@
-import type { SaveFileV3, StorageLike } from "./contracts";
+import type { SaveFileV4, StorageLike } from "./contracts";
 import { create_default_save, normalize_save_file, save_storage_key } from "./save_file";
 
-export function load_save(storage: StorageLike): SaveFileV3 {
+export function load_save(storage: StorageLike): SaveFileV4 {
   let stored_value: string | null;
   try {
     stored_value = storage.getItem(save_storage_key);
@@ -16,7 +16,7 @@ export function load_save(storage: StorageLike): SaveFileV3 {
   }
 }
 
-export function store_save(storage: StorageLike, save: SaveFileV3): void {
+export function store_save(storage: StorageLike, save: SaveFileV4): void {
   const normalized_save = normalize_save_file(save);
   try {
     storage.setItem(save_storage_key, JSON.stringify(normalized_save));
