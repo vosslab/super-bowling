@@ -54,14 +54,14 @@
 
 ### Developer Tests and Notes
 
-- `./check_codebase.sh` passed with 191 Node tests, `pytest tests/` passed 667,
+- `./check_codebase.sh` passed with 191 Node tests, `pytest tests/` passed 676,
   and the full Playwright suite passed 36/36.
 - Focused Playwright checks passed 13/13 before the full run, then the updated
   result and layout journeys passed 7/7. Original-resolution review accepted
   the 1600 x 1000 aiming and final-score captures.
-- The centered-slider and 21-pin camera browser checks passed 5/5. Final
-  original-resolution review accepted the active-lane capture with its compact
-  launch platform and physical near lane filling the canvas to its lower edge.
+- Focused active-lane browser checks passed 2/2. Final original-resolution
+  review accepted the 21-pin capture with its compact launch platform and
+  physical near lane filling the canvas to its lower edge.
 
 ## 2026-08-02
 
