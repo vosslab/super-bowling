@@ -81,7 +81,13 @@ export type SetupProps = {
   mode_record(pin_count: PinCount, bowls_per_frame: number): ModeRecord | undefined;
   on_set_mute(mute_enabled: boolean): void;
   on_set_reduced_motion(reduced_motion: boolean): void;
-  fixture_mode?: "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck";
+  fixture_mode?:
+    | "perfect_game"
+    | "strike_result"
+    | "zero_knock"
+    | "partial_knock"
+    | "spare_pickup"
+    | "camera_deck";
 };
 
 export function Setup(props: SetupProps): JSX.Element {

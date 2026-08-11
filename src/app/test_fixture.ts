@@ -1,5 +1,6 @@
 import { create_rack } from "../simulation/rack";
 import { get_rack_pin_count, type PinCount, type RackPinCount } from "../config/pin_counts";
+import { foul_to_head_pin } from "../config/lane";
 import {
   ball_snapshot_stride,
   ball_snapshot_in_pit_flag_offset,
@@ -20,7 +21,7 @@ function queue_event(listener: (event: SimulationEvent) => void, event: Simulati
 function create_snapshot(
   pin_count: RackPinCount,
   fallen_pin_count: number,
-  deadwood_removed = false,
+  removed_pin_count = 0,
 ): Float32Array {
   const rack = create_rack(pin_count);
   const snapshot = new Float32Array(pin_count * pin_snapshot_stride + ball_snapshot_stride);
@@ -30,7 +31,7 @@ function create_snapshot(
     snapshot[offset + snapshot_y_offset] = slot.y;
     snapshot[offset + snapshot_state_flag_offset] = Number(slot.pin_id) < fallen_pin_count ? 1 : 0;
     snapshot[offset + snapshot_removed_flag_offset] = Number(
-      deadwood_removed && Number(slot.pin_id) < fallen_pin_count,
+      Number(slot.pin_id) < removed_pin_count,
     );
   }
   const ball_offset = pin_count * pin_snapshot_stride;
@@ -53,6 +54,15 @@ export function create_zero_knock_fixture(pin_count: PinCount = 10): SimulationC
 export function create_partial_knock_fixture(pin_count: PinCount = 10): SimulationClient {
   return create_fixture_client(get_rack_pin_count(pin_count), 3, {
     hold_second_roll_in_rolling: true,
+  });
+}
+
+/** Delivers a partial first roll followed by a clean second-roll pickup. */
+export function create_spare_pickup_fixture(pin_count: PinCount = 10): SimulationClient {
+  const rack_pin_count = get_rack_pin_count(pin_count);
+  const first_roll_fallen_pin_count = Math.min(3, rack_pin_count - 1);
+  return create_fixture_client(rack_pin_count, first_roll_fallen_pin_count, {
+    cumulative_fallen_pin_counts: [first_roll_fallen_pin_count, rack_pin_count],
   });
 }
 
@@ -130,6 +140,7 @@ export function create_camera_deck_fixture(pin_count: PinCount): SimulationClien
 }
 
 type FixtureClientOptions = Readonly<{
+  cumulative_fallen_pin_counts?: readonly number[];
   hold_second_roll_in_rolling?: boolean;
 }>;
 
@@ -174,6 +185,9 @@ function create_fixture_client(
     }
     if (request.type === "launch") {
       launch_count += 1;
+      const sequence = options.cumulative_fallen_pin_counts;
+      const cumulative_fallen_pin_count =
+        sequence?.[Math.min(launch_count - 1, sequence.length - 1)] ?? fallen_pin_count;
       if (options.hold_second_roll_in_rolling && deadwood_removed && launch_count > 1) {
         const rolling_snapshot = create_snapshot(pin_count, 0);
         rolling_snapshot[pin_count * pin_snapshot_stride + snapshot_y_offset] = 2;
@@ -187,21 +201,27 @@ function create_fixture_client(
         });
         return;
       }
-      const settled_snapshot = create_snapshot(pin_count, fallen_pin_count);
-      settled_snapshot[pin_count * pin_snapshot_stride + ball_snapshot_in_pit_flag_offset] = 1;
+      const settled_snapshot = create_snapshot(
+        pin_count,
+        cumulative_fallen_pin_count,
+        deadwood_removed ? fallen_pin_count : 0,
+      );
+      const ball_offset = pin_count * pin_snapshot_stride;
+      settled_snapshot[ball_offset + snapshot_y_offset] = foul_to_head_pin;
+      settled_snapshot[ball_offset + ball_snapshot_in_pit_flag_offset] = 1;
       publish({
         type: "snapshot",
         simulation_time_ms: 500,
         pin_count,
-        standing_pin_count: pin_count - fallen_pin_count,
-        fallen_pin_count,
+        standing_pin_count: pin_count - cumulative_fallen_pin_count,
+        fallen_pin_count: cumulative_fallen_pin_count,
         snapshot_data: settled_snapshot,
       });
       publish({
         type: "settled",
         pin_count,
-        standing_pin_count: pin_count - fallen_pin_count,
-        fallen_pin_count,
+        standing_pin_count: pin_count - cumulative_fallen_pin_count,
+        fallen_pin_count: cumulative_fallen_pin_count,
         timed_out: false,
       });
     }
@@ -213,7 +233,7 @@ function create_fixture_client(
         pin_count,
         standing_pin_count: pin_count - fallen_pin_count,
         fallen_pin_count: 0,
-        snapshot_data: create_snapshot(pin_count, fallen_pin_count, deadwood_removed),
+        snapshot_data: create_snapshot(pin_count, fallen_pin_count, fallen_pin_count),
       });
       publish({ type: "sweep_complete", pin_count });
       return;

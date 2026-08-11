@@ -15,7 +15,7 @@ export type RackBounds = {
 
 export type CameraState = {
   rack_bounds: RackBounds;
-  /** Monotonic travel metadata; it never changes the fixed composition. */
+  /** Monotonic physical travel that drives the deck-focused shot projection. */
   shot_progress: number;
   reduced_motion: boolean;
 };

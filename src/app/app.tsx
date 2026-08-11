@@ -11,11 +11,19 @@ import {
   create_camera_deck_fixture,
   create_partial_knock_fixture,
   create_perfect_game_fixture,
+  create_spare_pickup_fixture,
   create_zero_knock_fixture,
 } from "./test_fixture";
 import { Setup } from "./setup";
 
-type FixtureMode = "perfect_game" | "zero_knock" | "partial_knock" | "camera_deck" | undefined;
+type FixtureMode =
+  | "perfect_game"
+  | "strike_result"
+  | "zero_knock"
+  | "partial_knock"
+  | "spare_pickup"
+  | "camera_deck"
+  | undefined;
 
 type ActiveGame = {
   client: SimulationClient;
@@ -55,8 +63,10 @@ function create_app_settings(storage: StorageLike): SaveSettingsController {
 function read_fixture_mode(): FixtureMode {
   const fixture = new URLSearchParams(window.location.search).get("fixture");
   return fixture === "perfect_game" ||
+    fixture === "strike_result" ||
     fixture === "zero_knock" ||
     fixture === "partial_knock" ||
+    fixture === "spare_pickup" ||
     fixture === "camera_deck"
     ? fixture
     : undefined;
@@ -72,13 +82,17 @@ export function App(): JSX.Element {
     const next_client =
       fixture_mode === "perfect_game"
         ? create_perfect_game_fixture(pin_count)
-        : fixture_mode === "zero_knock"
-          ? create_zero_knock_fixture(pin_count)
-          : fixture_mode === "partial_knock"
-            ? create_partial_knock_fixture(pin_count)
-            : fixture_mode === "camera_deck"
-              ? create_camera_deck_fixture(pin_count)
-              : create_simulation_client();
+        : fixture_mode === "strike_result"
+          ? create_perfect_game_fixture(pin_count)
+          : fixture_mode === "zero_knock"
+            ? create_zero_knock_fixture(pin_count)
+            : fixture_mode === "partial_knock"
+              ? create_partial_knock_fixture(pin_count)
+              : fixture_mode === "spare_pickup"
+                ? create_spare_pickup_fixture(pin_count)
+                : fixture_mode === "camera_deck"
+                  ? create_camera_deck_fixture(pin_count)
+                  : create_simulation_client();
     return next_client;
   }
 

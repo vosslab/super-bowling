@@ -8,6 +8,7 @@ _temp*.?*
 OTHER_REPOS/
 # === LOCAL ===
 # Template-only ignores.
+/lane_master_videos/
 # === PYTHON ===
 build/
 dist/

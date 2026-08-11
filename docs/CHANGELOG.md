@@ -1,3 +1,64 @@
+## 2026-08-11
+
+### Additions and New Features
+
+- Added `docs/LANE_MASTER_VIDEO_FINDINGS.md` as a durable
+  evidence record for the five local arcade captures, the ASI Lane Master and official UNIS
+  Extreme product-family sources, the motion and result cues adopted by Super Bowling, and the
+  styling and reward systems deliberately left behind.
+- Added a shot-driven deck push that begins on release and smoothly enlarges
+  the lane, ball, and pins through one shared projection. Ten-pin play gets the
+  strongest move while the widest fantasy rack retains a smaller readable push.
+- Added distinct `STRIKE` and `SPARE` result bursts with short one-shot
+  confetti, amber and cyan identities, and the existing side-panel status as
+  the single accessible announcement.
+- Rebuilt the ball lighting around a shaded rim, fixed gloss, warm lane
+  reflection, cast shadow, and recessed finger holes while retaining the
+  selected player pattern and physically derived surface roll.
+- Added velocity-driven fallen-pin lift, grounded shadows, and one restrained
+  afterimage. The simulation snapshot remains authoritative, and every effect
+  fades back to the settled pin pose when physical motion reaches zero.
+
+### Behavior or Interface Changes
+
+- Result framing now holds the pin deck at the end of a roll and resets before
+  the next aim. Reduced motion keeps the fixed pre-roll camera and removes the
+  decorative confetti animation while preserving the visible result panel.
+- Removed the fallen-pin SVG's baked shadow and painted all pin shadows in
+  screen-space at their projected ground contact. Settled fallen pins now rest
+  on the lane instead of floating around their former midpoint anchor.
+- Added manual strike and two-roll spare fixtures at the existing
+  `SimulationClient` test boundary so browser journeys can verify the complete
+  Solid result flow without direct state mutation or a slow full-physics gate.
+
+### Decisions and Failures
+
+- Defined Super Bowling's design lineage as Nintendo Wii-style screen bowling without a motion
+  controller, combined with UNIS Lane Master-style arcade action without a physical ball or
+  cabinet sensors. The resulting pointer and keyboard game remains an original synthesis.
+- Used the local arcade videos as timing and energy references for the quick
+  deck push, visible ball rotation, separated pin motion, and concentrated
+  result moment. The shipped dark-teal lane surge, amber/cyan result language,
+  ball treatment, and overlays remain original to Super Bowling.
+- Kept camera motion inside the rational world projection rather than applying
+  an independent CSS or canvas scale, preserving lane, ball, and pin alignment.
+- The first full Playwright attempt could not launch Chromium inside the macOS
+  sandbox because its Mach-port registration was denied. The unchanged suite
+  passed when rerun outside that sandbox boundary.
+
+### Developer Tests and Notes
+
+- `./check_codebase.sh` passed all five gates with 167 Node tests, including
+  camera progression and reset, wide-rack scaling, settled versus moving pin
+  presentation, and reducer-produced strike/spare burst coverage.
+- `./build_github_pages.sh` produced the GitHub Pages-ready build, and the full
+  Playwright suite passed 28/28 in 14.2 seconds. The new browser journeys use
+  visible rolls and verify both result overlays plus terminal camera zoom.
+- Original-resolution review covered a real worker collision sequence, desktop strike
+  and spare states, a 390 px narrow layout, and reduced motion. A fresh
+  independent visual review found no blocker across the four requested action
+  upgrades.
+
 ## 2026-08-03
 
 ### Behavior or Interface Changes

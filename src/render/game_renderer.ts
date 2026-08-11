@@ -5,7 +5,7 @@ import type { RackPinCount } from "../config/pin_counts";
 import { pin_snapshot_stride, read_snapshot_ball, read_snapshot_pin } from "../simulation/protocol";
 import { create_rack } from "../simulation/rack";
 import { draw_ball, type BallDrawState } from "./ball";
-import { create_camera_state } from "./camera";
+import { create_camera_state, get_camera_zoom } from "./camera";
 import type { CameraState } from "./contracts";
 import { load_game_assets, type AssetLoadState, type GameAssets } from "./game_assets";
 import { interpolate_shortest_angle } from "./interpolation";
@@ -75,6 +75,8 @@ export type LaneProjection = {
     horizon_fraction: number;
     framing_clamped: boolean;
     framing_reason: "solved" | "unsolved" | "lower_bound" | "upper_bound";
+    presentation_zoom: number;
+    presentation_focus_y_fraction: number;
   };
   pixels_per_world_unit: number;
   horizon: ScreenPoint;
@@ -186,10 +188,14 @@ function create_projection(
   depth_exaggeration: number,
   horizon_fraction: number = camera_config.horizon_fraction,
   near_screen_fraction: number = camera_config.near_lane_y_fraction,
+  presentation_zoom = 1,
 ): LaneProjection {
   const bounds = camera.rack_bounds;
   const lane_half_width = lane_width(bounds.pin_count) / 2;
   const full_half_width = lane_half_width + gutter_width;
+  const focus_y = height * camera_config.shot_zoom_focus_y_fraction;
+  const unzoomed_horizon_y = height * horizon_fraction;
+  const unzoomed_near_screen_y = height * near_screen_fraction;
   return {
     x_extent: full_half_width + camera_config.horizontal_padding,
     near_y: -camera_config.launch_platform_depth,
@@ -218,10 +224,16 @@ function create_projection(
       horizon_fraction,
       framing_clamped: false,
       framing_reason: "unsolved",
+      presentation_zoom,
+      presentation_focus_y_fraction: camera_config.shot_zoom_focus_y_fraction,
     },
-    pixels_per_world_unit: (width * camera_config.near_rail_half_width_fraction) / full_half_width,
-    horizon: { x: width / 2, y: height * horizon_fraction },
-    near_screen_y: height * near_screen_fraction,
+    pixels_per_world_unit:
+      ((width * camera_config.near_rail_half_width_fraction) / full_half_width) * presentation_zoom,
+    horizon: {
+      x: width / 2,
+      y: focus_y + (unzoomed_horizon_y - focus_y) * presentation_zoom,
+    },
+    near_screen_y: focus_y + (unzoomed_near_screen_y - focus_y) * presentation_zoom,
   };
 }
 
@@ -463,6 +475,7 @@ export function create_camera_projection(
     solved.depth_exaggeration,
     solved.framing.horizon_fraction,
     solved.framing.near_screen_fraction,
+    get_camera_zoom(camera),
   );
   const row_reveal_fractions = solved.row_reveal_fractions;
   const rear_y = row_y_positions[row_y_positions.length - 1];
@@ -502,6 +515,8 @@ export function create_camera_projection(
       horizon_fraction: solved.framing.horizon_fraction,
       framing_clamped: solved.framing.framing_clamped,
       framing_reason: solved.framing.framing_reason,
+      presentation_zoom: get_camera_zoom(camera),
+      presentation_focus_y_fraction: camera_config.shot_zoom_focus_y_fraction,
     },
   };
 }
@@ -640,6 +655,8 @@ function create_pin_command(
   if (current_pin.removed || current_pin.in_pit) return undefined;
   const x = interpolate(previous_pin.x, current_pin.x, alpha);
   const y = interpolate(previous_pin.y, current_pin.y, alpha);
+  const velocity_x = interpolate(previous_pin.velocity_x, current_pin.velocity_x, alpha);
+  const velocity_y = interpolate(previous_pin.velocity_y, current_pin.velocity_y, alpha);
   const body = project_body(projection, { x, y, z: 0 }, { x, y, z: 1.25 }, pin_radius * 2);
   if (body === undefined) return undefined;
   const kind = choose_pin_sprite(current_pin.state_flag === 1);
@@ -652,17 +669,31 @@ function create_pin_command(
         alpha,
       )
     : 0;
+  const speed = Math.hypot(velocity_x, velocity_y);
+  const motion_energy = fallen ? clamp(speed / 16, 0, 1) : 0;
+  const lift = fallen ? standing_height * 0.22 * motion_energy : 0;
+  const trail_world = project_world_point(projection, {
+    x: x - velocity_x * 0.035,
+    y: y - velocity_y * 0.035,
+    z: 0,
+  });
+  const trail_x = trail_world === undefined ? 0 : (trail_world.x - body.base.x) * 2.4;
+  const trail_y = trail_world === undefined ? 0 : (trail_world.y - body.base.y) * 2.4;
   return {
     kind,
     pin_index,
     base_depth: body.base_depth,
     x: body.base.x,
-    y: (body.base.y + body.crown.y) / 2,
+    y: fallen ? body.base.y - body.width / 2 - lift : (body.base.y + body.crown.y) / 2,
     ground_x: body.base.x,
     ground_y: body.base.y,
     width: fallen ? standing_height : body.width,
     height: fallen ? body.width : standing_height,
     angle,
+    lift,
+    motion_energy,
+    trail_x,
+    trail_y,
   };
 }
 

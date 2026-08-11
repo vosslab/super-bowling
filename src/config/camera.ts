@@ -30,6 +30,15 @@ export const camera_config = {
   rack_top_fraction: 0.04,
   /** Desired visible portion of each pin row behind the row in front. */
   rack_row_reveal_fraction: 0.1,
+  /**
+   * A roll pushes the shared projection toward the deck. Ten-pin play gets
+   * the strongest move; larger fantasy racks scale it down so their breadth
+   * remains readable while the center cascade still gains emphasis.
+   */
+  ten_pin_shot_zoom: 1.34,
+  shot_zoom_start_progress: 0,
+  shot_zoom_full_progress: 0.84,
+  shot_zoom_focus_y_fraction: 0.12,
   near_rail_half_width_fraction: 0.475,
   near_lane_y_fraction: 0.99,
   // Measured in lane-depth world units. A larger value makes the deck denser.

@@ -10,6 +10,10 @@ export type PinDrawState = {
   width: number;
   height: number;
   angle: number;
+  lift: number;
+  motion_energy: number;
+  trail_x: number;
+  trail_y: number;
 };
 
 export type PinAssets = {
@@ -40,31 +44,40 @@ export function draw_pin(
   state: PinDrawState,
 ): void {
   const source = state.kind === "standing_pin" ? assets.upright : assets.fallen;
+  const display_angle =
+    state.kind === "fallen_pin" ? canonical_fallen_pin_angle(state.angle) : state.angle;
   context.save();
-  if (state.kind === "standing_pin") {
-    // The upright SVG already spans its viewBox from foot to crown. The small
-    // projected contact shadow makes that exact physical base legible against
-    // the receding deck instead of visually lifting the pin into empty space.
-    context.fillStyle = "rgba(66, 45, 27, 0.58)";
-    context.beginPath();
-    context.ellipse(
-      state.ground_x,
-      state.ground_y,
-      Math.max(1, state.width * 0.38),
-      Math.min(2, Math.max(1, state.width * 0.14)),
-      0,
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
+  context.translate(state.ground_x, state.ground_y);
+  context.rotate(display_angle);
+  context.fillStyle = `rgba(39, 27, 20, ${Math.max(0.16, 0.54 - state.motion_energy * 0.28)})`;
+  context.beginPath();
+  context.ellipse(
+    0,
+    0,
+    Math.max(1, state.width * (state.kind === "fallen_pin" ? 0.43 : 0.38)),
+    Math.max(1, state.height * (state.kind === "fallen_pin" ? 0.18 : 0.055)),
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  context.restore();
+
+  if (state.kind === "fallen_pin" && state.motion_energy > 0.16) {
+    context.save();
+    context.globalAlpha = state.motion_energy * 0.16;
+    context.translate(state.x + state.trail_x, state.y + state.trail_y);
+    context.rotate(display_angle);
+    context.drawImage(source, -state.width / 2, -state.height / 2, state.width, state.height);
+    context.restore();
   }
+
+  context.save();
   context.translate(state.x, state.y);
   // The SVG's crown points right before rotation. Its screen-space y offset
   // is therefore proportional to sin(angle), so the canonical angle above
   // guarantees that the crown cannot land below the base.
-  context.rotate(
-    state.kind === "fallen_pin" ? canonical_fallen_pin_angle(state.angle) : state.angle,
-  );
+  context.rotate(display_angle);
   context.drawImage(source, -state.width / 2, -state.height / 2, state.width, state.height);
   context.restore();
 }

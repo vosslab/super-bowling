@@ -33,6 +33,7 @@ import {
 import {
   advance_camera_for_ball,
   create_camera_state,
+  get_camera_zoom,
   reset_camera_for_roll,
   with_reduced_motion,
 } from "../render/camera";
@@ -62,6 +63,7 @@ import {
   type CenteredSliderScale,
 } from "./aim_slider";
 import type { SimulationClient } from "./simulation_client";
+import { roll_celebration, type RollCelebration } from "./roll_celebration";
 
 type SnapshotHolder = {
   previous: Float32Array | undefined;
@@ -85,6 +87,20 @@ export type GameProps = {
 
 const result_minimum_hold_ms = 900;
 const result_auto_advance_ms = 2200;
+const celebration_confetti = [
+  { x: 8, drift: -2.8, delay: 40, color: "#FFE76D", turn: -210 },
+  { x: 15, drift: 2.2, delay: 0, color: "#F26A4B", turn: 160 },
+  { x: 23, drift: -1.6, delay: 120, color: "#85D5E8", turn: -120 },
+  { x: 31, drift: 3.1, delay: 55, color: "#FFF8E7", turn: 240 },
+  { x: 39, drift: -2.4, delay: 145, color: "#F3B63F", turn: -180 },
+  { x: 47, drift: 1.4, delay: 20, color: "#E65343", turn: 150 },
+  { x: 55, drift: -1.2, delay: 95, color: "#A8E3D0", turn: -260 },
+  { x: 63, drift: 2.7, delay: 10, color: "#FFE76D", turn: 210 },
+  { x: 71, drift: -3.2, delay: 130, color: "#85D5E8", turn: -150 },
+  { x: 79, drift: 1.9, delay: 65, color: "#F26A4B", turn: 190 },
+  { x: 87, drift: -2.1, delay: 105, color: "#FFF8E7", turn: -230 },
+  { x: 94, drift: 2.5, delay: 35, color: "#F3B63F", turn: 170 },
+] as const;
 
 function phase_label(phase: MatchState["phase"]): string {
   const labels: Record<MatchState["phase"], string> = {
@@ -663,6 +679,16 @@ export function Game(props: GameProps): JSX.Element {
     if (delta > 0) return `${completed_score} - new record (+${delta})`;
     return `${completed_score} - record ${previous_score}`;
   };
+  const current_roll_celebration = (): RollCelebration | undefined =>
+    roll_celebration(match_state());
+  const current_camera_zoom = (): number => {
+    if (camera === undefined) return 1;
+    return get_camera_zoom({
+      ...camera,
+      shot_progress: camera_progress(),
+      reduced_motion: props.reduced_motion(),
+    });
+  };
 
   return (
     <main
@@ -679,7 +705,7 @@ export function Game(props: GameProps): JSX.Element {
       data-drawn-aim-guide-first-screen-x={drawn_aim_guide_first_screen_x()?.toFixed(2) ?? ""}
       data-camera-mode="centered-shot"
       data-camera-progress={camera_progress().toFixed(4)}
-      data-camera-zoom="0.0000"
+      data-camera-zoom={current_camera_zoom().toFixed(4)}
       data-ball-in-pit={ball_in_pit() ? "true" : "false"}
       data-earned-moment={current_earned_moment()?.kind ?? ""}
       data-reduced-motion={props.reduced_motion() ? "true" : "false"}
@@ -798,6 +824,23 @@ export function Game(props: GameProps): JSX.Element {
                 {(support_text) => <p>{support_text()}</p>}
               </Show>
             </section>
+          )}
+        </Show>
+        <Show when={current_roll_celebration()}>
+          {(celebration) => (
+            <div class="roll_celebration" data-celebration={celebration().kind} aria-hidden="true">
+              <div class="celebration_confetti">
+                <Index each={celebration_confetti}>
+                  {(piece) => (
+                    <i
+                      style={`--confetti-x: ${piece().x}%; --confetti-drift: ${piece().drift}rem; --confetti-delay: ${piece().delay}ms; --confetti-color: ${piece().color}; --confetti-turn: ${piece().turn}deg;`}
+                    />
+                  )}
+                </Index>
+              </div>
+              <p class="celebration_label">{celebration().label}</p>
+              <p class="celebration_support">{celebration().support_text}</p>
+            </div>
           )}
         </Show>
         <Show when={asset_message()}>

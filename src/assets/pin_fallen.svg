@@ -15,7 +15,6 @@
       <use href="#pin_shape"/>
     </clipPath>
   </defs>
-  <ellipse cx="126" cy="65" rx="106" ry="10" fill="#715846" opacity="0.34"/>
   <g transform="translate(252 0) rotate(90)">
     <use href="#pin_shape" fill="url(#body)"/>
     <g clip-path="url(#pin_clip)">

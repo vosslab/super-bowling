@@ -110,8 +110,13 @@ test("interpolates pin positions into finite front-facing lane commands", () => 
           Number.isFinite,
         );
       }
-      return [command.x, command.y, command.width, command.height, command.angle].every(
-        Number.isFinite,
+      return (
+        [command.x, command.y, command.width, command.height, command.angle].every(
+          Number.isFinite,
+        ) &&
+        [command.lift, command.motion_energy, command.trail_x, command.trail_y].every(
+          Number.isFinite,
+        )
       );
     }),
   );
@@ -412,6 +417,33 @@ test("uses the published capsule axis for fallen pin art", () => {
   assert.equal(choose_pin_sprite(true), "fallen_pin");
 });
 
+test("uses fallen-pin velocity for a short lift and motion trail that settle back to rest", () => {
+  const settled_snapshot = create_snapshot(10);
+  settled_snapshot[snapshot_state_flag_offset] = 1;
+  const moving_snapshot = new Float32Array(settled_snapshot);
+  moving_snapshot[snapshot_velocity_x_offset] = 9;
+  moving_snapshot[snapshot_velocity_y_offset] = -3;
+
+  const settled = get_pin_command(
+    create_game_draw_commands(settled_snapshot, settled_snapshot, 10, 1, 1600, 1000),
+    0,
+  );
+  const moving = get_pin_command(
+    create_game_draw_commands(moving_snapshot, moving_snapshot, 10, 1, 1600, 1000),
+    0,
+  );
+
+  assert.equal(settled.kind, "fallen_pin");
+  assert.equal(moving.kind, "fallen_pin");
+  assert.equal(settled.motion_energy, 0);
+  assert.equal(settled.lift, 0);
+  assert.equal(Math.hypot(settled.trail_x, settled.trail_y), 0);
+  assert.ok(moving.motion_energy > 0);
+  assert.ok(moving.lift > 0);
+  assert.ok(Math.hypot(moving.trail_x, moving.trail_y) > 0);
+  assert.ok(moving.y < settled.y, "an energetic pin briefly lifts above its grounded pose");
+});
+
 test("draws fallen pins crown-up while retaining their undirected capsule axis", () => {
   const fixture_angles = [-2.8, -Math.PI / 2, -0.15, 0, 0.15, Math.PI / 2, 2.8];
   for (const physical_axis_angle of fixture_angles) {
@@ -429,8 +461,13 @@ test("draws fallen pins crown-up while retaining their undirected capsule axis",
 
     let rendered_angle;
     const context = {
+      globalAlpha: 1,
+      fillStyle: "",
       save() {},
       restore() {},
+      beginPath() {},
+      ellipse() {},
+      fill() {},
       translate() {},
       rotate(angle) {
         rendered_angle = angle;
@@ -449,6 +486,10 @@ test("draws fallen pins crown-up while retaining their undirected capsule axis",
         width: 60,
         height: 18,
         angle: physical_axis_angle,
+        lift: 0,
+        motion_energy: 0,
+        trail_x: 0,
+        trail_y: 0,
       },
     );
     assert.equal(rendered_angle, canonical_angle);

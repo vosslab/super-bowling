@@ -136,11 +136,35 @@ export function get_ball_hole_commands(state: BallDrawState): BallHoleCommand[] 
 }
 
 function draw_finger_holes(context: CanvasRenderingContext2D, state: BallDrawState): void {
-  context.fillStyle = "rgba(5, 20, 43, 0.82)";
   for (const hole of get_ball_hole_commands(state)) {
     context.globalAlpha = hole.opacity;
+    context.fillStyle = "rgba(208, 239, 255, 0.24)";
+    context.beginPath();
+    context.ellipse(
+      hole.x - hole.radius_x * 0.1,
+      hole.y - hole.radius_y * 0.16,
+      hole.radius_x * 1.2,
+      hole.radius_y * 1.2,
+      0,
+      0,
+      full_turn,
+    );
+    context.fill();
+    context.fillStyle = "rgba(3, 11, 25, 0.94)";
     context.beginPath();
     context.ellipse(hole.x, hole.y, hole.radius_x, hole.radius_y, 0, 0, full_turn);
+    context.fill();
+    context.fillStyle = "rgba(0, 0, 0, 0.42)";
+    context.beginPath();
+    context.ellipse(
+      hole.x + hole.radius_x * 0.08,
+      hole.y + hole.radius_y * 0.18,
+      hole.radius_x * 0.7,
+      hole.radius_y * 0.62,
+      0,
+      0,
+      full_turn,
+    );
     context.fill();
   }
   context.globalAlpha = 1;
@@ -169,6 +193,53 @@ function draw_rolling_surface(
   context.globalAlpha = 1;
 }
 
+function draw_sphere_lighting(context: CanvasRenderingContext2D, state: BallDrawState): void {
+  const radius = Math.max(1, state.width * 0.58);
+  const left = state.x - state.width / 2;
+  const top = state.y - state.height / 2;
+  const rim = context.createRadialGradient(
+    state.x - state.width * 0.2,
+    state.y - state.height * 0.24,
+    state.width * 0.04,
+    state.x,
+    state.y,
+    radius,
+  );
+  rim.addColorStop(0, "rgba(255, 255, 255, 0)");
+  rim.addColorStop(0.52, "rgba(255, 255, 255, 0)");
+  rim.addColorStop(0.78, "rgba(7, 25, 48, 0.18)");
+  rim.addColorStop(1, "rgba(3, 11, 25, 0.82)");
+  context.fillStyle = rim;
+  context.fillRect(left, top, state.width, state.height);
+
+  const gloss = context.createRadialGradient(
+    state.x - state.width * 0.24,
+    state.y - state.height * 0.27,
+    0,
+    state.x - state.width * 0.24,
+    state.y - state.height * 0.27,
+    state.width * 0.31,
+  );
+  gloss.addColorStop(0, "rgba(255, 255, 255, 0.68)");
+  gloss.addColorStop(0.3, "rgba(229, 248, 255, 0.32)");
+  gloss.addColorStop(1, "rgba(255, 255, 255, 0)");
+  context.fillStyle = gloss;
+  context.fillRect(left, top, state.width, state.height);
+
+  const lane_reflection = context.createRadialGradient(
+    state.x + state.width * 0.08,
+    state.y + state.height * 0.38,
+    0,
+    state.x + state.width * 0.08,
+    state.y + state.height * 0.38,
+    state.width * 0.46,
+  );
+  lane_reflection.addColorStop(0, "rgba(255, 222, 142, 0.28)");
+  lane_reflection.addColorStop(1, "rgba(255, 222, 142, 0)");
+  context.fillStyle = lane_reflection;
+  context.fillRect(left, top, state.width, state.height);
+}
+
 /** Draws the same circular bowling ball used by the setup preview and the lane. */
 export function draw_ball(
   context: CanvasRenderingContext2D,
@@ -178,37 +249,36 @@ export function draw_ball(
   const left = state.x - state.width / 2;
   const top = state.y - state.height / 2;
   context.save();
+  context.fillStyle = "rgba(5, 13, 24, 0.36)";
+  context.beginPath();
+  context.ellipse(
+    state.x,
+    state.y + state.height * 0.44,
+    state.width * 0.38,
+    Math.max(1, state.height * 0.085),
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  context.restore();
+  context.save();
   context.beginPath();
   context.ellipse(state.x, state.y, state.width / 2, state.height / 2, 0, 0, Math.PI * 2);
   context.clip();
-  const gradient = context.createLinearGradient(left, top, left, top + state.height);
-  gradient.addColorStop(0, state.design.base_color);
-  gradient.addColorStop(0.55, state.design.base_color);
-  gradient.addColorStop(1, "#122A4D");
-  context.fillStyle = gradient;
+  context.fillStyle = state.design.base_color;
   context.fillRect(left, top, state.width, state.height);
   if (asset !== undefined) draw_rolling_surface(context, state, asset);
   for (const command of get_ball_pattern_commands(state.design.pattern)) {
     if (command.kind === "band") draw_band(context, state, command.offset);
     if (command.kind === "chevron") draw_chevron(context, state);
   }
-  draw_finger_holes(context, state);
-  context.fillStyle = "rgba(255, 255, 255, 0.38)";
-  context.beginPath();
-  context.ellipse(
-    state.x - state.width * 0.18 + (state.highlight_offset ?? 0),
-    state.y - state.height * 0.2,
-    state.width * 0.2,
-    state.height * 0.12,
-    -0.25,
-    0,
-    Math.PI * 2,
-  );
-  context.fill();
   draw_monogram(context, state);
+  draw_sphere_lighting(context, state);
+  draw_finger_holes(context, state);
   context.restore();
-  context.strokeStyle = "#18253D";
-  context.lineWidth = Math.max(1, state.width * 0.045);
+  context.strokeStyle = "rgba(5, 16, 33, 0.88)";
+  context.lineWidth = Math.max(1, state.width * 0.04);
   context.beginPath();
   context.ellipse(state.x, state.y, state.width / 2, state.height / 2, 0, 0, Math.PI * 2);
   context.stroke();

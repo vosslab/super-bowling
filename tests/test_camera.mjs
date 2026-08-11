@@ -7,6 +7,7 @@ import {
   advance_camera_for_ball,
   create_camera_state,
   create_rack_bounds,
+  get_camera_zoom,
   reset_camera_for_roll,
   with_reduced_motion,
 } from "../src/render/camera.ts";
@@ -133,19 +134,56 @@ test("derives immutable bounds from each authoritative complete rack", () => {
   }
 });
 
-test("holds one stable framing and horizon through every shot state", () => {
+test("pushes the shared projection toward the deck from release through impact", () => {
+  const completed_zooms = new Map();
   for (const pin_count of rack_pin_counts) {
     const aiming = create_camera_state(pin_count, false);
     const rolling = advance_camera_for_ball(aiming, aiming.rack_bounds.front / 2, false);
     const settled = advance_camera_for_ball(rolling, aiming.rack_bounds.back, false);
     const reduced = with_reduced_motion(settled, true);
+    const reset = reset_camera_for_roll(settled);
     const baseline = create_camera_projection(aiming, canvas.width, canvas.height);
-    for (const state of [rolling, settled, reduced, reset_camera_for_roll(settled)]) {
-      const projection = create_camera_projection(state, canvas.width, canvas.height);
-      assert.deepEqual(projection.horizon, baseline.horizon);
-      assert.deepEqual(projection.camera, baseline.camera);
+
+    assert.equal(get_camera_zoom(aiming), 1, `${pin_count}-pin aiming begins unzoomed`);
+    assert.ok(get_camera_zoom(rolling) > 1, `${pin_count}-pin camera moves during the roll`);
+    assert.ok(
+      get_camera_zoom(settled) >= get_camera_zoom(rolling),
+      `${pin_count}-pin camera continues toward the deck`,
+    );
+    assert.equal(get_camera_zoom(reduced), 1, `${pin_count}-pin reduced motion stays fixed`);
+    assert.equal(get_camera_zoom(reset), 1, `${pin_count}-pin next roll resets the camera`);
+
+    const rolling_projection = create_camera_projection(rolling, canvas.width, canvas.height);
+    const settled_projection = create_camera_projection(settled, canvas.width, canvas.height);
+    const reduced_projection = create_camera_projection(reduced, canvas.width, canvas.height);
+    const reset_projection = create_camera_projection(reset, canvas.width, canvas.height);
+    assert.ok(rolling_projection.camera.presentation_zoom > baseline.camera.presentation_zoom);
+    assert.ok(
+      settled_projection.camera.presentation_zoom >= rolling_projection.camera.presentation_zoom,
+    );
+    assert.notDeepEqual(rolling_projection.horizon, baseline.horizon);
+    assert.deepEqual(reduced_projection.horizon, baseline.horizon);
+    assert.deepEqual(reset_projection.horizon, baseline.horizon);
+    assert.ok(
+      [
+        rolling_projection.camera.presentation_zoom,
+        settled_projection.camera.presentation_zoom,
+        settled_projection.horizon.x,
+        settled_projection.horizon.y,
+        settled_projection.near_screen_y,
+      ].every(Number.isFinite),
+      `${pin_count}-pin moving projection remains finite`,
+    );
+    for (const pin of get_pins(draw(pin_count, settled))) {
+      assert_inside_canvas(pin, `${pin_count}-pin zoomed rack pin`);
     }
+    completed_zooms.set(pin_count, get_camera_zoom(settled));
   }
+
+  assert.ok(
+    completed_zooms.get(10) > completed_zooms.get(990),
+    "ten-pin play receives a stronger deck push than the widest fantasy rack",
+  );
 });
 
 test("keeps every legal aiming scene inside a representative play canvas", () => {

@@ -1,4 +1,4 @@
-import { get_camera_composition } from "../config/camera";
+import { camera_config, get_camera_composition } from "../config/camera";
 import type { RackPinCount } from "../config/pin_counts";
 import { create_rack } from "../simulation/rack";
 import type { CameraState, RackBounds } from "./contracts";
@@ -31,7 +31,24 @@ export function get_camera_depth_distance(camera: CameraState): number {
   return get_camera_composition(camera.rack_bounds.pin_count).depth_distance;
 }
 
-/** Records travel for UI state only; projection and horizon remain fixed. */
+function smoothstep(progress: number): number {
+  const clamped = Math.min(1, Math.max(0, progress));
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+/** Returns the shared projection scale for the ball's physical lane progress. */
+export function get_camera_zoom(camera: CameraState): number {
+  if (camera.reduced_motion) return 1;
+  const progress_range =
+    camera_config.shot_zoom_full_progress - camera_config.shot_zoom_start_progress;
+  const zoom_progress =
+    (camera.shot_progress - camera_config.shot_zoom_start_progress) / progress_range;
+  const mode_scale = Math.sqrt(10 / camera.rack_bounds.pin_count);
+  const maximum_zoom = 1 + (camera_config.ten_pin_shot_zoom - 1) * mode_scale;
+  return 1 + (maximum_zoom - 1) * smoothstep(zoom_progress);
+}
+
+/** Records monotonic physical travel that drives the deck-focused projection. */
 export function advance_camera_for_ball(
   camera: CameraState,
   ball_y: number,
