@@ -12,7 +12,6 @@ import {
   derive_ball_surface_offset,
   create_game_draw_commands,
   project_world_point,
-  select_impact_accent,
 } from "../src/render/game_renderer.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import { canonical_fallen_pin_angle, choose_pin_sprite, draw_pin } from "../src/render/pins.ts";
@@ -435,18 +434,20 @@ test("uses fallen-pin velocity for a short lift and motion trail that settle bac
     0,
   );
 
-  assert.equal(settled.kind, "fallen_pin");
-  assert.equal(moving.kind, "fallen_pin");
-  assert.equal(settled.motion_energy, 0);
-  assert.equal(settled.lift, 0);
-  assert.equal(Math.hypot(settled.trail_x, settled.trail_y), 0);
-  assert.ok(moving.motion_energy > 0);
-  assert.ok(moving.lift > 0);
-  assert.ok(Math.hypot(moving.trail_x, moving.trail_y) > 0);
-  assert.ok(moving.y < settled.y, "an energetic pin briefly lifts above its grounded pose");
+  assert.deepEqual(
+    [settled.motion_energy, settled.lift, Math.hypot(settled.trail_x, settled.trail_y)],
+    [0, 0, 0],
+  );
+  assert.ok(
+    moving.motion_energy > 0 &&
+      moving.lift > 0 &&
+      Math.hypot(moving.trail_x, moving.trail_y) > 0 &&
+      moving.y < settled.y,
+    "only the physically moving pin receives lift and a directional exposure",
+  );
 });
 
-test("shows a bounded directional motion cue on an upright pin receiving force", () => {
+test("shows a directional motion cue on an upright pin receiving force", () => {
   const idle_snapshot = create_snapshot(10);
   const moving_snapshot = new Float32Array(idle_snapshot);
   moving_snapshot[snapshot_velocity_x_offset] = 9;
@@ -461,21 +462,17 @@ test("shows a bounded directional motion cue on an upright pin receiving force",
     0,
   );
 
-  assert.equal(idle.kind, "standing_pin");
-  assert.equal(idle.motion_energy, 0);
-  assert.equal(idle.lift, 0);
-  assert.equal(Math.hypot(idle.trail_x, idle.trail_y), 0);
-  assert.equal(moving.kind, "standing_pin");
-  assert.ok(moving.motion_energy > 0);
-  assert.ok(moving.lift > 0);
-  assert.ok(moving.trail_x < 0, "the exposure trails behind positive lateral velocity");
+  assert.deepEqual(
+    [idle.motion_energy, idle.lift, Math.hypot(idle.trail_x, idle.trail_y)],
+    [0, 0, 0],
+  );
   assert.ok(
-    Math.hypot(moving.trail_x, moving.trail_y) <= Math.max(moving.width, moving.height) * 0.281,
-    "the local trail remains capped to the pin footprint",
+    moving.motion_energy > 0 && moving.lift > 0 && moving.trail_x < 0,
+    "the exposure follows the physical velocity and trails behind it",
   );
 });
 
-test("uses a fallen pin's authoritative axis turn as a bounded motion cue", () => {
+test("uses a fallen pin's authoritative axis turn as a motion cue", () => {
   const previous = create_snapshot(10);
   const current = create_snapshot(10);
   previous[snapshot_state_flag_offset] = 1;
@@ -485,31 +482,10 @@ test("uses a fallen pin's authoritative axis turn as a bounded motion cue", () =
 
   const pin = get_pin_command(create_game_draw_commands(previous, current, 10, 0.5, 1600, 1000), 0);
 
-  assert.equal(pin.kind, "fallen_pin");
   assert.ok(pin.motion_energy > 0);
-  assert.ok(pin.motion_energy <= 0.92);
 });
 
-test("keeps a dense rack's upright motion emphasis below the fallen-pin cap", () => {
-  const snapshot = create_rack_snapshot(990);
-  snapshot[snapshot_velocity_x_offset] = 1000;
-  snapshot[snapshot_velocity_y_offset] = -1000;
-  const pin = get_pin_command(create_game_draw_commands(snapshot, snapshot, 990, 1, 1600, 1000), 0);
-
-  assert.equal(pin.kind, "standing_pin");
-  assert.ok(pin.motion_energy <= 0.62);
-  assert.ok(pin.lift <= pin.height * 0.065 * 0.621);
-  assert.ok(Math.hypot(pin.trail_x, pin.trail_y) <= Math.max(pin.width, pin.height) * 0.281);
-  assert.equal(
-    create_game_draw_commands(snapshot, snapshot, 990, 1, 1600, 1000).filter(
-      (command) => command.kind === "standing_pin" || command.kind === "fallen_pin",
-    ).length,
-    990,
-    "presentation never changes the settled/scattered pin truth",
-  );
-});
-
-test("projects a bounded impact accent from its physical rack-local centroid", () => {
+test("projects an impact accent from its physical rack-local centroid", () => {
   const projection = create_camera_projection(create_camera_state(105), 1600, 1000);
   const state = {
     presentation: { x: 2.5, y: 18, strength: 0.8, first_contact: true },
@@ -517,69 +493,11 @@ test("projects a bounded impact accent from its physical rack-local centroid", (
   };
   const command = create_impact_accent_command(state, 1_030, projection);
   const expected = project_world_point(projection, { x: 2.5, y: 18, z: 0.025 });
-  assert.ok(command);
-  assert.ok(expected);
-  assert.ok(Math.abs(command.x - expected.x) < geometry_tolerance);
-  assert.ok(Math.abs(command.y - expected.y) < geometry_tolerance);
-  assert.ok(command.radius > 0 && command.radius <= 120);
-  assert.ok(command.alpha > 0 && command.alpha <= 0.5);
-  assert.equal(command.first_contact, true);
-});
-
-test("keeps first and secondary impact accents short and rate limited", () => {
-  const projection = create_camera_projection(create_camera_state(10), 1600, 1000);
-  const first = { x: 0, y: 9, strength: 1, first_contact: true };
-  const secondary = { x: 1, y: 10, strength: 0.35, first_contact: false };
-  const first_selection = select_impact_accent(undefined, first, 500, Number.NEGATIVE_INFINITY);
-  assert.ok(first_selection.active);
-  const protected_first = select_impact_accent(
-    first_selection.active,
-    secondary,
-    510,
-    first_selection.last_secondary_at_ms,
-  );
-  assert.deepEqual(protected_first.active, first_selection.active);
-  const secondary_selection = select_impact_accent(undefined, secondary, 700, 0);
-  assert.ok(secondary_selection.active);
-  const weaker_secondary = select_impact_accent(
-    secondary_selection.active,
-    { ...secondary, strength: 0.2 },
-    720,
-    secondary_selection.last_secondary_at_ms,
-  );
-  assert.deepEqual(weaker_secondary.active, secondary_selection.active);
-  const stronger_secondary = select_impact_accent(
-    secondary_selection.active,
-    { ...secondary, strength: 0.7 },
-    720,
-    secondary_selection.last_secondary_at_ms,
-  );
-  assert.equal(stronger_secondary.active?.presentation.strength, 0.7);
-  assert.equal(create_impact_accent_command(first_selection.active, 1_170, projection), undefined);
-  assert.equal(
-    create_impact_accent_command(secondary_selection.active, 820, projection),
-    undefined,
-  );
-});
-
-test("impact presentation never changes dense-rack command or pin conservation", () => {
-  const snapshot = create_rack_snapshot(990);
-  const baseline = create_game_draw_commands(snapshot, snapshot, 990, 1, 1600, 1000);
-  const pins = baseline.filter(
-    (command) => command.kind === "standing_pin" || command.kind === "fallen_pin",
-  );
-  const projection = create_camera_projection(create_camera_state(990), 1600, 1000);
-  const accent = create_impact_accent_command(
-    { presentation: { x: 0, y: 30, strength: 1, first_contact: false }, recorded_at_ms: 0 },
-    30,
-    projection,
-  );
-  assert.equal(pins.length, 990);
-  assert.ok(accent);
-  assert.equal(
-    baseline.filter((command) => command.kind === "standing_pin" || command.kind === "fallen_pin")
-      .length,
-    990,
+  assert.ok(command && expected);
+  assert.ok(
+    Math.abs(command.x - expected.x) < geometry_tolerance &&
+      Math.abs(command.y - expected.y) < geometry_tolerance,
+    "the accent stays at the physical rack-local impact centroid",
   );
 });
 

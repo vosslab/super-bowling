@@ -56,6 +56,11 @@
 
 ### Fixes and Maintenance
 
+- Reclassified the arcade rebuild checks by repository policy. Permanent coverage now keeps only
+  deterministic behavior contracts for impact aggregation, physical cue mapping, camera state,
+  mute behavior, and visible result journeys. Exact Web Audio layer counts, camera magnitudes,
+  renderer caps, CSS names, pixel boxes, and real-physics timing loops remain maintainer evidence
+  rather than fragile suite assertions.
 - Rasterized the committed SVG pin and ball artwork once after loading, then reused those Canvas
   sources with direct transforms during play. The 990-pin draw loop still renders every physical
   pin and bounded motion trail, but no longer asks the browser to rasterize SVGs or push two Canvas

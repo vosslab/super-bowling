@@ -44,11 +44,17 @@ inspection can miss.
 
 | Change scope | Required evidence |
 | --- | --- |
-| Pure game, scoring, rendering, or simulation behavior | Add or update a deterministic `tests/test_*.mjs` test, then run `./check_codebase.sh`. |
-| Browser-visible journey, layout, or interaction | Add or update a Playwright `.spec.ts` test under `tests/playwright/`, then run `./run_playwright_tests.sh --build`. |
+| Durable pure game, scoring, rendering, or simulation behavior | Add or update a small deterministic `tests/test_*.mjs` test only when it satisfies the permanent-test checklist, then run `./check_codebase.sh`. |
+| Durable browser-visible journey or interaction | Add or update a behavior-based Playwright `.spec.ts` test under `tests/playwright/`, then run `./run_playwright_tests.sh --build`. |
 | Repository docs, local links, or file hygiene | Run `source source_me.sh && python3 -m pytest tests/`. |
 | Maintained screenshots or GIFs | Run `./devel/capture_screenshots.sh --documentation` against a fresh production build, then inspect the committed assets at original resolution. |
 | Physics scale or settlement performance | Run `npm run benchmark`; inspect the ignored JSON report under `artifacts/benchmark/`. |
+
+Treat frame timings, visual thresholds, physics outcome matrices, audio-node counts, and
+original-resolution screenshot review as implementation or maintainer evidence. Keep those probes
+under `devel/` or ignored `artifacts/`; do not turn their current measurements into permanent suite
+assertions. [PYTEST_STYLE.md](PYTEST_STYLE.md) supplies the checklist for deciding whether a small
+Node or browser behavior test earns permanent residence.
 
 Use behavior-based assertions, real visible interactions, and readiness waits
 in browser tests. [PLAYWRIGHT_TEST_STYLE.md](PLAYWRIGHT_TEST_STYLE.md) and

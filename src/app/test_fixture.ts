@@ -62,7 +62,7 @@ export function create_spare_pickup_fixture(pin_count: PinCount = 10): Simulatio
   const rack_pin_count = get_rack_pin_count(pin_count);
   const first_roll_fallen_pin_count = Math.min(3, rack_pin_count - 1);
   return create_fixture_client(rack_pin_count, first_roll_fallen_pin_count, {
-    cumulative_fallen_pin_counts: [first_roll_fallen_pin_count, rack_pin_count],
+    second_roll_fallen_pin_count: rack_pin_count,
   });
 }
 
@@ -140,8 +140,8 @@ export function create_camera_deck_fixture(pin_count: PinCount): SimulationClien
 }
 
 type FixtureClientOptions = Readonly<{
-  cumulative_fallen_pin_counts?: readonly number[];
   hold_second_roll_in_rolling?: boolean;
+  second_roll_fallen_pin_count?: number;
 }>;
 
 function create_fixture_client(
@@ -185,9 +185,10 @@ function create_fixture_client(
     }
     if (request.type === "launch") {
       launch_count += 1;
-      const sequence = options.cumulative_fallen_pin_counts;
       const cumulative_fallen_pin_count =
-        sequence?.[Math.min(launch_count - 1, sequence.length - 1)] ?? fallen_pin_count;
+        launch_count > 1 && options.second_roll_fallen_pin_count !== undefined
+          ? options.second_roll_fallen_pin_count
+          : fallen_pin_count;
       if (options.hold_second_roll_in_rolling && deadwood_removed && launch_count > 1) {
         const rolling_snapshot = create_snapshot(pin_count, 0);
         rolling_snapshot[pin_count * pin_snapshot_stride + snapshot_y_offset] = 2;

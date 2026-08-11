@@ -31,22 +31,22 @@ function settle_roll(state, standing_pin_count) {
 
 test("derives strike and spare bursts only from reducer-produced result states", () => {
   const strike = settle_roll(ready_match(), 0);
-  assert.deepEqual(roll_celebration(strike), {
-    kind: "strike",
-    label: "STRIKE",
-    support_text: "All pins cleared",
-  });
-
   const first_roll = settle_roll(ready_match(), 4);
   const sweeping = reduce_match(first_roll, { type: "advance_after_result" }).state;
   const second_roll = reduce_match(sweeping, { type: "sweep_complete" }).state;
   const spare = settle_roll(second_roll, 0);
-  assert.deepEqual(roll_celebration(spare), {
-    kind: "spare",
-    label: "SPARE",
-    support_text: "Clean pickup",
-  });
-
-  assert.equal(roll_celebration(first_roll), undefined);
-  assert.equal(roll_celebration(ready_match()), undefined);
+  assert.deepEqual(
+    [
+      roll_celebration(strike),
+      roll_celebration(spare),
+      roll_celebration(first_roll),
+      roll_celebration(ready_match()),
+    ],
+    [
+      { kind: "strike", label: "STRIKE", support_text: "All pins cleared" },
+      { kind: "spare", label: "SPARE", support_text: "Clean pickup" },
+      undefined,
+      undefined,
+    ],
+  );
 });

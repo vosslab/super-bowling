@@ -16,6 +16,14 @@ Do not put reusable library code, runtime application code, or permanent tests
 here. Shared test helpers belong in `tests/`; runtime files belong in the
 appropriate repo root or package.
 
+## Repo-local evidence tools
+
+- [capture_screenshots.sh](capture_screenshots.sh) and its capture modules rebuild the locally
+  served game,
+  reproduce maintained documentation images, and write ignored motion, projection, provenance,
+  and frame-window evidence. They support implementation and human visual review; they are not
+  permanent test cases and their measured values are not suite thresholds.
+
 ## Current root scripts
 
 | File | Kind of work |
