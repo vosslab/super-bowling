@@ -13,6 +13,7 @@ import {
   create_game_draw_commands,
   project_world_point,
 } from "../src/render/game_renderer.ts";
+import { derive_fallen_pin_presentation } from "../src/render/fallen_pin_presentation.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import { canonical_fallen_pin_angle, choose_pin_sprite, draw_pin } from "../src/render/pins.ts";
 import {
@@ -445,6 +446,13 @@ test("uses fallen-pin velocity for a short lift and motion trail that settle bac
       moving.y < settled.y,
     "only the physically moving pin receives lift and a directional exposure",
   );
+});
+
+test("keeps a resting fallen pin's dimensional pose stable through tiny axis corrections", () => {
+  const first = derive_fallen_pin_presentation(7, 0.4, 0, 0, 0);
+  const corrected = derive_fallen_pin_presentation(7, 0.4001, 0, 0, 0);
+
+  assert.deepEqual(corrected, first);
 });
 
 test("shows a directional motion cue on an upright pin receiving force", () => {

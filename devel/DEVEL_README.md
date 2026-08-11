@@ -23,20 +23,36 @@ appropriate repo root or package.
   reproduce maintained documentation images, and write ignored motion, projection, provenance,
   and frame-window evidence. They support implementation and human visual review; they are not
   permanent test cases and their measured values are not suite thresholds.
+- [capture_real_gameplay_audio.mjs](capture_real_gameplay_audio.mjs) records a complete real-worker
+  990-pin roll and a hard off-center ten-pin pocket hit as post-master WebM audio/video evidence.
+  It needs a freshly built local app, Playwright Chromium, and `ffmpeg` plus `ffprobe`:
+
+  ```bash
+  node --import tsx devel/capture_real_gameplay_audio.mjs \
+    --base-url http://127.0.0.1:4278 \
+    --output-directory _temp/20260811_audio_completion
+  ```
+
+  The ignored output directory receives the WebM captures and JSON sidecars with real worker
+  milestones, asset/decode provenance, post-master analyser samples, and container checks. This is
+  one-time perceptual evidence, not a permanent test or fixed dB gate: listen to the complete
+  rolls to judge the rolling bed, first impact, secondary collisions, cascade, and result payoff.
+  Human listening remains the authority.
 
 ## Current root scripts
 
-| File | Kind of work |
-| --- | --- |
-| [bump_version.py](bump_version.py) | Preview and save repo version changes; enter `patch` for the next patch release. |
-| [version_lib.py](version_lib.py) | Shared version parsing and normalization behavior. |
-| [version_files.py](version_files.py) | Discover and update files that carry version metadata. |
-| [changelog_lib.py](changelog_lib.py) | Shared parser and helpers for changelog tools. |
-| [commit_changelog.py](commit_changelog.py) | Draft a commit message from new changelog entries. |
-| [query_changelog.py](query_changelog.py) | Search active and archived changelog entries. |
-| [rotate_changelog.py](rotate_changelog.py) | Move old changelog day blocks into archive files. |
-| [flatten_broken_md_links.py](flatten_broken_md_links.py) | Repair or flatten broken Markdown links. |
-| [dist_clean.sh](dist_clean.sh) | Remove build artifacts, caches, and dependency installs. |
+| File                                                               | Kind of work                                                                     |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| [bump_version.py](bump_version.py)                                 | Preview and save repo version changes; enter `patch` for the next patch release. |
+| [version_lib.py](version_lib.py)                                   | Shared version parsing and normalization behavior.                               |
+| [version_files.py](version_files.py)                               | Discover and update files that carry version metadata.                           |
+| [changelog_lib.py](changelog_lib.py)                               | Shared parser and helpers for changelog tools.                                   |
+| [commit_changelog.py](commit_changelog.py)                         | Draft a commit message from new changelog entries.                               |
+| [query_changelog.py](query_changelog.py)                           | Search active and archived changelog entries.                                    |
+| [rotate_changelog.py](rotate_changelog.py)                         | Move old changelog day blocks into archive files.                                |
+| [flatten_broken_md_links.py](flatten_broken_md_links.py)           | Repair or flatten broken Markdown links.                                         |
+| [dist_clean.sh](dist_clean.sh)                                     | Remove build artifacts, caches, and dependency installs.                         |
+| [capture_real_gameplay_audio.mjs](capture_real_gameplay_audio.mjs) | One-time real-worker, post-master A/V capture for perceptual audio review.       |
 
 ## Propagated devel scripts
 

@@ -34,6 +34,7 @@ import {
   advance_camera_for_ball,
   create_camera_state,
   get_camera_zoom,
+  latch_camera_impact,
   reset_camera_for_roll,
   show_camera_result,
   with_reduced_motion,
@@ -332,7 +333,7 @@ export function Game(props: GameProps): JSX.Element {
       // animation frame can interpolate the terminal snapshot. Latch that
       // physical endpoint so the result holds the roll's final framing.
       if (camera !== undefined && match_state().phase === "rolling" && ball.in_pit) {
-        apply_camera(advance_camera_for_ball(camera, ball.y));
+        apply_camera(advance_camera_for_ball(camera, ball.y, ball.x));
       }
     }
     if (match_state().phase !== "rack_resetting") return;
@@ -350,6 +351,11 @@ export function Game(props: GameProps): JSX.Element {
       if (cues.audio !== undefined) audio?.record_impact(cues.audio);
       if (!props.reduced_motion() && cues.visual !== undefined) {
         renderer?.record_impact(cues.visual, timestamp);
+      }
+      if (camera !== undefined && event.first_ball_pin_impact && event.ball_pin !== undefined) {
+        apply_camera(
+          latch_camera_impact(camera, event.ball_pin.centroid_x, event.ball_pin.centroid_y),
+        );
       }
       set_impact_window_count((count) => count + 1);
       if (event.first_ball_pin_impact) set_first_impact_seen(true);
@@ -471,7 +477,8 @@ export function Game(props: GameProps): JSX.Element {
         const previous_ball = read_snapshot_ball(snapshot_holder.previous, ball_offset);
         const current_ball = read_snapshot_ball(snapshot_holder.current, ball_offset);
         const interpolated_y = previous_ball.y + (current_ball.y - previous_ball.y) * alpha;
-        apply_camera(advance_camera_for_ball(camera, interpolated_y));
+        const interpolated_x = previous_ball.x + (current_ball.x - previous_ball.x) * alpha;
+        apply_camera(advance_camera_for_ball(camera, interpolated_y, interpolated_x));
       }
       const commands = renderer.draw(alpha, timestamp);
       const pin_count = commands.filter(
@@ -562,6 +569,7 @@ export function Game(props: GameProps): JSX.Element {
     renderer = create_game_renderer(context);
     audio = create_audio_controller();
     audio.set_muted(props.mute_enabled());
+    audio.preload();
     camera = create_camera_state(get_rack_pin_count(props.setup.pin_count));
     apply_camera(camera);
     const resize_observer = new ResizeObserver(resize_canvas);

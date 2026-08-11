@@ -7,6 +7,12 @@
   show the full 990-pin approach, maximum impact, cascade, and result stages.
 - Added a setup-page build identity that derives the package version, Git revision, and last commit
   time during the normal build, with clear local fallbacks for non-built development sessions.
+- Added a six-file CC0 physical sample bank for bowling roll, impact, clatter, knock, thump, and
+  hard-object layers. [src/assets/audio/LICENSES.md](../src/assets/audio/LICENSES.md) records each
+  source, author, URL, derivative operation, and SHA-256 hash for future provenance review.
+- Added [devel/capture_real_gameplay_audio.mjs](../devel/capture_real_gameplay_audio.mjs), a
+  real-worker post-master WebM capture for complete 990-pin and off-center ten-pin rolls. Its
+  ignored artifacts preserve worker milestones and analyser evidence for human A/V review.
 
 - Added twelve freshly captured 16:10 gameplay screenshots, a five-second real-worker 105-pin
   cascade animation with static fallbacks, and dedicated 1,000-pin action and arcade moments
@@ -58,6 +64,13 @@
 - Strike and spare results now use dominant, lane-centered payoff treatments with large typography,
   color, rays, and confetti. Reduced-motion play retains the strong readable result without the
   decorative motion.
+- The shot camera now follows the real ball corridor during approach, latches its first-impact
+  centroid through the cascade, and eases back to a centered result. Edge and gutter entries retain
+  their nearby rack context, while reduced motion keeps the neutral composition.
+- Audio now leads with the verified CC0 physical samples for rolling, first impact, collision
+  cascade, and deck contact. It preloads bytes before the player gesture, decodes on activation,
+  falls back procedurally if a sample is unavailable, bounds simultaneous voices through a
+  compressor, and preserves mute and disposal ownership.
 
 - The 990-pin shot now receives a meaningful camera push while reduced motion
   is an explicitly selected, fixed-composition accessibility alternative rather
@@ -76,6 +89,9 @@
 
 ### Fixes and Maintenance
 
+- Stabilized each fallen pin's presentation-only roll pose by pin identity. Tiny late physics-axis
+  corrections now preserve apparent depth, scale, side lighting, and deck contact instead of
+  making nearly settled pins twitch between unrelated dimensional poses.
 - Added an explicitly deferred oil-pattern roadmap note: a future practice or advanced mode may
   explore deterministic, understandable lane friction variation after dedicated gameplay research.
 
@@ -93,6 +109,9 @@
   design and acceptance target. Motion accessibility now has one compact
   contract for preserved information, a usable lower-motion alternative, and
   saved preference behavior instead of repeated camera and effect constraints.
+- Corrected AudioParam ramp assignment so physical impact transients reach the master mix instead
+  of being silenced. The lane bed yields at first contact, leaving the real cascade and result cue
+  readable rather than masking them.
 
 ### Decisions and Failures
 
@@ -101,6 +120,8 @@
   scoring exceptions.
 - Kept oil-pattern chaos out of this rebuild. A fair, learnable treatment needs its own visible
   feedback and deterministic design, so it remains a roadmap item rather than a hidden change.
+- Kept physics and scoring unchanged. The dynamic camera and sample-driven mix present authoritative
+  ball paths and Rapier contact windows; they do not redirect a roll, alter pins, or change scores.
 
 - Falsified camera projection and command generation as the 990-pin frame bottleneck: together
   they consumed less than one millisecond in isolated measurements. Browser profiling instead
@@ -141,7 +162,7 @@
   journeys 9/9, impact-window tests 3/3, and the physics benchmark/backstop
   30/30 with no timeout. An authoritative first-impact capture now records the
   real cascade evidence used by the presentation checks.
-- `./check_codebase.sh` passed all five gates with 185 Node tests, including
+- `./check_codebase.sh` passed all five gates with 182 Node tests, including
   camera progression and reset, wide-rack scaling, settled versus moving pin
   presentation, and reducer-produced strike/spare burst coverage.
 - The GitHub Pages-ready build completed, and the full Playwright suite passed 29/29 in 14.3
@@ -151,6 +172,10 @@
   and spare states, a 390 px narrow layout, and reduced motion. A fresh
   independent visual review found no blocker across the four requested action
   upgrades.
+- Post-master real-worker A/V captures verify non-silent, non-clipping WebM audio with separate
+  approach, impact/cascade, and result stages. They remain evidence rather than a fixed loudness
+  regression: final acceptance requires listening to complete ten-pin and 990-pin rolls, and the
+  integrated A/V review may reopen camera, collision, celebration, or pacing work.
 
 ## 2026-08-03
 

@@ -20,8 +20,11 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function stable_phase(pin_index: number, axis_angle: number): number {
-  const seed = Math.sin(pin_index * 12.9898 + axis_angle * 5.398) * 43_758.5453;
+function stable_phase(pin_index: number): number {
+  // The physical capsule axis can make tiny solver corrections after the pin
+  // has nearly stopped. Keep the unresolved roll-about-axis pose attached to
+  // pin identity so those corrections cannot reshuffle its apparent side.
+  const seed = Math.sin(pin_index * 12.9898 + 5.398) * 43_758.5453;
   return seed - Math.floor(seed);
 }
 
@@ -38,7 +41,7 @@ export function derive_fallen_pin_presentation(
   velocity_y: number,
   motion_energy: number,
 ): FallenPinPresentation {
-  const phase = stable_phase(pin_index, axis_angle);
+  const phase = stable_phase(pin_index);
   const roll_phase = phase * Math.PI * 2;
   const speed = Math.hypot(velocity_x, velocity_y);
   const moving = clamp(motion_energy, 0, 1);

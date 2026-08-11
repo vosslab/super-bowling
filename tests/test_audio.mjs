@@ -119,6 +119,7 @@ class FakeAudioContext {
     this.compressors = [];
     this.resume_count = 0;
     this.close_count = 0;
+    this.decode_count = 0;
   }
 
   async resume() {
@@ -162,6 +163,11 @@ class FakeAudioContext {
     this.buffer_sources.push(source);
     return source;
   }
+
+  async decodeAudioData() {
+    this.decode_count += 1;
+    return new FakeBuffer(1);
+  }
 }
 
 function create_fake_backend() {
@@ -187,6 +193,28 @@ test("audio context starts only through activation and accepts an idempotent rol
   audio.stop_roll();
   assert.equal(factory_calls_before_activation, 0);
   assert.equal(fixture.get_factory_calls(), 1);
+});
+
+test("preload fetches local samples before activation without constructing an audio context", async () => {
+  const fixture = create_fake_backend();
+  const original_fetch = globalThis.fetch;
+  let fetch_started = 0;
+  globalThis.fetch = async () => {
+    fetch_started += 1;
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) };
+  };
+  try {
+    const audio = create_audio_controller(fixture.create_backend);
+    audio.preload();
+    assert.equal(fixture.get_factory_calls(), 0);
+    assert.ok(fetch_started > 0, "preload starts local sample requests");
+    audio.activate();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(fixture.get_factory_calls(), 1);
+    assert.ok(fixture.context.decode_count > 0, "activation decodes preloaded bytes");
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
 });
 
 test("mute immediately stops the rolling voice and gates collision and result voices", () => {

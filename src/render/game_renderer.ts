@@ -6,7 +6,12 @@ import { pin_snapshot_stride, read_snapshot_ball, read_snapshot_pin } from "../s
 import { create_rack } from "../simulation/rack";
 import { create_aim_guide_command, draw_aim_guide } from "./aim_guide";
 import { draw_ball, type BallDrawState } from "./ball";
-import { create_camera_state, get_camera_zoom } from "./camera";
+import {
+  create_camera_state,
+  get_camera_focus_y_fraction,
+  get_camera_horizon_x,
+  get_camera_zoom,
+} from "./camera";
 import type { CameraState } from "./contracts";
 import { derive_fallen_pin_presentation } from "./fallen_pin_presentation";
 import { load_game_assets, type AssetLoadState, type GameAssets } from "./game_assets";
@@ -28,13 +33,8 @@ export {
   type ImpactAccentState,
   type ImpactPresentation,
 } from "./impact_accent";
-
 export type ScreenPoint = { x: number; y: number };
-/**
- * A compact, worker-derived contact location in lane world units. This is
- * presentation-only: callers provide the physics centroid and the renderer
- * projects it with the same camera that draws the rack.
- */
+/** A compact worker-derived contact location, projected with the shared camera. */
 export type GameDrawCommand =
   | { kind: "lane"; width: number; height: number; geometry: LaneGeometry }
   | ImpactAccentCommand
@@ -190,7 +190,6 @@ function projected_row_reveals(projection: LaneProjection, row_y_positions: numb
   }
   return reveals;
 }
-
 function median(values: ReadonlyArray<number>): number {
   if (values.length === 0 || values.some((value) => !Number.isFinite(value))) return 0;
   const sorted = [...values].sort((first, second) => first - second);
@@ -214,7 +213,7 @@ function create_projection(
   const bounds = camera.rack_bounds;
   const lane_half_width = lane_width(bounds.pin_count) / 2;
   const full_half_width = lane_half_width + gutter_width;
-  const focus_y = height * camera_config.shot_zoom_focus_y_fraction;
+  const focus_y = height * get_camera_focus_y_fraction(camera);
   const unzoomed_horizon_y = height * horizon_fraction;
   const unzoomed_near_screen_y = height * near_screen_fraction;
   return {
@@ -246,12 +245,12 @@ function create_projection(
       framing_clamped: false,
       framing_reason: "unsolved",
       presentation_zoom,
-      presentation_focus_y_fraction: camera_config.shot_zoom_focus_y_fraction,
+      presentation_focus_y_fraction: get_camera_focus_y_fraction(camera),
     },
     pixels_per_world_unit:
       ((width * camera_config.near_rail_half_width_fraction) / full_half_width) * presentation_zoom,
     horizon: {
-      x: width / 2,
+      x: get_camera_horizon_x(camera, width, full_half_width),
       y: focus_y + (unzoomed_horizon_y - focus_y) * presentation_zoom,
     },
     near_screen_y: focus_y + (unzoomed_near_screen_y - focus_y) * presentation_zoom,
@@ -550,7 +549,7 @@ export function create_camera_projection(
       framing_clamped: solved.framing.framing_clamped,
       framing_reason: solved.framing.framing_reason,
       presentation_zoom: get_camera_zoom(camera),
-      presentation_focus_y_fraction: camera_config.shot_zoom_focus_y_fraction,
+      presentation_focus_y_fraction: get_camera_focus_y_fraction(camera),
     },
   };
 }

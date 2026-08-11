@@ -12,10 +12,12 @@ controller, with the camera drive and high-impact arcade energy of UNIS Lane Mas
 physical ball, cabinet, or sensors. It is an original keyboard-and-pointer game: choose a line,
 power, angle, and spin, watch the projected path, then commit to the roll.
 
-The lane reacts to the shot. A release-driven camera advances toward the rack, the custom ball
-rolls with visible depth and surface rotation, and physically simulated pins separate into
-readable paths. Strikes and spares earn big, distinct lane celebrations while ordinary rolls keep
-the next decision in view.
+The lane reacts to the shot. A camera starts wide, then derives its late close focus from the
+ball's real approach before latching the first physical impact corridor through the cascade. It
+keeps safe edge and gutter context, then eases back to a centered result; reduced-motion play
+stays neutral. The custom ball rolls with visible depth and surface rotation, and physically
+simulated pins separate into readable paths. Strikes and spares earn big, distinct lane
+celebrations while ordinary rolls keep the next decision in view.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 
@@ -42,8 +44,10 @@ one short real-worker 105-pin animation.
   through five bowls per frame for a super-frame challenge.
 - Keep a practice record for each rack and bowls-per-frame mode: high game, recent scores, best
   frame, longest named strike run, and games bowled.
-- Use original dark-teal lane art, geometric controls, Canvas rendering, synthesized sound, and
-  amber `STRIKE` or cyan `SPARE` result language.
+- Use original dark-teal lane art, geometric controls, Canvas rendering, and current
+  physics-timed bowling audio: bundled provenance-audited CC0 rolling and contact samples (see
+  [src/assets/audio/LICENSES.md](src/assets/audio/LICENSES.md)), with procedural fallback and a
+  working mute control; amber `STRIKE` or cyan `SPARE` result language completes the lane.
 - Keep the next local session ready with recent-player restore and saved presentation settings.
 
 | Scale label | Actual pins |
@@ -58,10 +62,13 @@ one short real-worker 105-pin animation.
 ## What a roll feels like
 
 Aim before release rather than steering after it: move the start point, shape the launch angle
-and hook, then press Space. The camera begins its push as the ball travels, holds the deck through
-the collision, and resets before the next aim. Rapier physics keeps the contact and standing-pin
-state authoritative; the renderer adds depth, shadows, brief motion emphasis, and original
-celebration flare without changing the result.
+and hook, then press Space. The camera begins wide and chooses its late close focus from the
+ball's actual approach. Once a physical impact occurs, it holds that corridor through the
+cascade, leaves enough edge or gutter context to read an off-center shot, and eases to a centered
+result before the next aim. Reduced-motion play keeps this presentation neutral. Rapier physics
+keeps contact and standing-pin state authoritative; recorded bowling, rolling, and contact sounds
+are triggered from those real physics windows, with procedural fallback. The renderer adds depth,
+shadows, brief motion emphasis, and original celebration flare without changing the result.
 
 The game targets a 16:10 landscape desktop browser experience; narrow layouts remain usable, but
 the lane is designed to be seen wide.
@@ -116,12 +123,16 @@ npm run benchmark
 
 ## Status and boundaries
 
-The regulation-lane rebuild and the action presentation pass are shipped in the playable build:
-worker-backed previews, four pre-roll controls, shot-driven deck framing, enhanced ball and pin
-rendering, and strike/spare bursts all have code and browser coverage. The game has no account,
-server-owned state, motion controller, physical-ball hardware, cabinet integration, tickets, or
-prize mechanics. Its reference inspirations inform pacing and readability, not copied art,
-branding, interface assets, or hardware behavior.
+The regulation-lane rebuild and the current action-presentation implementation are available in
+the playable build: worker-backed previews, four pre-roll controls, shot-driven deck framing,
+enhanced ball and pin rendering, and strike/spare bursts all have code and browser coverage. The
+maintained screenshots document the current visual state; complete real-time A/V recordings still
+require human listening and viewing before they establish perceptual quality. The maintainer
+workflow and that evidence boundary are documented in
+[devel/DEVEL_README.md](devel/DEVEL_README.md). The game has no account, server-owned state,
+motion controller, physical-ball hardware, cabinet integration, tickets, or prize mechanics. Its
+reference inspirations inform pacing and readability, not copied art, branding, interface assets,
+or hardware behavior.
 
 The repository includes [deploy-pages.yml](deploy-pages.yml), a copyable root GitHub Actions
 workflow. Copy it to `.github/workflows/deploy-pages.yml` to build `dist/` and publish the Pages

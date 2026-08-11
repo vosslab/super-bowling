@@ -51,6 +51,8 @@ export type AudioContextLike = {
 };
 export type AudioBackendFactory = () => AudioContextLike;
 export type AudioController = {
+  /** Starts local sample downloads without constructing or resuming an audio context. */
+  preload(): void;
   activate(): void;
   set_muted(muted: boolean): void;
   start_roll(): void;
@@ -74,6 +76,7 @@ type ActiveCollisionCue = { end_time_s: number; stop(): void };
 type AudioMix = { lane: GainLike; collision: GainLike; result: GainLike };
 type SampleName = "impact" | "clatter" | "roll" | "knock" | "thump" | "clack";
 type AudioSampleBank = Partial<Record<SampleName, AudioBufferLike>>;
+type AudioSampleBytes = Partial<Record<SampleName, ArrayBuffer>>;
 type ResultHit = {
   at_s: number;
   noise_frequency: number;
@@ -210,11 +213,17 @@ function create_browser_audio_backend(): AudioContextLike {
   return new AudioContext();
 }
 function set_audio_value(parameter: AudioParamLike, value: number, time_s: number): void {
+  if (parameter.setValueAtTime !== undefined) {
+    parameter.setValueAtTime(value, time_s);
+    return;
+  }
   parameter.value = value;
-  parameter.setValueAtTime?.(value, time_s);
 }
 function ramp_audio_value(parameter: AudioParamLike, value: number, time_s: number): void {
-  parameter.linearRampToValueAtTime?.(value, time_s);
+  if (parameter.linearRampToValueAtTime !== undefined) {
+    parameter.linearRampToValueAtTime(value, time_s);
+    return;
+  }
   parameter.value = value;
 }
 function stop_rolling_voice(voice: RollingVoice | undefined, time_s: number): void {
@@ -277,23 +286,59 @@ function update_rolling_voice(voice: RollingVoice, speed: number, time_s: number
   );
 }
 
-async function load_sample_bank(context: AudioContextLike): Promise<AudioSampleBank> {
-  if (context.decodeAudioData === undefined || typeof fetch === "undefined") return {};
-  const entries = await Promise.all(
-    (Object.entries(sample_paths) as Array<[SampleName, string]>).map(async ([name, path]) => {
-      try {
-        const response = await fetch(path);
-        if (!response.ok) return undefined;
-        return [name, await context.decodeAudioData!(await response.arrayBuffer())] as const;
-      } catch {
-        // The procedural voice remains the local/offline fallback for a missing or bad decode.
-        return undefined;
-      }
-    }),
-  );
-  return Object.fromEntries(
-    entries.filter((entry): entry is readonly [SampleName, AudioBufferLike] => entry !== undefined),
-  );
+/**
+ * Fetching static, same-origin sample bytes is safe before a player gesture.
+ * Decoding remains activation-owned because it requires an AudioContext.
+ */
+async function fetch_sample_bytes(): Promise<AudioSampleBytes> {
+  if (typeof fetch === "undefined") return {};
+  try {
+    const entries = await Promise.all(
+      (Object.entries(sample_paths) as Array<[SampleName, string]>).map(async ([name, path]) => {
+        try {
+          const response = await fetch(path);
+          if (!response.ok) return undefined;
+          return [name, await response.arrayBuffer()] as const;
+        } catch {
+          // The procedural voice remains the local/offline fallback for a missing sample.
+          return undefined;
+        }
+      }),
+    );
+    return Object.fromEntries(
+      entries.filter((entry): entry is readonly [SampleName, ArrayBuffer] => entry !== undefined),
+    );
+  } catch {
+    return {};
+  }
+}
+
+async function decode_sample_bank(
+  context: AudioContextLike,
+  sample_bytes: AudioSampleBytes,
+): Promise<AudioSampleBank> {
+  if (context.decodeAudioData === undefined) return {};
+  try {
+    const entries = await Promise.all(
+      (Object.entries(sample_bytes) as Array<[SampleName, ArrayBuffer]>).map(
+        async ([name, bytes]) => {
+          try {
+            return [name, await context.decodeAudioData!(bytes)] as const;
+          } catch {
+            // A bad decode is isolated to this layer; the other samples and fallback remain usable.
+            return undefined;
+          }
+        },
+      ),
+    );
+    return Object.fromEntries(
+      entries.filter(
+        (entry): entry is readonly [SampleName, AudioBufferLike] => entry !== undefined,
+      ),
+    );
+  } catch {
+    return {};
+  }
 }
 
 function create_noise_buffer(context: AudioContextLike, duration_s: number): AudioBufferLike {
@@ -585,7 +630,8 @@ export function create_audio_controller(
   let noise_buffer: AudioBufferLike | undefined;
   let lane_texture_buffer: AudioBufferLike | undefined;
   let sample_bank: AudioSampleBank = {};
-  let sample_load_started = false;
+  let sample_bytes_load: Promise<AudioSampleBytes> | undefined;
+  let sample_decode_load: Promise<AudioSampleBank> | undefined;
   let sample_variation = 0;
   let muted = false;
   let rolling_voice: RollingVoice | undefined;
@@ -598,25 +644,41 @@ export function create_audio_controller(
   function can_play(): boolean {
     return context !== undefined && !muted && !disposed;
   }
+  function begin_sample_preload(): Promise<AudioSampleBytes> {
+    if (sample_bytes_load === undefined) sample_bytes_load = fetch_sample_bytes().catch(() => ({}));
+    return sample_bytes_load;
+  }
+  function install_sample_bank(loaded: AudioSampleBank): void {
+    if (disposed || context === undefined) return;
+    sample_bank = loaded;
+    if (!roll_active || impact_started || muted || rolling_voice?.sample_backed === true) return;
+    if (loaded.roll === undefined || mix === undefined) return;
+    stop_rolling_voice(rolling_voice, context.currentTime);
+    rolling_voice = create_sample_rolling_voice(context, mix.lane, loaded.roll, roll_speed);
+  }
+  function decode_preloaded_samples(): void {
+    if (context === undefined || sample_decode_load !== undefined) return;
+    const decoding_context = context;
+    sample_decode_load = begin_sample_preload().then((sample_bytes) =>
+      decode_sample_bank(decoding_context, sample_bytes),
+    );
+    void sample_decode_load.then((loaded) => {
+      if (context !== decoding_context) return;
+      install_sample_bank(loaded);
+    });
+  }
+  function preload(): void {
+    if (disposed) return;
+    void begin_sample_preload();
+  }
   function activate(): void {
     if (disposed) return;
     if (context === undefined) {
       context = create_backend();
       mix = create_audio_mix(context);
     }
-    void context.resume();
-    if (!sample_load_started && context !== undefined) {
-      sample_load_started = true;
-      void load_sample_bank(context).then((loaded) => {
-        if (disposed || context === undefined) return;
-        sample_bank = loaded;
-        if (!roll_active || impact_started || muted || rolling_voice?.sample_backed === true)
-          return;
-        if (loaded.roll === undefined || mix === undefined) return;
-        stop_rolling_voice(rolling_voice, context.currentTime);
-        rolling_voice = create_sample_rolling_voice(context, mix.lane, loaded.roll, roll_speed);
-      });
-    }
+    void context.resume().catch(() => undefined);
+    decode_preloaded_samples();
   }
   function set_muted(next_muted: boolean): void {
     if (muted === next_muted) return;
@@ -733,6 +795,7 @@ export function create_audio_controller(
     if (context !== undefined) void context.close();
   }
   return {
+    preload,
     activate,
     set_muted,
     start_roll,

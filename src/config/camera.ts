@@ -51,7 +51,30 @@ export const camera_config = {
   /** A short visual ease avoids a cut from impact hold into the result composition. */
   result_camera_transition_ms: 560,
   shot_zoom_start_progress: 0.44,
-  shot_zoom_full_progress: 0.84,
+  /** Maximum impact scale arrives only once the ball and local entry field can share the frame. */
+  shot_zoom_full_progress: 0.98,
+  /** The close view starts panning only after the calm establishing approach. */
+  shot_focus_start_progress: 0.5,
+  /** The bounded camera catches up with the ball before it reaches the deck. */
+  shot_focus_full_progress: 0.82,
+  /** Extra rack extent used by the normalized focus-bound projection. */
+  shot_focus_edge_context: 0.8,
+  /** Keep an actual edge/gutter ball away from the canvas edge at close zoom. */
+  shot_focus_subject_margin_fraction: 0.06,
+  /** The close shot temporarily raises its projection anchor while the ball is still separated from the deck. */
+  shot_vertical_focus_start_progress: 0.54,
+  /** Peak vertical relief keeps the moving ball in a lower safe band before entry. */
+  shot_vertical_focus_peak_progress: 0.76,
+  /** The projection returns to the deck anchor before physical first contact. */
+  shot_vertical_focus_release_progress: 0.98,
+  /** Bounded extra screen anchor for the ball-plus-entry corridor composition. */
+  shot_vertical_focus_relief_fraction: 0.13,
+  /**
+   * First contact returns to the stable deck anchor. A deeper real contact is
+   * already drawn higher by perspective; moving the anchor downward would
+   * compound that projection and push the ball below the frame.
+   */
+  shot_vertical_impact_focus_fraction: 0.04,
   shot_zoom_focus_y_fraction: 0.08,
   near_rail_half_width_fraction: 0.475,
   near_lane_y_fraction: 0.99,
