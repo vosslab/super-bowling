@@ -344,6 +344,14 @@ input:focus-visible {
 .fixture_tools .fixture_button {
   margin: 0;
 }
+.build_identity {
+  margin: 0.9rem auto 0;
+  color: #a9c6ce;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.025em;
+  text-align: center;
+}
 .sr_only {
   position: absolute;
   width: 1px;

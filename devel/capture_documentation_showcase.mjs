@@ -1,4 +1,4 @@
-/* global document */
+/* global document, HTMLInputElement */
 
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, stat } from "node:fs/promises";
@@ -7,6 +7,9 @@ import { promisify } from "node:util";
 
 import {
   capture_live_screenshot,
+  freeze_mid_roll_canvas,
+  install_canvas_ellipse_probe,
+  remove_frozen_mid_roll_canvas,
   png_metadata,
   start_aiming_state,
   wait_for_best_frame_earned,
@@ -81,7 +84,7 @@ async function capture_thousand_pin_action(browser, base_url) {
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Space");
     await wait_for_phase(page, "rolling");
-    await wait_for_numeric_attribute(page, "data-camera-physical-progress", 0.58);
+    await wait_for_numeric_attribute(page, "data-camera-physical-progress", 0.34);
     captures.push(
       await capture_documentation_image(
         page,
@@ -295,6 +298,84 @@ async function capture_result(browser, base_url, fixture, celebration, filename)
   }
 }
 
+async function set_real_ten_pin_pocket_shot(page) {
+  const start_position = page.locator('[data-control="start-position"]');
+  const power = page.locator('[data-control="power"]');
+  await start_position.evaluate((element) => {
+    if (!(element instanceof HTMLInputElement)) throw new Error("Expected range input.");
+    element.value = "-20";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await power.evaluate((element) => {
+    if (!(element instanceof HTMLInputElement)) throw new Error("Expected range input.");
+    element.value = "18";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+async function capture_real_ten_pin_arcade_evidence(browser, base_url) {
+  console.log("==> Capturing real ten-pin ball, physical strike, and payoff evidence");
+  const context = await browser.newContext({ viewport });
+  await install_canvas_ellipse_probe(context);
+  const page = await context.newPage();
+  page.setDefaultTimeout(documentation_roll_timeout_ms);
+  const captures = [];
+  try {
+    await start_aiming_state(
+      page,
+      base_url,
+      "10 mode - 10 pins",
+      "Start 10 mode - 10 pins for 1 player",
+      10,
+    );
+    await set_real_ten_pin_pocket_shot(page);
+    await page.getByRole("button", { name: "Bowl now" }).click();
+    await wait_for_phase(page, "rolling");
+    await wait_for_numeric_attribute(page, "data-camera-physical-progress", 0.34);
+    const frozen_ball = await freeze_mid_roll_canvas(page);
+    try {
+      captures.push(
+        await capture_documentation_image(
+          page,
+          "classic_ball_in_motion.png",
+          "ten_pin_moving_ball",
+          10,
+        ),
+      );
+    } finally {
+      await remove_frozen_mid_roll_canvas(page, frozen_ball);
+    }
+    await wait_for_phase(page, "result");
+    const strike_celebration = page.locator('[data-celebration="strike"]');
+    await strike_celebration.waitFor();
+    await strike_celebration.evaluate((element) => {
+      element.setAttribute("style", "visibility: hidden");
+    });
+    captures.push(
+      await capture_documentation_image(
+        page,
+        "classic_physical_strike_aftermath.png",
+        "ten_pin_physical_strike_aftermath",
+        10,
+      ),
+    );
+    await strike_celebration.evaluate((element) => {
+      element.removeAttribute("style");
+    });
+    captures.push(
+      await capture_documentation_image(
+        page,
+        "classic_strike.png",
+        "ten_pin_real_strike_payoff",
+        10,
+      ),
+    );
+    return captures;
+  } finally {
+    await context.close();
+  }
+}
+
 async function capture_best_frame(browser, base_url) {
   console.log("==> Capturing the real 990-pin BEST FRAME moment");
   const context = await browser.newContext({ viewport });
@@ -366,9 +447,7 @@ export async function capture_documentation_showcase(browser, base_url) {
   captures.push(...(await capture_hundred_pin_action(browser, base_url)));
   captures.push(await capture_hundred_pin_animation(browser, base_url));
   captures.push(await verify_hundred_pin_reduced_motion(browser, base_url));
-  captures.push(
-    await capture_result(browser, base_url, "strike_result", "strike", "classic_strike.png"),
-  );
+  captures.push(...(await capture_real_ten_pin_arcade_evidence(browser, base_url)));
   captures.push(
     await capture_result(browser, base_url, "spare_pickup", "spare", "classic_spare.png"),
   );

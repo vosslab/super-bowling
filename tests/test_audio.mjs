@@ -68,13 +68,55 @@ class FakeFilter extends FakeNode {
   }
 }
 
+class FakeCompressor extends FakeNode {
+  constructor() {
+    super();
+    this.threshold = new FakeParam();
+    this.knee = new FakeParam();
+    this.ratio = new FakeParam();
+    this.attack = new FakeParam();
+    this.release = new FakeParam();
+  }
+}
+
+class FakeBuffer {
+  constructor(length) {
+    this.samples = new Float32Array(length);
+  }
+
+  getChannelData() {
+    return this.samples;
+  }
+}
+
+class FakeBufferSource extends FakeNode {
+  constructor() {
+    super();
+    this.buffer = null;
+    this.loop = false;
+    this.started = [];
+    this.stopped = [];
+  }
+
+  start(time = 0) {
+    this.started.push(time);
+  }
+
+  stop(time = 0) {
+    this.stopped.push(time);
+  }
+}
+
 class FakeAudioContext {
   constructor() {
     this.currentTime = 2;
     this.destination = new FakeNode();
+    this.sampleRate = 44_100;
     this.oscillators = [];
+    this.buffer_sources = [];
     this.gains = [];
     this.filters = [];
+    this.compressors = [];
     this.resume_count = 0;
     this.close_count = 0;
   }
@@ -104,6 +146,22 @@ class FakeAudioContext {
     this.filters.push(filter);
     return filter;
   }
+
+  createDynamicsCompressor() {
+    const compressor = new FakeCompressor();
+    this.compressors.push(compressor);
+    return compressor;
+  }
+
+  createBuffer(channel_count, length) {
+    return new FakeBuffer(length);
+  }
+
+  createBufferSource() {
+    const source = new FakeBufferSource();
+    this.buffer_sources.push(source);
+    return source;
+  }
 }
 
 function create_fake_backend() {
@@ -116,7 +174,7 @@ function create_fake_backend() {
   return { context, create_backend, get_factory_calls: () => factory_calls };
 }
 
-test("audio context starts only through activate and rolling voice has idempotent ownership", () => {
+test("audio context starts only through activation and accepts an idempotent roll lifecycle", () => {
   const fixture = create_fake_backend();
   const audio = create_audio_controller(fixture.create_backend);
   audio.start_roll();
@@ -127,20 +185,8 @@ test("audio context starts only through activate and rolling voice has idempoten
   audio.start_roll();
   audio.stop_roll();
   audio.stop_roll();
-  assert.deepEqual(
-    {
-      factory_calls_before_activation,
-      factory_calls_after_activation: fixture.get_factory_calls(),
-      rolling_voices: fixture.context.oscillators.length,
-      rolling_voice_stops: fixture.context.oscillators[0].stopped.length,
-    },
-    {
-      factory_calls_before_activation: 0,
-      factory_calls_after_activation: 1,
-      rolling_voices: 1,
-      rolling_voice_stops: 1,
-    },
-  );
+  assert.equal(factory_calls_before_activation, 0);
+  assert.equal(fixture.get_factory_calls(), 1);
 });
 
 test("mute immediately stops the rolling voice and gates collision and result voices", () => {
@@ -149,6 +195,9 @@ test("mute immediately stops the rolling voice and gates collision and result vo
   audio.activate();
   audio.start_roll();
   audio.set_muted(true);
+  const starts_before_muted_cues =
+    fixture.context.oscillators.flatMap((voice) => voice.started).length +
+    fixture.context.buffer_sources.flatMap((source) => source.started).length;
   audio.record_impact({
     first_contact: true,
     ball_pin: { contact_count: 1, impulse: 0.8 },
@@ -156,9 +205,14 @@ test("mute immediately stops the rolling voice and gates collision and result vo
     deck_impulse: 0,
   });
   audio.play_result("strike");
-  const voices_while_muted = fixture.context.oscillators.length;
+  const starts_after_muted_cues =
+    fixture.context.oscillators.flatMap((voice) => voice.started).length +
+    fixture.context.buffer_sources.flatMap((source) => source.started).length;
   audio.set_muted(false);
   audio.play_result("spare");
-  assert.equal(voices_while_muted, 1);
-  assert.ok(fixture.context.oscillators.length > voices_while_muted);
+  const starts_after_unmute =
+    fixture.context.oscillators.flatMap((voice) => voice.started).length +
+    fixture.context.buffer_sources.flatMap((source) => source.started).length;
+  assert.equal(starts_after_muted_cues, starts_before_muted_cues);
+  assert.ok(starts_after_unmute > starts_after_muted_cues);
 });

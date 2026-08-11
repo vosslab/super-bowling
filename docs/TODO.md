@@ -14,6 +14,10 @@ current bowling and presentation work.
   the same missing settled-roll data and belong in one change.
 - Decide whether a clean-game marker adds enough value to the final summary to justify another
   statistic. It is derivable from completed frames and needs no persistence change.
+- Research an optional advanced/practice-mode lane-oil system before changing physics. It should
+  use deterministic or seeded spatial friction maps, make conditioning understandable to players,
+  and keep technique plus preview feedback learnable and fair. This is explicitly deferred from
+  the current arcade-presentation rebuild.
 
 ## Motion review
 

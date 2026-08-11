@@ -8,6 +8,7 @@ import { create_aim_guide_command, draw_aim_guide } from "./aim_guide";
 import { draw_ball, type BallDrawState } from "./ball";
 import { create_camera_state, get_camera_zoom } from "./camera";
 import type { CameraState } from "./contracts";
+import { derive_fallen_pin_presentation } from "./fallen_pin_presentation";
 import { load_game_assets, type AssetLoadState, type GameAssets } from "./game_assets";
 import { interpolate_shortest_angle } from "./interpolation";
 import {
@@ -29,7 +30,6 @@ export {
 } from "./impact_accent";
 
 export type ScreenPoint = { x: number; y: number };
-
 /**
  * A compact, worker-derived contact location in lane world units. This is
  * presentation-only: callers provide the physics centroid and the renderer
@@ -70,7 +70,6 @@ export type GameRenderer = {
 
 export type AimGuideState = { lateral_offset: number; preview_path: Float32Array };
 export type LaneArrow = { x: number; y: number; size: number; tip_y: number; base_y: number };
-
 /** A rational, one-point perspective definition shared by lane and bodies. */
 export type LaneProjection = {
   x_extent: number;
@@ -123,14 +122,12 @@ export type LaneGeometry = {
 
 export type WorldPoint = { x: number; y: number; z: number };
 type ProjectedBody = { base: ScreenPoint; crown: ScreenPoint; width: number; base_depth: number };
-
 // Values below one compress the complete deck; values above one exaggerate it.
 // The finite interval solves the shipped reveal target at every supported rack
 // size without a rack-specific factor.
 const deck_exaggeration_bounds = { minimum: 0.02, maximum: 12 } as const;
 
 const default_ball_design = normalize_ball_design({});
-
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -708,6 +705,9 @@ function create_pin_command(
     motion_energy,
     trail_x,
     trail_y,
+    fallen_presentation: fallen
+      ? derive_fallen_pin_presentation(pin_index, angle, velocity_x, velocity_y, motion_energy)
+      : undefined,
   };
 }
 

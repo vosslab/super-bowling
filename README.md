@@ -14,20 +14,21 @@ power, angle, and spin, watch the projected path, then commit to the roll.
 
 The lane reacts to the shot. A release-driven camera advances toward the rack, the custom ball
 rolls with visible depth and surface rotation, and physically simulated pins separate into
-readable paths. Strikes and spares earn quick, distinct lane-side celebrations while ordinary
-rolls keep the next decision in view.
+readable paths. Strikes and spares earn big, distinct lane celebrations while ordinary rolls keep
+the next decision in view.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 
 ![A full-power ball opening the first collision wave through the center of the 990-pin rack](docs/screenshots/thousand_pin_impact_wave.png)
 ![Hundreds of individually simulated pins spreading into a deep 990-pin collision field](docs/screenshots/thousand_pin_cascade.png)
-![Amber STRIKE stinger below a cleared ten-pin deck](docs/screenshots/classic_strike.png)
-![Cyan SPARE stinger below a clean ten-pin pickup](docs/screenshots/classic_spare.png)
+![A dimensional blue player ball with glossy lighting, recessed finger holes, surface pattern, and lane contact shadow during a normal ten-pin roll](docs/screenshots/classic_ball_in_motion.png)
+![A lane-wide amber STRIKE payoff over a physically cleared ten-pin deck](docs/screenshots/classic_strike.png)
+![A lane-wide cyan SPARE payoff over a clean second-roll pickup](docs/screenshots/classic_spare.png)
 <!-- screenshots:end -->
 
 See the complete [1,000-pin action tour](docs/showcase/THOUSAND_PIN_ACTION.md) and the
-[arcade moments gallery](docs/showcase/ARCADE_MOMENTS.md) for twelve current screenshots and one
-short real-worker 105-pin animation.
+[arcade moments gallery](docs/showcase/ARCADE_MOMENTS.md) for current real-worker screenshots and
+one short real-worker 105-pin animation.
 
 ## Make the shot yours
 

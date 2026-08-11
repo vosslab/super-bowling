@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, type JSX } from "solid-js";
 
 import { create_player_id } from "../brands";
+import { build_info } from "../build_info";
 import { get_mode_label, supported_pin_counts, type PinCount } from "../config/pin_counts";
 import { normalize_ball_design, type BallDesign } from "../designer/ball_design";
 import { BallDesigner } from "../designer/ball_designer";
@@ -351,6 +352,10 @@ export function Setup(props: SetupProps): JSX.Element {
             </button>
           </aside>
         </Show>
+        <p class="build_identity" aria-label="Build information">
+          Version {build_info.version} · revision {build_info.revision} · committed{" "}
+          {build_info.commit_time}
+        </p>
       </section>
     </main>
   );

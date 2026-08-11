@@ -1,3 +1,5 @@
+import type { FallenPinPresentation } from "./fallen_pin_presentation";
+
 export type PinSpriteKind = "standing_pin" | "fallen_pin";
 
 export type PinDrawState = {
@@ -14,6 +16,7 @@ export type PinDrawState = {
   motion_energy: number;
   trail_x: number;
   trail_y: number;
+  fallen_presentation?: FallenPinPresentation;
 };
 
 export type PinAssets = {
@@ -55,15 +58,29 @@ export function draw_pin(
   state: PinDrawState,
 ): void {
   const source = state.kind === "standing_pin" ? assets.upright : assets.fallen;
-  const display_angle =
+  const physical_angle =
     state.kind === "fallen_pin" ? canonical_fallen_pin_angle(state.angle) : state.angle;
+  const pose = state.kind === "fallen_pin" ? state.fallen_presentation : undefined;
+  const presentation_offset = pose?.screen_rotation_offset ?? 0;
+  const display_angle =
+    physical_angle +
+    (Math.sin(physical_angle + presentation_offset) > 0
+      ? -Math.abs(presentation_offset)
+      : presentation_offset);
   context.fillStyle = `rgba(39, 27, 20, ${Math.max(0.16, 0.54 - state.motion_energy * 0.28)})`;
   context.beginPath();
   context.ellipse(
     state.ground_x,
     state.ground_y,
-    Math.max(1, state.width * (state.kind === "fallen_pin" ? 0.43 : 0.38)),
-    Math.max(1, state.height * (state.kind === "fallen_pin" ? 0.18 : 0.055)),
+    Math.max(
+      1,
+      state.width * (state.kind === "fallen_pin" ? 0.43 * (pose?.long_axis_scale ?? 1) : 0.38),
+    ),
+    Math.max(
+      1,
+      state.height *
+        (state.kind === "fallen_pin" ? 0.18 + (pose?.contact_softness ?? 0) * 0.08 : 0.055),
+    ),
     display_angle,
     0,
     Math.PI * 2,
@@ -81,9 +98,33 @@ export function draw_pin(
 
   context.globalAlpha = 1;
   set_rotated_transform(context, state.x, state.y, display_angle);
+  if (pose !== undefined) context.scale(pose.long_axis_scale, pose.cross_axis_scale);
   // The SVG's crown points right before rotation. Its screen-space y offset
   // is therefore proportional to sin(angle), so the canonical angle above
   // guarantees that the crown cannot land below the base.
   context.drawImage(source, -state.width / 2, -state.height / 2, state.width, state.height);
+  // Large nearby pins receive two inexpensive solid overlays. They give a
+  // fallen profile a visible rounded end, side light, and contact depth;
+  // distant 990-pin bodies keep the one-sprite fast path.
+  if (pose !== undefined && state.width >= 22) {
+    const end_x = -state.width * 0.39;
+    const end_radius = state.height * 0.32;
+    context.fillStyle = `rgba(92, 67, 46, ${0.22 + Math.abs(Math.sin(pose.roll_phase)) * 0.16})`;
+    context.beginPath();
+    context.ellipse(end_x, 0, end_radius, Math.max(1, end_radius * 0.58), 0, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "rgba(255, 250, 230, 0.38)";
+    context.beginPath();
+    context.ellipse(
+      end_x + Math.cos(pose.roll_phase) * end_radius * 0.3,
+      -end_radius * 0.18,
+      Math.max(1, end_radius * 0.38),
+      Math.max(1, end_radius * 0.17),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
   context.resetTransform();
 }

@@ -30,12 +30,15 @@ import {
   start_position_in_boards,
 } from "../game/aim";
 import {
+  advance_camera_result,
   advance_camera_for_ball,
   create_camera_state,
   get_camera_zoom,
   reset_camera_for_roll,
+  show_camera_result,
   with_reduced_motion,
 } from "../render/camera";
+import { camera_config } from "../config/camera";
 import type { CameraState } from "../render/contracts";
 import { format_frame_roll_slots } from "../game/score_display";
 import { bowls_per_frame_rule_text } from "../game/bowls_per_frame";
@@ -141,6 +144,7 @@ export function Game(props: GameProps): JSX.Element {
   >();
   const [camera_progress, set_camera_progress] = createSignal(0);
   const [camera_physical_progress, set_camera_physical_progress] = createSignal(0);
+  const [camera_presentation_zoom, set_camera_presentation_zoom] = createSignal(1);
   const [impact_window_count, set_impact_window_count] = createSignal(0);
   const [first_impact_seen, set_first_impact_seen] = createSignal(false);
   const [last_impact_strength, set_last_impact_strength] = createSignal(0);
@@ -163,6 +167,7 @@ export function Game(props: GameProps): JSX.Element {
   let renderer: GameRenderer | undefined;
   let audio: AudioController | undefined;
   let camera: CameraState | undefined;
+  let camera_result_transition_started_at: number | undefined;
   let animation_frame = 0;
   let result_timer: number | undefined;
   let result_available_at = 0;
@@ -179,6 +184,10 @@ export function Game(props: GameProps): JSX.Element {
     camera = next_camera;
     const presentation_camera = with_reduced_motion(camera, props.reduced_motion());
     renderer?.set_camera(presentation_camera);
+    const presentation_zoom = get_camera_zoom(presentation_camera);
+    if (camera_presentation_zoom() !== presentation_zoom) {
+      set_camera_presentation_zoom(presentation_zoom);
+    }
     if (camera_physical_progress() !== camera.shot_progress) {
       set_camera_physical_progress(camera.shot_progress);
     }
@@ -196,6 +205,7 @@ export function Game(props: GameProps): JSX.Element {
   function execute_effect(effect: MatchEffect): void {
     if (effect.type === "reset_rack") {
       if (camera !== undefined && renderer !== undefined) {
+        camera_result_transition_started_at = undefined;
         apply_camera(reset_camera_for_roll(camera));
       }
       props.client.send({ type: "reset_rack", pin_count: effect.pin_count });
@@ -203,6 +213,7 @@ export function Game(props: GameProps): JSX.Element {
     if (effect.type === "launch") {
       reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
+        camera_result_transition_started_at = undefined;
         apply_camera(reset_camera_for_roll(camera));
       }
       props.client.send({
@@ -217,6 +228,7 @@ export function Game(props: GameProps): JSX.Element {
     if (effect.type === "prepare_next_roll") {
       reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
+        camera_result_transition_started_at = undefined;
         apply_camera(reset_camera_for_roll(camera));
       }
       props.client.send({ type: "prepare_next_roll" });
@@ -382,6 +394,10 @@ export function Game(props: GameProps): JSX.Element {
           message: "The roll took too long to settle. Start a new match to recover.",
         });
       } else {
+        if (camera !== undefined) {
+          camera_result_transition_started_at = performance.now();
+          apply_camera(show_camera_result(camera));
+        }
         const next = dispatch({ type: "settled", settled_roll: event });
         audio?.stop_roll();
         evaluate_earned_moment(before, next);
@@ -434,6 +450,17 @@ export function Game(props: GameProps): JSX.Element {
 
   function draw_frame(timestamp: number): void {
     if (renderer !== undefined && snapshot_holder.current !== undefined) {
+      if (
+        camera !== undefined &&
+        camera.shot_phase === "result" &&
+        camera_result_transition_started_at !== undefined &&
+        !props.reduced_motion()
+      ) {
+        const elapsed_ms = timestamp - camera_result_transition_started_at;
+        const transition_progress = elapsed_ms / camera_config.result_camera_transition_ms;
+        apply_camera(advance_camera_result(camera, transition_progress));
+        if (transition_progress >= 1) camera_result_transition_started_at = undefined;
+      }
       const alpha = Math.min(1, (timestamp - snapshot_holder.received_at) / (1000 / 60));
       if (
         camera !== undefined &&
@@ -694,8 +721,7 @@ export function Game(props: GameProps): JSX.Element {
   const current_roll_celebration = (): RollCelebration | undefined =>
     roll_celebration(match_state());
   const current_camera_zoom = (): number => {
-    if (camera === undefined) return 1;
-    return get_camera_zoom(with_reduced_motion(camera, props.reduced_motion()));
+    return camera_presentation_zoom();
   };
 
   return (
@@ -843,7 +869,7 @@ export function Game(props: GameProps): JSX.Element {
             <div
               class="roll_celebration"
               data-celebration={celebration().kind}
-              data-celebration-presentation="deck-safe-stinger"
+              data-celebration-presentation="dominant-lane-payoff"
               aria-hidden="true"
             >
               <div class="celebration_confetti">

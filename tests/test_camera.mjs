@@ -4,11 +4,13 @@ import test from "node:test";
 import { aim_limits } from "../src/game/aim.ts";
 import { get_rack_pin_count, supported_pin_counts } from "../src/config/pin_counts.ts";
 import {
+  advance_camera_result,
   advance_camera_for_ball,
   create_camera_state,
   create_rack_bounds,
   get_camera_zoom,
   reset_camera_for_roll,
+  show_camera_result,
   with_reduced_motion,
 } from "../src/render/camera.ts";
 import {
@@ -158,6 +160,28 @@ test("pushes the shared projection toward the deck from release through impact",
     ),
     "reduced motion and the next decision return to the neutral view",
   );
+});
+
+test("eases each settled impact view into its readable result composition", () => {
+  for (const pin_count of rack_pin_counts) {
+    const impact = advance_camera_for_ball(
+      create_camera_state(pin_count),
+      create_camera_state(pin_count).rack_bounds.back,
+    );
+    const result_start = show_camera_result(impact);
+    const result_middle = advance_camera_result(result_start, 0.5);
+    const result_end = advance_camera_result(result_middle, 1);
+    const zooms = [result_start, result_middle, result_end].map(get_camera_zoom);
+    assert.ok(
+      zooms[0] >= zooms[1] && zooms[1] >= zooms[2],
+      `${pin_count}-pin result view only pulls back after the held impact`,
+    );
+    assert.equal(
+      get_camera_zoom(advance_camera_result(result_end, 2)),
+      zooms[2],
+      `${pin_count}-pin completed result view remains stable`,
+    );
+  }
 });
 
 test("keeps every legal aiming scene inside a representative play canvas", () => {

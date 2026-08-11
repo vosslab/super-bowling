@@ -31,15 +31,28 @@ export const camera_config = {
   /** Desired visible portion of each pin row behind the row in front. */
   rack_row_reveal_fraction: 0.1,
   /**
-   * A roll pushes the shared projection toward the deck. The complete 990-pin
-   * field retains a deliberate minimum push: reducing the move in direct
-   * proportion to rack count made its camera motion effectively invisible.
+   * A roll holds the complete rack in a calm establishing frame until the
+   * ball is visibly committed to the deck, then makes the collision occupy
+   * materially more screen space. The 990-pin field intentionally receives
+   * the largest push: a count-proportional 1.2x adjustment was imperceptible
+   * against that rack's already broad framing.
    */
-  ten_pin_shot_zoom: 1.36,
-  large_rack_minimum_shot_zoom: 1.2,
-  shot_zoom_start_progress: 0.14,
+  ten_pin_shot_zoom: 1.5,
+  /**
+   * The 990-pin collision is a deliberately cropped impact shot. The early
+   * lane view establishes the complete field; this close ceiling then makes
+   * the central collision corridor fill the frame before the ball reaches it.
+   */
+  large_rack_impact_zoom: 5,
+  /** The ten-pin result stays close enough to support its lane celebration. */
+  ten_pin_result_zoom: 1.36,
+  /** The settled-result shot restores enough of the huge field to read it. */
+  large_rack_result_zoom: 1.61,
+  /** A short visual ease avoids a cut from impact hold into the result composition. */
+  result_camera_transition_ms: 560,
+  shot_zoom_start_progress: 0.44,
   shot_zoom_full_progress: 0.84,
-  shot_zoom_focus_y_fraction: 0.12,
+  shot_zoom_focus_y_fraction: 0.08,
   near_rail_half_width_fraction: 0.475,
   near_lane_y_fraction: 0.99,
   // Measured in lane-depth world units. A larger value makes the deck denser.

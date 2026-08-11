@@ -17,6 +17,10 @@ export type CameraState = {
   rack_bounds: RackBounds;
   /** Monotonic physical travel that drives the deck-focused shot projection. */
   shot_progress: number;
+  /** The result composition begins only after the authoritative settled event. */
+  shot_phase: "rolling" | "result";
+  /** Presentation-only progress from the held impact composition to the result view. */
+  result_transition_progress: number;
 };
 
 export type RenderSnapshotPair = {

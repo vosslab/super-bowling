@@ -56,15 +56,20 @@ export function get_ball_pattern_commands(pattern: BallPattern): BallPatternComm
 }
 
 function draw_band(context: CanvasRenderingContext2D, state: BallDrawState, offset: number): void {
-  // A pole-to-pole band stays fixed while the ball rolls around its horizontal axis.
-  const band_x = state.x + offset * state.width;
+  // A tall band follows the rotating sphere rather than sliding across a flat disc.
+  // Its small depth breathing makes the player-selected pattern help communicate roll.
+  const surface_offset = state.surface_offset ?? state.roll_angle;
+  const roll_depth = Math.cos(surface_offset + offset * full_turn) * 0.12;
+  const band_x = state.x + (offset + roll_depth) * state.width;
   context.fillStyle = state.design.accent_color;
+  context.globalAlpha = 0.7 + Math.max(0, roll_depth) * 1.5;
   context.fillRect(
-    band_x - state.width * 0.055,
+    band_x - state.width * (0.042 + Math.abs(roll_depth) * 0.035),
     state.y - state.height * 0.4,
-    state.width * 0.11,
+    state.width * (0.084 + Math.abs(roll_depth) * 0.07),
     state.height * 0.8,
   );
+  context.globalAlpha = 1;
 }
 
 function project_surface_point(
@@ -138,7 +143,7 @@ export function get_ball_hole_commands(state: BallDrawState): BallHoleCommand[] 
 function draw_finger_holes(context: CanvasRenderingContext2D, state: BallDrawState): void {
   for (const hole of get_ball_hole_commands(state)) {
     context.globalAlpha = hole.opacity;
-    context.fillStyle = "rgba(208, 239, 255, 0.24)";
+    context.fillStyle = "rgba(223, 246, 255, 0.38)";
     context.beginPath();
     context.ellipse(
       hole.x - hole.radius_x * 0.1,
@@ -150,17 +155,30 @@ function draw_finger_holes(context: CanvasRenderingContext2D, state: BallDrawSta
       full_turn,
     );
     context.fill();
-    context.fillStyle = "rgba(3, 11, 25, 0.94)";
+    context.fillStyle = "rgba(2, 8, 19, 0.96)";
     context.beginPath();
     context.ellipse(hole.x, hole.y, hole.radius_x, hole.radius_y, 0, 0, full_turn);
     context.fill();
-    context.fillStyle = "rgba(0, 0, 0, 0.42)";
+    context.fillStyle = "rgba(0, 0, 0, 0.58)";
     context.beginPath();
     context.ellipse(
       hole.x + hole.radius_x * 0.08,
       hole.y + hole.radius_y * 0.18,
       hole.radius_x * 0.7,
       hole.radius_y * 0.62,
+      0,
+      0,
+      full_turn,
+    );
+    context.fill();
+    context.globalAlpha = hole.opacity * 0.5;
+    context.fillStyle = "rgba(255, 255, 255, 0.34)";
+    context.beginPath();
+    context.ellipse(
+      hole.x - hole.radius_x * 0.28,
+      hole.y - hole.radius_y * 0.32,
+      hole.radius_x * 0.34,
+      hole.radius_y * 0.2,
       0,
       0,
       full_turn,
@@ -197,6 +215,20 @@ function draw_sphere_lighting(context: CanvasRenderingContext2D, state: BallDraw
   const radius = Math.max(1, state.width * 0.58);
   const left = state.x - state.width / 2;
   const top = state.y - state.height / 2;
+  const diffuse = context.createRadialGradient(
+    state.x - state.width * 0.24,
+    state.y - state.height * 0.29,
+    state.width * 0.04,
+    state.x + state.width * 0.06,
+    state.y + state.height * 0.1,
+    radius,
+  );
+  diffuse.addColorStop(0, "rgba(255, 255, 255, 0.25)");
+  diffuse.addColorStop(0.48, "rgba(255, 255, 255, 0.04)");
+  diffuse.addColorStop(1, "rgba(3, 11, 25, 0.46)");
+  context.fillStyle = diffuse;
+  context.fillRect(left, top, state.width, state.height);
+
   const rim = context.createRadialGradient(
     state.x - state.width * 0.2,
     state.y - state.height * 0.24,
@@ -207,8 +239,8 @@ function draw_sphere_lighting(context: CanvasRenderingContext2D, state: BallDraw
   );
   rim.addColorStop(0, "rgba(255, 255, 255, 0)");
   rim.addColorStop(0.52, "rgba(255, 255, 255, 0)");
-  rim.addColorStop(0.78, "rgba(7, 25, 48, 0.18)");
-  rim.addColorStop(1, "rgba(3, 11, 25, 0.82)");
+  rim.addColorStop(0.76, "rgba(7, 25, 48, 0.12)");
+  rim.addColorStop(1, "rgba(3, 11, 25, 0.72)");
   context.fillStyle = rim;
   context.fillRect(left, top, state.width, state.height);
 
@@ -220,8 +252,8 @@ function draw_sphere_lighting(context: CanvasRenderingContext2D, state: BallDraw
     state.y - state.height * 0.27,
     state.width * 0.31,
   );
-  gloss.addColorStop(0, "rgba(255, 255, 255, 0.68)");
-  gloss.addColorStop(0.3, "rgba(229, 248, 255, 0.32)");
+  gloss.addColorStop(0, "rgba(255, 255, 255, 0.84)");
+  gloss.addColorStop(0.22, "rgba(238, 250, 255, 0.48)");
   gloss.addColorStop(1, "rgba(255, 255, 255, 0)");
   context.fillStyle = gloss;
   context.fillRect(left, top, state.width, state.height);
@@ -234,7 +266,7 @@ function draw_sphere_lighting(context: CanvasRenderingContext2D, state: BallDraw
     state.y + state.height * 0.38,
     state.width * 0.46,
   );
-  lane_reflection.addColorStop(0, "rgba(255, 222, 142, 0.28)");
+  lane_reflection.addColorStop(0, "rgba(255, 222, 142, 0.36)");
   lane_reflection.addColorStop(1, "rgba(255, 222, 142, 0)");
   context.fillStyle = lane_reflection;
   context.fillRect(left, top, state.width, state.height);
@@ -249,13 +281,25 @@ export function draw_ball(
   const left = state.x - state.width / 2;
   const top = state.y - state.height / 2;
   context.save();
-  context.fillStyle = "rgba(5, 13, 24, 0.36)";
+  context.fillStyle = "rgba(248, 203, 111, 0.16)";
+  context.beginPath();
+  context.ellipse(
+    state.x,
+    state.y + state.height * 0.52,
+    state.width * 0.27,
+    Math.max(1, state.height * 0.055),
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  context.fillStyle = "rgba(5, 13, 24, 0.5)";
   context.beginPath();
   context.ellipse(
     state.x,
     state.y + state.height * 0.44,
-    state.width * 0.38,
-    Math.max(1, state.height * 0.085),
+    state.width * 0.39,
+    Math.max(1, state.height * 0.09),
     0,
     0,
     Math.PI * 2,

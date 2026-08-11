@@ -2,6 +2,12 @@
 
 ### Additions and New Features
 
+- Added maintained real-worker gameplay evidence for the revised arcade presentation, including a
+  dimensional moving ball and a real physical ten-pin strike aftermath. The action galleries now
+  show the full 990-pin approach, maximum impact, cascade, and result stages.
+- Added a setup-page build identity that derives the package version, Git revision, and last commit
+  time during the normal build, with clear local fallbacks for non-built development sessions.
+
 - Added twelve freshly captured 16:10 gameplay screenshots, a five-second real-worker 105-pin
   cascade animation with static fallbacks, and dedicated 1,000-pin action and arcade moments
   galleries. The README now leads with the real 990-pin collision wave plus the distinct strike
@@ -24,9 +30,9 @@
   evidence record distilled from Lane Master research footage, the ASI and official UNIS
   Extreme product-family sources, the motion and result cues adopted by Super Bowling, and the
   styling and reward systems deliberately left behind.
-- Added a shot-driven deck push that begins on release and smoothly enlarges
-  the lane, ball, and pins through one shared projection. Ten-pin play gets the
-  strongest move while the widest fantasy rack retains a smaller readable push.
+- Added a shot-driven deck push that begins late in the approach and smoothly enlarges
+  the lane, ball, and pins through one shared projection. The signature 990-pin rack
+  receives the strongest move and fills the playable frame at impact.
 - Added distinct `STRIKE` and `SPARE` result bursts with short one-shot
   confetti, amber and cyan identities, and the existing side-panel status as
   the single accessible announcement.
@@ -39,11 +45,25 @@
 
 ### Behavior or Interface Changes
 
+- Reframed the 990-pin roll from a wide establishing view into a maximum-frame 4.6482x impact
+  view, then an eased 1.5849x result pullback. The close collision framing holds through the
+  readable cascade instead of treating a small camera-progress change as sufficient impact
+  emphasis or cutting abruptly to the result.
+- Rebuilt the moving ball as a visibly dimensional object with coherent lighting, recessed rolling
+  finger holes, surface bands, reflection, and contact shadow while retaining player-selected
+  appearance and physical roll data.
+- Fallen ten-pin presentation now varies apparent depth, foreshortening, rotation, overlap,
+  sliding, and deck contact from each authoritative two-dimensional pose. It makes settled pins
+  read as distinct fallen objects rather than uniform sideways sprites without changing physics.
+- Strike and spare results now use dominant, lane-centered payoff treatments with large typography,
+  color, rays, and confetti. Reduced-motion play retains the strong readable result without the
+  decorative motion.
+
 - The 990-pin shot now receives a meaningful camera push while reduced motion
   is an explicitly selected, fixed-composition accessibility alternative rather
   than a constraint on the primary arcade presentation.
-- Result feedback is now a compact, deck-safe stinger; explicit Normal motion
-  preference takes precedence over the operating-system reduced-motion hint.
+- Result feedback now uses a dominant lane payoff; explicit Normal motion preference takes
+  precedence over the operating-system reduced-motion hint.
 - Result framing now holds the pin deck at the end of a roll and resets before
   the next aim. Reduced motion keeps the fixed pre-roll camera and removes the
   decorative confetti animation while preserving the visible result panel.
@@ -55,6 +75,9 @@
   Solid result flow without direct state mutation or a slow full-physics gate.
 
 ### Fixes and Maintenance
+
+- Added an explicitly deferred oil-pattern roadmap note: a future practice or advanced mode may
+  explore deterministic, understandable lane friction variation after dedicated gameplay research.
 
 - Reclassified the arcade rebuild checks by repository policy. Permanent coverage now keeps only
   deterministic behavior contracts for impact aggregation, physical cue mapping, camera state,
@@ -72,6 +95,12 @@
   saved preference behavior instead of repeated camera and effect constraints.
 
 ### Decisions and Failures
+
+- Kept authoritative physics, technique-driven input, and scoring unchanged. The current arcade
+  work strengthens how a real roll is framed and rendered rather than adding artificial forces or
+  scoring exceptions.
+- Kept oil-pattern chaos out of this rebuild. A fair, learnable treatment needs its own visible
+  feedback and deterministic design, so it remains a roadmap item rather than a hidden change.
 
 - Falsified camera projection and command generation as the 990-pin frame bottleneck: together
   they consumed less than one millisecond in isolated measurements. Browser profiling instead
