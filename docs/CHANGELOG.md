@@ -92,6 +92,10 @@
 - Stabilized each fallen pin's presentation-only roll pose by pin identity. Tiny late physics-axis
   corrections now preserve apparent depth, scale, side lighting, and deck contact instead of
   making nearly settled pins twitch between unrelated dimensional poses.
+- Replaced the half-second rolling-sample loop with a seamlessly overlapped, speed-shaped recorded
+  texture, and made secondary 990-pin collision cues shorten, thin, and decay as the physical
+  cascade settles. The first ball-pin hit remains a distinct recorded transient before the larger
+  rack wave instead of dissolving into a repeated broadband wall.
 - Added an explicitly deferred oil-pattern roadmap note: a future practice or advanced mode may
   explore deterministic, understandable lane friction variation after dedicated gameplay research.
 

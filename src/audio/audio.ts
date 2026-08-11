@@ -70,7 +70,7 @@ type RollingVoice = {
   source: AudioBufferSourceLike;
   filter: BiquadFilterLike | undefined;
   gain: GainLike;
-  sample_backed: boolean;
+  gain_scale: number;
 };
 type ActiveCollisionCue = { end_time_s: number; stop(): void };
 type AudioMix = { lane: GainLike; collision: GainLike; result: GainLike };
@@ -95,7 +95,9 @@ const maximum_secondary_collision_cues = maximum_concurrent_collision_cues - 1;
  * decay.  This is also the scheduler's ownership window, so dense racks
  * cannot accumulate unbounded long-lived sample voices.
  */
-const collision_cue_duration_s = 0.38;
+const first_contact_cue_duration_s = 0.48;
+const secondary_collision_cue_duration_s = 0.2;
+const recorded_roll_gain_scale = 25;
 const sample_paths: Record<SampleName, string> = {
   impact: "./assets/audio/bowling_impact_1.ogg",
   clatter: "./assets/audio/bowling_pin_clatter_1.ogg",
@@ -238,11 +240,11 @@ function clamp_normalized_speed(value: number): number {
 }
 
 function rolling_filter_frequency(speed: number): number {
-  return 420 + speed * 1250;
+  return 360 + speed * 900;
 }
 
 function rolling_gain(speed: number): number {
-  return 0.004 + speed * 0.012;
+  return 0.012 + speed * 0.022;
 }
 
 /**
@@ -279,11 +281,7 @@ function update_rolling_voice(voice: RollingVoice, speed: number, time_s: number
     ramp_audio_value(voice.filter.frequency, rolling_filter_frequency(speed), time_s + 0.035);
   if (voice.source.playbackRate !== undefined)
     ramp_audio_value(voice.source.playbackRate, 0.82 + speed * 0.22, time_s + 0.035);
-  ramp_audio_value(
-    voice.gain.gain,
-    rolling_gain(speed) * (voice.sample_backed ? 2.8 : 1),
-    time_s + 0.035,
-  );
+  ramp_audio_value(voice.gain.gain, rolling_gain(speed) * voice.gain_scale, time_s + 0.035);
 }
 
 /**
@@ -379,6 +377,36 @@ function create_lane_texture_buffer(context: AudioContextLike): AudioBufferLike 
   return buffer;
 }
 
+/**
+ * Overlap-adds the short recorded roll into a periodic texture without replaying
+ * its authored attack and long fade every half second.
+ */
+function create_seamless_rolling_sample(
+  context: AudioContextLike,
+  recorded_sample: AudioBufferLike,
+): AudioBufferLike {
+  const input = recorded_sample.getChannelData(0);
+  if (input.length < 4) return recorded_sample;
+  const hop_length = Math.floor(input.length / 2);
+  const output_length = hop_length * 4;
+  const output_buffer = context.createBuffer(1, output_length, context.sampleRate);
+  const output = output_buffer.getChannelData(0);
+  const weights = new Float32Array(output_length);
+  for (let start = -input.length; start < output_length + input.length; start += hop_length) {
+    for (let offset = 0; offset < input.length; offset += 1) {
+      const destination = start + offset;
+      if (destination < 0 || destination >= output_length) continue;
+      const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * offset) / (input.length - 1));
+      output[destination] = output[destination]! + input[offset]! * window;
+      weights[destination] = weights[destination]! + window;
+    }
+  }
+  for (let index = 0; index < output.length; index += 1) {
+    if (weights[index]! > 0) output[index] = output[index]! / weights[index]!;
+  }
+  return output_buffer;
+}
+
 function play_noise_transient(
   context: AudioContextLike,
   destination: AudioNodeLike,
@@ -452,20 +480,20 @@ function play_sample(
   buffer: AudioBufferLike,
   peak_gain: number,
   playback_rate: number,
-  loop = false,
+  duration_s: number,
 ): () => void {
   const source = context.createBufferSource();
   const gain = context.createGain();
   const start = context.currentTime;
   source.buffer = buffer;
-  source.loop = loop;
+  source.loop = false;
   set_audio_value(source.playbackRate ?? { value: 1 }, playback_rate, start);
   set_audio_value(gain.gain, peak_gain, start);
-  if (!loop) ramp_audio_value(gain.gain, 0, start + collision_cue_duration_s);
+  ramp_audio_value(gain.gain, 0, start + duration_s);
   source.connect(gain);
   gain.connect(destination);
   source.start(start);
-  if (!loop) source.stop(start + collision_cue_duration_s + 0.01);
+  source.stop(start + duration_s + 0.01);
   return () => stop_source(source, context.currentTime);
 }
 function play_collision_sound(
@@ -475,6 +503,8 @@ function play_collision_sound(
   sound: CollisionSound,
   sample_bank: AudioSampleBank,
   variation: number,
+  gain_scale: number,
+  cue_duration_s: number,
 ): Array<() => void> {
   const stop_layers: Array<() => void> = [];
   const ball_intensity = sound.ball_pin.impulse;
@@ -483,7 +513,14 @@ function play_collision_sound(
     const sample = sample_bank.impact;
     if (sample !== undefined)
       stop_layers.push(
-        play_sample(context, destination, sample, 0.42 + ball_intensity * 0.3, variation),
+        play_sample(
+          context,
+          destination,
+          sample,
+          0.42 + ball_intensity * 0.3,
+          variation,
+          first_contact_cue_duration_s,
+        ),
       );
     else
       stop_layers.push(
@@ -516,8 +553,9 @@ function play_collision_sound(
           context,
           destination,
           sample,
-          0.16 + contact_mix * 0.2 + (ball_intensity + pin_intensity) * 0.12,
+          (0.16 + contact_mix * 0.2 + (ball_intensity + pin_intensity) * 0.12) * gain_scale,
           variation,
+          cue_duration_s,
         ),
       );
     else
@@ -536,7 +574,14 @@ function play_collision_sound(
     const sample = sample_bank.thump;
     if (sample !== undefined)
       stop_layers.push(
-        play_sample(context, destination, sample, 0.12 + sound.deck_impulse * 0.18, variation),
+        play_sample(
+          context,
+          destination,
+          sample,
+          (0.12 + sound.deck_impulse * 0.18) * gain_scale,
+          variation,
+          cue_duration_s,
+        ),
       );
     else
       stop_layers.push(
@@ -586,6 +631,7 @@ function create_rolling_voice(
   destination: AudioNodeLike,
   texture: AudioBufferLike,
   speed: number,
+  gain_scale: number,
 ): RollingVoice {
   const source = context.createBufferSource();
   const filter = context.createBiquadFilter();
@@ -593,33 +639,14 @@ function create_rolling_voice(
   const start = context.currentTime;
   source.buffer = texture;
   source.loop = true;
-  filter.type = "bandpass";
+  filter.type = "lowpass";
   set_audio_value(filter.frequency, rolling_filter_frequency(speed), start);
-  set_audio_value(gain.gain, rolling_gain(speed), start);
+  set_audio_value(gain.gain, rolling_gain(speed) * gain_scale, start);
   source.connect(filter);
   filter.connect(gain);
   gain.connect(destination);
   source.start(start);
-  return { source, filter, gain, sample_backed: false };
-}
-
-function create_sample_rolling_voice(
-  context: AudioContextLike,
-  destination: AudioNodeLike,
-  sample: AudioBufferLike,
-  speed: number,
-): RollingVoice {
-  const source = context.createBufferSource();
-  const gain = context.createGain();
-  const start = context.currentTime;
-  source.buffer = sample;
-  source.loop = true;
-  set_audio_value(source.playbackRate ?? { value: 1 }, 0.82 + speed * 0.22, start);
-  set_audio_value(gain.gain, rolling_gain(speed) * 2.8, start);
-  source.connect(gain);
-  gain.connect(destination);
-  source.start(start);
-  return { source, filter: undefined, gain, sample_backed: true };
+  return { source, filter, gain, gain_scale };
 }
 
 export function create_audio_controller(
@@ -639,6 +666,8 @@ export function create_audio_controller(
   let impact_started = false;
   let disposed = false;
   let roll_speed = 0;
+  let first_impact_time_s: number | undefined;
+  let last_collision_time_s = Number.NEGATIVE_INFINITY;
   let active_collision_cues: ActiveCollisionCue[] = [];
   let active_result_cues: ActiveCollisionCue[] = [];
   function can_play(): boolean {
@@ -650,11 +679,23 @@ export function create_audio_controller(
   }
   function install_sample_bank(loaded: AudioSampleBank): void {
     if (disposed || context === undefined) return;
-    sample_bank = loaded;
-    if (!roll_active || impact_started || muted || rolling_voice?.sample_backed === true) return;
-    if (loaded.roll === undefined || mix === undefined) return;
+    const recorded_roll = loaded.roll;
+    sample_bank = {
+      ...loaded,
+      ...(recorded_roll === undefined
+        ? {}
+        : { roll: create_seamless_rolling_sample(context, recorded_roll) }),
+    };
+    if (!roll_active || impact_started || muted || rolling_voice === undefined) return;
+    if (sample_bank.roll === undefined || mix === undefined) return;
     stop_rolling_voice(rolling_voice, context.currentTime);
-    rolling_voice = create_sample_rolling_voice(context, mix.lane, loaded.roll, roll_speed);
+    rolling_voice = create_rolling_voice(
+      context,
+      mix.lane,
+      sample_bank.roll,
+      roll_speed,
+      recorded_roll_gain_scale,
+    );
   }
   function decode_preloaded_samples(): void {
     if (context === undefined || sample_decode_load !== undefined) return;
@@ -698,16 +739,21 @@ export function create_audio_controller(
       if (lane_texture_buffer === undefined)
         lane_texture_buffer = create_lane_texture_buffer(context);
       if (mix === undefined) return;
-      rolling_voice =
-        sample_bank.roll === undefined
-          ? create_rolling_voice(context, mix.lane, lane_texture_buffer, roll_speed)
-          : create_sample_rolling_voice(context, mix.lane, sample_bank.roll, roll_speed);
+      rolling_voice = create_rolling_voice(
+        context,
+        mix.lane,
+        sample_bank.roll ?? lane_texture_buffer,
+        roll_speed,
+        sample_bank.roll === undefined ? 1 : recorded_roll_gain_scale,
+      );
     }
   }
   function start_roll(): void {
     if (disposed) return;
     roll_active = true;
     impact_started = false;
+    first_impact_time_s = undefined;
+    last_collision_time_s = Number.NEGATIVE_INFINITY;
     active_collision_cues.forEach((cue) => cue.stop());
     active_collision_cues = [];
     active_result_cues.forEach((cue) => cue.stop());
@@ -716,10 +762,13 @@ export function create_audio_controller(
     if (lane_texture_buffer === undefined)
       lane_texture_buffer = create_lane_texture_buffer(context);
     if (mix === undefined) return;
-    rolling_voice =
-      sample_bank.roll === undefined
-        ? create_rolling_voice(context, mix.lane, lane_texture_buffer, roll_speed)
-        : create_sample_rolling_voice(context, mix.lane, sample_bank.roll, roll_speed);
+    rolling_voice = create_rolling_voice(
+      context,
+      mix.lane,
+      sample_bank.roll ?? lane_texture_buffer,
+      roll_speed,
+      sample_bank.roll === undefined ? 1 : recorded_roll_gain_scale,
+    );
   }
   function stop_roll(): void {
     roll_active = false;
@@ -743,7 +792,19 @@ export function create_audio_controller(
     prune_collision_cues(time_s);
     if (sound.first_contact)
       return active_collision_cues.length < maximum_concurrent_collision_cues;
+    const impact_age_s = Math.max(0, time_s - (first_impact_time_s ?? time_s));
+    const energy = Math.max(sound.ball_pin.impulse, sound.pin_pin.impulse, sound.deck_impulse);
+    const base_interval_s = impact_age_s < 1 ? 0.14 : impact_age_s < 3 ? 0.25 : 0.42;
+    const minimum_interval_s = Math.max(0.11, base_interval_s - energy * 0.08);
+    if (time_s - last_collision_time_s < minimum_interval_s) return false;
     return active_collision_cues.length < maximum_secondary_collision_cues;
+  }
+  function secondary_gain_scale(sound: CollisionSound, time_s: number): number {
+    const energy = Math.max(sound.ball_pin.impulse, sound.pin_pin.impulse, sound.deck_impulse);
+    const impact_age_s = Math.max(0, time_s - (first_impact_time_s ?? time_s));
+    if (impact_age_s < 1) return 0.65 + energy * 0.2;
+    if (impact_age_s < 3) return 0.5 + energy * 0.18;
+    return 0.34 + energy * 0.14;
   }
   function emit_collision(sound: CollisionSound | undefined): void {
     if (sound === undefined || !can_play() || context === undefined) return;
@@ -752,6 +813,10 @@ export function create_audio_controller(
     if (mix === undefined) return;
     sample_variation = (sample_variation + 1) % 5;
     const variation = 0.94 + sample_variation * 0.03;
+    const cue_duration_s = sound.first_contact
+      ? first_contact_cue_duration_s
+      : secondary_collision_cue_duration_s;
+    const gain_scale = sound.first_contact ? 1 : secondary_gain_scale(sound, context.currentTime);
     const stop_layers = play_collision_sound(
       context,
       mix.collision,
@@ -759,16 +824,20 @@ export function create_audio_controller(
       sound,
       sample_bank,
       variation,
+      gain_scale,
+      cue_duration_s,
     );
     active_collision_cues.push({
-      end_time_s: context.currentTime + collision_cue_duration_s,
+      end_time_s: context.currentTime + cue_duration_s,
       stop: () => stop_layers.forEach((stop_layer) => stop_layer()),
     });
     if (sound.first_contact) {
       impact_started = true;
+      first_impact_time_s = context.currentTime;
       stop_rolling_voice(rolling_voice, context.currentTime);
       rolling_voice = undefined;
     }
+    last_collision_time_s = context.currentTime;
   }
   function record_impact(cue: CollisionSound): void {
     if (!roll_active || !can_play()) return;
