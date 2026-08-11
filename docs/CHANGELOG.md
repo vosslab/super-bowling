@@ -3,7 +3,7 @@
 ### Additions and New Features
 
 - Added `docs/LANE_MASTER_VIDEO_FINDINGS.md` as a durable
-  evidence record for the five local arcade captures, the ASI Lane Master and official UNIS
+  evidence record distilled from Lane Master research footage, the ASI and official UNIS
   Extreme product-family sources, the motion and result cues adopted by Super Bowling, and the
   styling and reward systems deliberately left behind.
 - Added a shot-driven deck push that begins on release and smoothly enlarges
@@ -36,7 +36,7 @@
 - Defined Super Bowling's design lineage as Nintendo Wii-style screen bowling without a motion
   controller, combined with UNIS Lane Master-style arcade action without a physical ball or
   cabinet sensors. The resulting pointer and keyboard game remains an original synthesis.
-- Used the local arcade videos as timing and energy references for the quick
+- Used Lane Master motion observations as timing and energy references for the quick
   deck push, visible ball rotation, separated pin motion, and concentrated
   result moment. The shipped dark-teal lane surge, amber/cyan result language,
   ball treatment, and overlays remain original to Super Bowling.

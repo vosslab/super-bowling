@@ -2,10 +2,9 @@
 
 ## Purpose
 
-This document records the visual findings from the five local arcade captures used to
-increase Super Bowling's sense of speed, impact, and reward. It separates observed evidence
-from the design decisions made for this game. The captures are references, not a visual or
-mechanical specification.
+This document records Lane Master visual findings used to increase Super Bowling's sense of
+speed, impact, and reward. It separates observed evidence from the design decisions made for
+this game. The observations are references, not a visual or mechanical specification.
 
 ## Design lineage
 
@@ -33,36 +32,23 @@ The [UNIS Lane Master Extreme page](https://www.unistechnology.com/products/lane
 is the manufacturer source for the Extreme ticket version. UNIS identifies Extreme as an upgrade
 from the original Lane Master and describes single- or multiplayer timed play in which players
 hit as many pins as possible. That description provides useful product-family context for the
-many-pin stages visible in clips 4 and 5.
+many-pin stages included in the visual review.
 
 The ASI page uses both `Lane Master` and `Lane Master Extreme` in its copy, while the UNIS page
 documents the Extreme ticket version specifically. This review therefore attributes the shared
-product family and labels only what is visible in the captures. It does not claim that the
-recorded cabinet is a particular revision or redemption configuration.
+product family and labels only observable behavior. It does not claim that the reviewed cabinet
+is a particular revision or redemption configuration.
 
-- The set contains five HEVC phone recordings at 720 x 1280 and approximately 60 fps.
-- The recordings total about 48.6 seconds.
-- Three clips show standard ten-pin play.
-- Two clips show a red and gold `Golden Pin Stage` with large pin fields.
-- Frame samples at 0.17 to 0.50 second intervals support the motion review.
-- The oblique phone angle, display glare, exposure changes, and cabinet lighting make exact
+The source recordings remain local-only research material. They are not repository inputs,
+published documentation assets, test fixtures, or distribution files. This document is the
+durable repository record of the findings.
+
+- The reviewed material includes standard ten-pin play and a red and gold `Golden Pin Stage`
+  with large pin fields.
+- The oblique phone view, display glare, exposure changes, and cabinet lighting make exact
   color, scale, and pixel measurements unreliable.
-- The files contain stereo cabinet and room audio, but this review treats the visual content
-  as evidence. Ambient arcade sound is not a sound-design specification.
-- No captured image, audio, logo, character, or interface artwork ships with Super Bowling.
-
-## Capture inventory
-
-The recordings are local reference inputs rather than published game assets, so the table lists
-their repository-relative paths without promising GitHub-hosted links.
-
-| Capture | Length | Visible content |
-| --- | ---: | --- |
-| `videos/Arcade_Bowling - 1.mov` | 7.37 s | Standard roll, deck approach, impact, and remaining pins |
-| `videos/Arcade_Bowling - 2.mov` | 11.52 s | Standard roll, impact, score update, and next-frame transition |
-| `videos/Arcade_Bowling - 3.mov` | 3.24 s | Short standard collision with several pins left standing |
-| `videos/Arcade_Bowling - 4.mov` | 10.57 s | Golden Pin Stage roll and 87-pin result sequence |
-| `videos/Arcade_Bowling - 5.mov` | 15.86 s | Golden Pin Stage roll, 94-pin result, and next-stage reset |
+- Ambient arcade sound is not a sound-design specification.
+- No source image, audio, logo, character, or interface artwork ships with Super Bowling.
 
 ## Observed motion language
 
@@ -86,7 +72,7 @@ view.
 - The highlight and surface appearance remain readable while the ball grows.
 - Near impact, bloom and overlap favor perceived force over a perfectly clean silhouette.
 
-The captures demonstrate that a convincing arcade ball needs readable volume and motion, not
+The footage demonstrates that a convincing arcade ball needs readable volume and motion, not
 photorealistic texture.
 
 ### Pin response
