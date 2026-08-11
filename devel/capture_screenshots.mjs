@@ -1277,10 +1277,10 @@ async function capture_reduced_motion_evidence(browser, base_url, output_directo
     if (
       result.reduced_motion !== "true" ||
       result.camera_progress !== "0.0000" ||
-      result.camera_zoom !== "0.0000"
+      result.camera_zoom !== "1.0000"
     ) {
       throw new Error(
-        "Reduced-motion capture did not retain the fixed centered composition with zero zoom.",
+        "Reduced-motion capture did not retain the fixed centered composition at neutral zoom.",
       );
     }
     return result;
@@ -1463,25 +1463,15 @@ async function measure_frame_window(browser, base_url, output_directory) {
     );
     const screenshot_path = join(output_directory, "frame_window_990.png");
     const json_path = join(output_directory, "frame_window_990.json");
-    const standing_count = page.locator("[data-standing-count]");
-    const initial_text = await standing_count.textContent();
-    const initial_match = initial_text?.match(/([\d,]+) of ([\d,]+) pins standing/);
-    if (initial_match === null || initial_match === undefined) {
-      throw new Error("Could not read the initial visible standing-pin count for the frame probe.");
-    }
-    const initial_standing_count = Number(initial_match[1].replaceAll(",", ""));
     await page.keyboard.press("Space");
     await page.waitForFunction(
       () => document.querySelector("main.play_shell")?.getAttribute("data-phase") === "rolling",
     );
     try {
       await page.waitForFunction(
-        (starting_count) => {
-          const text = document.querySelector("[data-standing-count]")?.textContent ?? "";
-          const match = text.match(/([\d,]+) of ([\d,]+) pins standing/);
-          return match !== null && Number(match[1].replaceAll(",", "")) < starting_count;
-        },
-        initial_standing_count,
+        () =>
+          document.querySelector("main.play_shell")?.getAttribute("data-first-impact-seen") ===
+          "true",
         { timeout: 20_000 },
       );
     } catch (_error) {
@@ -1496,7 +1486,7 @@ async function measure_frame_window(browser, base_url, output_directory) {
         pin_count: 990,
         contact_proxy: "unavailable",
         blocker:
-          "The visible [data-standing-count] did not decrease from the initial 990 pins within 20 seconds after a real Space launch.",
+          "No authoritative first ball-pin impact window arrived within 20 seconds after a real Space launch.",
         screenshot,
       };
       await writeFile(json_path, `${JSON.stringify(result, null, 2)}\n`);
@@ -1534,7 +1524,7 @@ async function measure_frame_window(browser, base_url, output_directory) {
     const result = {
       viewport,
       pin_count: 990,
-      contact_proxy: "first visible [data-standing-count] decrease after launch",
+      contact_proxy: "first physics-derived ball-pin impact window after launch",
       ...metrics,
       screenshot,
     };
@@ -1563,8 +1553,8 @@ async function capture_milestone(browser, base_url) {
     base_url,
     output_directory,
   );
-  const reduced_motion = await capture_reduced_motion_evidence(browser, base_url, output_directory);
   const frame_window = await measure_frame_window(browser, base_url, output_directory);
+  const reduced_motion = await capture_reduced_motion_evidence(browser, base_url, output_directory);
   const report = {
     capture_report_format: 2,
     full_page_viewport: viewport,
