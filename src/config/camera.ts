@@ -31,12 +31,13 @@ export const camera_config = {
   /** Desired visible portion of each pin row behind the row in front. */
   rack_row_reveal_fraction: 0.1,
   /**
-   * A roll pushes the shared projection toward the deck. Ten-pin play gets
-   * the strongest move; larger fantasy racks scale it down so their breadth
-   * remains readable while the center cascade still gains emphasis.
+   * A roll pushes the shared projection toward the deck. The complete 990-pin
+   * field retains a deliberate minimum push: reducing the move in direct
+   * proportion to rack count made its camera motion effectively invisible.
    */
-  ten_pin_shot_zoom: 1.34,
-  shot_zoom_start_progress: 0,
+  ten_pin_shot_zoom: 1.36,
+  large_rack_minimum_shot_zoom: 1.2,
+  shot_zoom_start_progress: 0.14,
   shot_zoom_full_progress: 0.84,
   shot_zoom_focus_y_fraction: 0.12,
   near_rail_half_width_fraction: 0.475,

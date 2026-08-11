@@ -49,6 +49,7 @@ async function build_site() {
   await cp("src/benchmark.html", "dist/benchmark.html");
   await cp("src/designer_fixture.html", "dist/designer_fixture.html");
   await cp("src/style.css", "dist/style.css");
+  await cp("src/style_setup.css", "dist/style_setup.css");
   await cp("src/assets", "dist/assets", { recursive: true });
   await writeFile("dist/.nojekyll", "");
 }

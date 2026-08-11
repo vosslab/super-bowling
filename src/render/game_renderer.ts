@@ -4,17 +4,40 @@ import { ball_radius, board_count, gutter_width, lane_width, pin_radius } from "
 import type { RackPinCount } from "../config/pin_counts";
 import { pin_snapshot_stride, read_snapshot_ball, read_snapshot_pin } from "../simulation/protocol";
 import { create_rack } from "../simulation/rack";
+import { create_aim_guide_command, draw_aim_guide } from "./aim_guide";
 import { draw_ball, type BallDrawState } from "./ball";
 import { create_camera_state, get_camera_zoom } from "./camera";
 import type { CameraState } from "./contracts";
 import { load_game_assets, type AssetLoadState, type GameAssets } from "./game_assets";
 import { interpolate_shortest_angle } from "./interpolation";
+import {
+  create_impact_accent_command as create_projected_impact_accent_command,
+  draw_impact_accent,
+  select_impact_accent,
+  type ImpactAccentCommand,
+  type ImpactAccentState,
+  type ImpactPresentation,
+} from "./impact_accent";
 import { choose_pin_sprite, draw_pin, type PinDrawState } from "./pins";
+
+export {
+  select_impact_accent,
+  type ImpactAccentCommand,
+  type ImpactAccentSelection,
+  type ImpactAccentState,
+  type ImpactPresentation,
+} from "./impact_accent";
 
 export type ScreenPoint = { x: number; y: number };
 
+/**
+ * A compact, worker-derived contact location in lane world units. This is
+ * presentation-only: callers provide the physics centroid and the renderer
+ * projects it with the same camera that draws the rack.
+ */
 export type GameDrawCommand =
   | { kind: "lane"; width: number; height: number; geometry: LaneGeometry }
+  | ImpactAccentCommand
   | ({ kind: "ball"; base_depth: number } & BallDrawState)
   | {
       kind: "aim_guide";
@@ -41,7 +64,8 @@ export type GameRenderer = {
   set_aim_presentation(lateral_offset: number | undefined): void;
   set_ball_visible(visible: boolean): void;
   set_aim_guide(aim_guide: AimGuideState | undefined): void;
-  draw(alpha: number): GameDrawCommand[];
+  record_impact(presentation: ImpactPresentation, timestamp_ms: number): void;
+  draw(alpha: number, timestamp_ms?: number): GameDrawCommand[];
 };
 
 export type AimGuideState = { lateral_offset: number; preview_path: Float32Array };
@@ -417,6 +441,19 @@ export function project_world_point(
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
 }
 
+export function create_impact_accent_command(
+  state: ImpactAccentState,
+  timestamp_ms: number,
+  projection: LaneProjection,
+): ImpactAccentCommand | undefined {
+  return create_projected_impact_accent_command(
+    state,
+    timestamp_ms,
+    (point) => project_world_point(projection, point),
+    (y) => get_depth_scale(projection, y),
+  );
+}
+
 function project_body(
   projection: LaneProjection,
   base: WorldPoint,
@@ -592,54 +629,11 @@ export function create_lane_geometry(
 function compare_depth(first: GameDrawCommand, second: GameDrawCommand): number {
   if (first.kind === "lane") return -1;
   if (second.kind === "lane") return 1;
+  if (first.kind === "impact_accent") return -1;
+  if (second.kind === "impact_accent") return 1;
   if (first.kind === "aim_guide") return 1;
   if (second.kind === "aim_guide") return -1;
   return second.base_depth - first.base_depth;
-}
-
-function create_aim_guide_command(
-  aim_guide: AimGuideState,
-  ball: Extract<GameDrawCommand, { kind: "ball" }>,
-  projection: LaneProjection,
-): Extract<GameDrawCommand, { kind: "aim_guide" }> {
-  const points: ScreenPoint[] = [];
-  for (let index = 0; index + 1 < aim_guide.preview_path.length; index += 2) {
-    const x = aim_guide.preview_path[index];
-    const y = aim_guide.preview_path[index + 1];
-    if (x === undefined || y === undefined) continue;
-    const point = project_world_point(projection, { x, y, z: 0 });
-    if (point !== undefined) points.push(point);
-  }
-  if (points.length < 2) throw new Error("Aim guides require a sampled visible preview path.");
-  const clear_radius = ball.width * 0.7;
-  const visible = points.filter(
-    (point) => Math.hypot(point.x - ball.x, point.y - ball.y) >= clear_radius,
-  );
-  const rendered =
-    visible.length >= 2
-      ? visible
-      : ((): ScreenPoint[] => {
-          const end = points[points.length - 1] ?? { x: ball.x, y: ball.y - clear_radius };
-          const distance = Math.hypot(end.x - ball.x, end.y - ball.y) || 1;
-          return [
-            {
-              x: ball.x + ((end.x - ball.x) / distance) * clear_radius,
-              y: ball.y + ((end.y - ball.y) / distance) * clear_radius,
-            },
-            end,
-          ];
-        })();
-  const start = rendered[0] ?? { x: ball.x, y: ball.y };
-  const end = rendered[rendered.length - 1] ?? start;
-  return {
-    kind: "aim_guide",
-    x: start.x,
-    y: start.y,
-    end_x: end.x,
-    end_y: end.y,
-    width: Math.max(2, ball.width * 0.1),
-    points: rendered,
-  };
 }
 
 function create_pin_command(
@@ -670,15 +664,35 @@ function create_pin_command(
       )
     : 0;
   const speed = Math.hypot(velocity_x, velocity_y);
-  const motion_energy = fallen ? clamp(speed / 16, 0, 1) : 0;
-  const lift = fallen ? standing_height * 0.22 * motion_energy : 0;
+  // Velocity is part of the authoritative worker snapshot, so it is the one
+  // signal the renderer can use to make a collision wave visible before the
+  // contact solver declares a pin fallen. Keep standing pins deliberately
+  // quieter: a dense rack should reveal the wave, never turn into one bright
+  // mass of afterimages.
+  const speed_energy = clamp((speed - 0.35) / 11.5, 0, 1);
+  const axis_turn = fallen
+    ? Math.abs(
+        Math.atan2(
+          Math.sin(current_pin.fallen_axis_angle - previous_pin.fallen_axis_angle),
+          Math.cos(current_pin.fallen_axis_angle - previous_pin.fallen_axis_angle),
+        ),
+      )
+    : 0;
+  const rotation_energy = clamp(axis_turn / 0.22, 0, 1) * 0.66;
+  const motion_energy = Math.max(speed_energy, rotation_energy) * (fallen ? 0.92 : 0.62);
+  const lift = standing_height * (fallen ? 0.19 : 0.065) * motion_energy;
   const trail_world = project_world_point(projection, {
-    x: x - velocity_x * 0.035,
-    y: y - velocity_y * 0.035,
+    x: x - velocity_x * 0.035 * motion_energy,
+    y: y - velocity_y * 0.035 * motion_energy,
     z: 0,
   });
-  const trail_x = trail_world === undefined ? 0 : (trail_world.x - body.base.x) * 2.4;
-  const trail_y = trail_world === undefined ? 0 : (trail_world.y - body.base.y) * 2.4;
+  const raw_trail_x = trail_world === undefined ? 0 : (trail_world.x - body.base.x) * 2.4;
+  const raw_trail_y = trail_world === undefined ? 0 : (trail_world.y - body.base.y) * 2.4;
+  const maximum_trail = Math.max(body.width, standing_height) * (fallen ? 0.46 : 0.28);
+  const raw_trail_length = Math.hypot(raw_trail_x, raw_trail_y);
+  const trail_scale = raw_trail_length > maximum_trail ? maximum_trail / raw_trail_length : 1;
+  const trail_x = raw_trail_x * trail_scale;
+  const trail_y = raw_trail_y * trail_scale;
   return {
     kind,
     pin_index,
@@ -768,7 +782,7 @@ export function create_game_draw_commands(
   width: number,
   height: number,
   design: BallDesign = default_ball_design,
-  camera: CameraState = create_camera_state(pin_count, false),
+  camera: CameraState = create_camera_state(pin_count),
   aim_guide: AimGuideState | undefined = undefined,
   aim_lateral_offset: number | undefined = aim_guide?.lateral_offset,
   ball_visible = true,
@@ -802,28 +816,13 @@ export function create_game_draw_commands(
     : undefined;
   if (ball !== undefined) commands.push(ball);
   if (aim_guide !== undefined && ball !== undefined)
-    commands.push(create_aim_guide_command(aim_guide, ball, projection));
+    commands.push(
+      create_aim_guide_command(aim_guide, ball, (x, y) =>
+        project_world_point(projection, { x, y, z: 0 }),
+      ),
+    );
   commands.sort(compare_depth);
   return commands;
-}
-
-function draw_aim_guide(
-  context: CanvasRenderingContext2D,
-  command: Extract<GameDrawCommand, { kind: "aim_guide" }>,
-): void {
-  context.save();
-  context.strokeStyle = "rgba(255, 239, 117, 0.94)";
-  context.lineWidth = command.width;
-  context.lineCap = "round";
-  context.setLineDash([0, command.width * 3.2]);
-  const first = command.points[0];
-  if (first !== undefined) {
-    context.beginPath();
-    context.moveTo(first.x, first.y);
-    for (const point of command.points.slice(1)) context.lineTo(point.x, point.y);
-    context.stroke();
-  }
-  context.restore();
 }
 
 function draw_lane(
@@ -905,6 +904,7 @@ function draw_commands(
   for (const command of commands) {
     if (command.kind === "lane")
       draw_lane(context, command.width, command.height, command.geometry);
+    else if (command.kind === "impact_accent") draw_impact_accent(context, command);
     else if (command.kind === "ball") draw_ball(context, command, assets.ball);
     else if (command.kind === "aim_guide") draw_aim_guide(context, command);
     else draw_pin(context, assets, command);
@@ -919,6 +919,8 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
   let aim_lateral_offset: number | undefined;
   let ball_visible = true;
   let aim_guide: AimGuideState | undefined;
+  let active_impact: ImpactAccentState | undefined;
+  let last_secondary_impact_at_ms = Number.NEGATIVE_INFINITY;
   void load_game_assets().then(
     (assets) => {
       asset_state = { status: "ready", assets };
@@ -935,7 +937,7 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
     set_snapshot_pair(pair): void {
       snapshot_pair = pair;
       if (camera === undefined || camera.rack_bounds.pin_count !== pair.pin_count)
-        camera = create_camera_state(pair.pin_count, false);
+        camera = create_camera_state(pair.pin_count);
     },
     set_camera(next_camera): void {
       camera = next_camera;
@@ -952,7 +954,17 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
     set_aim_guide(next_aim_guide): void {
       aim_guide = next_aim_guide;
     },
-    draw(alpha): GameDrawCommand[] {
+    record_impact(presentation, timestamp_ms): void {
+      const selection = select_impact_accent(
+        active_impact,
+        presentation,
+        timestamp_ms,
+        last_secondary_impact_at_ms,
+      );
+      active_impact = selection.active;
+      last_secondary_impact_at_ms = selection.last_secondary_at_ms;
+    },
+    draw(alpha, timestamp_ms = Date.now()): GameDrawCommand[] {
       if (snapshot_pair === undefined) return [];
       const commands = create_game_draw_commands(
         snapshot_pair.previous_snapshot,
@@ -967,6 +979,19 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
         aim_lateral_offset,
         ball_visible,
       );
+      if (active_impact !== undefined) {
+        const projection = create_camera_projection(
+          camera ?? create_camera_state(snapshot_pair.pin_count),
+          context.canvas.width,
+          context.canvas.height,
+        );
+        const accent = create_impact_accent_command(active_impact, timestamp_ms, projection);
+        if (accent === undefined) active_impact = undefined;
+        else {
+          commands.push(accent);
+          commands.sort(compare_depth);
+        }
+      }
       if (asset_state.status === "ready") draw_commands(context, commands, asset_state.assets);
       return commands;
     },

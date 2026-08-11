@@ -39,7 +39,7 @@ function fill_rack(snapshot, pin_count) {
   }
 }
 
-function draw(pin_count, camera = create_camera_state(pin_count, false), aim_lateral_offset = 0) {
+function draw(pin_count, camera = create_camera_state(pin_count), aim_lateral_offset = 0) {
   const snapshot = create_snapshot(pin_count);
   fill_rack(snapshot, pin_count);
   return create_game_draw_commands(
@@ -77,7 +77,7 @@ function assert_inside_canvas(body, label) {
   );
 }
 
-function assert_complete_scene(pin_count, camera = create_camera_state(pin_count, false)) {
+function assert_complete_scene(pin_count, camera = create_camera_state(pin_count)) {
   const commands = draw(pin_count, camera);
   const lane = get_lane(commands);
   const ball = commands.find((command) => command.kind === "ball");
@@ -137,9 +137,9 @@ test("derives immutable bounds from each authoritative complete rack", () => {
 test("pushes the shared projection toward the deck from release through impact", () => {
   const completed_zooms = new Map();
   for (const pin_count of rack_pin_counts) {
-    const aiming = create_camera_state(pin_count, false);
-    const rolling = advance_camera_for_ball(aiming, aiming.rack_bounds.front / 2, false);
-    const settled = advance_camera_for_ball(rolling, aiming.rack_bounds.back, false);
+    const aiming = create_camera_state(pin_count);
+    const rolling = advance_camera_for_ball(aiming, aiming.rack_bounds.front / 2);
+    const settled = advance_camera_for_ball(rolling, aiming.rack_bounds.back);
     const reduced = with_reduced_motion(settled, true);
     const reset = reset_camera_for_roll(settled);
     const baseline = create_camera_projection(aiming, canvas.width, canvas.height);
@@ -184,13 +184,55 @@ test("pushes the shared projection toward the deck from release through impact",
     completed_zooms.get(10) > completed_zooms.get(990),
     "ten-pin play receives a stronger deck push than the widest fantasy rack",
   );
+  assert.ok(
+    completed_zooms.get(990) >= 1.2,
+    "the 990-pin field receives a visibly meaningful deck push",
+  );
+});
+
+test("keeps large-rack camera choreography monotonic and perceptible across the shot", () => {
+  const aiming = create_camera_state(990);
+  const head_pin_y = aiming.rack_bounds.front;
+  const phases = [0, 0.2, 0.5, 0.8, 1].map((fraction) =>
+    advance_camera_for_ball(aiming, head_pin_y * fraction),
+  );
+  const zooms = phases.map(get_camera_zoom);
+
+  assert.equal(zooms[0], 1, "aiming begins at neutral projection");
+  for (let index = 1; index < zooms.length; index += 1) {
+    assert.ok(
+      zooms[index] >= zooms[index - 1],
+      `large-rack phase ${index} never retreats before the result hold`,
+    );
+  }
+  assert.ok(zooms[2] - zooms[0] >= 0.05, "the entry phase is perceptibly staged");
+  assert.ok(zooms[3] - zooms[2] >= 0.1, "the impact approach has a distinct push");
+  assert.ok(zooms[4] - zooms[0] >= 0.2, "the settled large-rack result holds emphasis");
+});
+
+test("keeps reduced motion as a neutral presentation adapter", () => {
+  const normal = advance_camera_for_ball(
+    create_camera_state(990),
+    create_camera_state(990).rack_bounds.front,
+  );
+  const reduced = with_reduced_motion(normal, true);
+  const restored = with_reduced_motion(normal, false);
+
+  assert.deepEqual(restored, normal, "normal choreography is unchanged when accessibility is off");
+  assert.equal(get_camera_zoom(reduced), 1, "reduced presentation uses the neutral projection");
+  assert.equal(reduced.shot_progress, 0, "reduced presentation does not retain a partial zoom");
+  assert.equal(
+    "reduced_motion" in normal,
+    false,
+    "camera state contains only physical camera data",
+  );
 });
 
 test("keeps every legal aiming scene inside a representative play canvas", () => {
   for (const pin_count of rack_pin_counts) {
     const limits = aim_limits(pin_count);
     for (const lateral_offset of [limits.minimum_start_position, limits.maximum_start_position]) {
-      const commands = draw(pin_count, create_camera_state(pin_count, false), lateral_offset);
+      const commands = draw(pin_count, create_camera_state(pin_count), lateral_offset);
       const ball = commands.find((command) => command.kind === "ball");
       assert.ok(ball, `${pin_count}-pin legal aiming ball draws`);
       assert_inside_canvas(ball, `${pin_count}-pin legal aiming ball`);
@@ -220,7 +262,7 @@ test("keeps complete rack rows visible and depth ordered", () => {
 
 test("ships finite, unclipped camera projections for every rack", () => {
   for (const pin_count of rack_pin_counts) {
-    const camera = create_camera_state(pin_count, false);
+    const camera = create_camera_state(pin_count);
     const projection = create_camera_projection(camera, canvas.width, canvas.height);
     assert.ok(
       [
@@ -241,7 +283,7 @@ test("ships finite, unclipped camera projections for every rack", () => {
 
 test("partial racks retain the complete-rack camera", () => {
   for (const pin_count of rack_pin_counts) {
-    const camera = create_camera_state(pin_count, false);
+    const camera = create_camera_state(pin_count);
     const baseline = create_camera_projection(camera, canvas.width, canvas.height);
     const partial = create_snapshot(pin_count);
     fill_rack(partial, pin_count);

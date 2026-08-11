@@ -38,6 +38,17 @@ export function canonical_fallen_pin_angle(angle: number): number {
   return axis_angle === 0 ? 0 : axis_angle - Math.PI;
 }
 
+function set_rotated_transform(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  angle: number,
+): void {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  context.setTransform(cosine, sine, -sine, cosine, x, y);
+}
+
 export function draw_pin(
   context: CanvasRenderingContext2D,
   assets: PinAssets,
@@ -46,38 +57,33 @@ export function draw_pin(
   const source = state.kind === "standing_pin" ? assets.upright : assets.fallen;
   const display_angle =
     state.kind === "fallen_pin" ? canonical_fallen_pin_angle(state.angle) : state.angle;
-  context.save();
-  context.translate(state.ground_x, state.ground_y);
-  context.rotate(display_angle);
   context.fillStyle = `rgba(39, 27, 20, ${Math.max(0.16, 0.54 - state.motion_energy * 0.28)})`;
   context.beginPath();
   context.ellipse(
-    0,
-    0,
+    state.ground_x,
+    state.ground_y,
     Math.max(1, state.width * (state.kind === "fallen_pin" ? 0.43 : 0.38)),
     Math.max(1, state.height * (state.kind === "fallen_pin" ? 0.18 : 0.055)),
-    0,
+    display_angle,
     0,
     Math.PI * 2,
   );
   context.fill();
-  context.restore();
 
-  if (state.kind === "fallen_pin" && state.motion_energy > 0.16) {
-    context.save();
-    context.globalAlpha = state.motion_energy * 0.16;
-    context.translate(state.x + state.trail_x, state.y + state.trail_y);
-    context.rotate(display_angle);
+  if (state.motion_energy > 0.16) {
+    // This is an intentionally small, single trailing exposure. It makes a
+    // local physical wave legible at 990 pins without multiplying sprites or
+    // obscuring the settled rack.
+    context.globalAlpha = state.motion_energy * (state.kind === "fallen_pin" ? 0.16 : 0.1);
+    set_rotated_transform(context, state.x + state.trail_x, state.y + state.trail_y, display_angle);
     context.drawImage(source, -state.width / 2, -state.height / 2, state.width, state.height);
-    context.restore();
   }
 
-  context.save();
-  context.translate(state.x, state.y);
+  context.globalAlpha = 1;
+  set_rotated_transform(context, state.x, state.y, display_angle);
   // The SVG's crown points right before rotation. Its screen-space y offset
   // is therefore proportional to sin(angle), so the canonical angle above
   // guarantees that the crown cannot land below the base.
-  context.rotate(display_angle);
   context.drawImage(source, -state.width / 2, -state.height / 2, state.width, state.height);
-  context.restore();
+  context.resetTransform();
 }

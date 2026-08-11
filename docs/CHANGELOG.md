@@ -2,6 +2,24 @@
 
 ### Additions and New Features
 
+- Added twelve freshly captured 16:10 gameplay screenshots, a five-second real-worker 105-pin
+  cascade animation with static fallbacks, and dedicated 1,000-pin action and arcade moments
+  galleries. The README now leads with the real 990-pin collision wave plus the distinct strike
+  and spare stingers instead of two quiet states.
+- Added a reproducible documentation-showcase capture module that records a real full-power
+  990-pin roll, a one-play 105-pin cascade, result fixtures through the production client boundary,
+  the earned BEST FRAME moment, and the local-player handoff.
+
+- Added bounded, physics-derived ball-pin and pin-pin impact/fall windows to
+  the worker protocol, giving the presentation layer real collision timing and
+  strength without exposing per-contact event floods.
+- Added a shared physical-cue mapping: real impact strength and moving-pin
+  velocity now drive the deck accent, upright and fallen motion trails, and
+  localized impact color at the collision centroid.
+- Reworked collision sound into short layered ball, pin, and deck cues with a
+  live concurrency budget and pitch tied to real ball speed, replacing the
+  former delayed aggregate-only response.
+
 - Added `docs/LANE_MASTER_VIDEO_FINDINGS.md` as a durable
   evidence record distilled from Lane Master research footage, the ASI and official UNIS
   Extreme product-family sources, the motion and result cues adopted by Super Bowling, and the
@@ -21,6 +39,11 @@
 
 ### Behavior or Interface Changes
 
+- The 990-pin shot now receives a meaningful camera push while reduced motion
+  is an explicitly selected, fixed-composition accessibility alternative rather
+  than a constraint on the primary arcade presentation.
+- Result feedback is now a compact, deck-safe stinger; explicit Normal motion
+  preference takes precedence over the operating-system reduced-motion hint.
 - Result framing now holds the pin deck at the end of a roll and resets before
   the next aim. Reduced motion keeps the fixed pre-roll camera and removes the
   decorative confetti animation while preserving the visible result panel.
@@ -33,6 +56,10 @@
 
 ### Fixes and Maintenance
 
+- Rasterized the committed SVG pin and ball artwork once after loading, then reused those Canvas
+  sources with direct transforms during play. The 990-pin draw loop still renders every physical
+  pin and bounded motion trail, but no longer asks the browser to rasterize SVGs or push two Canvas
+  state stacks per pin on every frame.
 - Refreshed the complete repository documentation routes and rebalanced current
   presentation guidance around the energetic arcade experience as the normal
   design and acceptance target. Motion accessibility now has one compact
@@ -41,6 +68,21 @@
 
 ### Decisions and Failures
 
+- Falsified camera projection and command generation as the 990-pin frame bottleneck: together
+  they consumed less than one millisecond in isolated measurements. Browser profiling instead
+  identified repeated SVG-backed `drawImage` calls and Canvas state restoration as the dominant
+  main-thread costs, so the fix stayed at the asset/drawing boundary rather than weakening physics,
+  camera motion, visible pin count, or cascade emphasis.
+- Kept showcase capture out of production game code. Documentation frames come from the shipped
+  build, with real workers for collision sequences and existing production-boundary fixtures only
+  for deterministic strike, spare, and handoff states.
+- The first expanded documentation capture closed three single-image browser contexts before their
+  screenshot promises completed. The capture helpers now await file completion before releasing
+  each context, and the unchanged front door then produced all twelve images successfully.
+
+- Kept scoring and physics constants unchanged: deterministic 990-pin evidence
+  showed a dense real cascade without a timeout, so the improvement belongs in
+  how physical events are communicated rather than in artificial force changes.
 - Defined Super Bowling's design lineage as Nintendo Wii-style screen bowling without a motion
   controller, combined with UNIS Lane Master-style arcade action without a physical ball or
   cabinet sensors. The resulting pointer and keyboard game remains an original synthesis.
@@ -56,11 +98,20 @@
 
 ### Developer Tests and Notes
 
-- `./check_codebase.sh` passed all five gates with 167 Node tests, including
+- The maintained complete-roll 990-pin frame window improved from a 34.9 ms median and 40.6 ms
+  p95 to a 16.7 ms median and 18.3 ms p95 across 181 impact-window samples. Two separate profiling
+  runs reproduced the 60 Hz result while retaining roughly 990 live pin images plus bounded trails,
+  and the full screenshot capture passed with refreshed 10-, 105-, and 990-pin evidence.
+- Strict TypeScript checking passed. Focused validation passed: 43
+  camera/renderer/impact Node tests, audio tests 10/10, relevant Playwright
+  journeys 9/9, impact-window tests 3/3, and the physics benchmark/backstop
+  30/30 with no timeout. An authoritative first-impact capture now records the
+  real cascade evidence used by the presentation checks.
+- `./check_codebase.sh` passed all five gates with 185 Node tests, including
   camera progression and reset, wide-rack scaling, settled versus moving pin
   presentation, and reducer-produced strike/spare burst coverage.
-- `./build_github_pages.sh` produced the GitHub Pages-ready build, and the full
-  Playwright suite passed 28/28 in 14.2 seconds. The new browser journeys use
+- The GitHub Pages-ready build completed, and the full Playwright suite passed 29/29 in 14.3
+  seconds. The browser journeys use
   visible rolls and verify both result overlays plus terminal camera zoom.
 - Original-resolution review covered a real worker collision sequence, desktop strike
   and spare states, a 390 px narrow layout, and reduced motion. A fresh

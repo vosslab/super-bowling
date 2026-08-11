@@ -18,9 +18,16 @@ readable paths. Strikes and spares earn quick, distinct lane-side celebrations w
 rolls keep the next decision in view.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
-![1,000-mode BEST FRAME earned-moment toast above the 990-pin lane and technique controls](docs/screenshots/thousand_pin_deck.png)
-![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with technique controls in the side panel](docs/screenshots/pass_the_keyboard.png)
+
+![A full-power ball opening the first collision wave through the center of the 990-pin rack](docs/screenshots/thousand_pin_impact_wave.png)
+![Hundreds of individually simulated pins spreading into a deep 990-pin collision field](docs/screenshots/thousand_pin_cascade.png)
+![Amber STRIKE stinger below a cleared ten-pin deck](docs/screenshots/classic_strike.png)
+![Cyan SPARE stinger below a clean ten-pin pickup](docs/screenshots/classic_spare.png)
 <!-- screenshots:end -->
+
+See the complete [1,000-pin action tour](docs/showcase/THOUSAND_PIN_ACTION.md) and the
+[arcade moments gallery](docs/showcase/ARCADE_MOMENTS.md) for twelve current screenshots and one
+short real-worker 105-pin animation.
 
 ## Make the shot yours
 
@@ -77,13 +84,13 @@ whole-second value when a shorter or longer local session is useful.
 
 ## Controls and scoring
 
-| Key | Action |
-| --- | --- |
-| Up / Down | Set pre-roll power. |
-| Left / Right | Set pre-roll start position. |
-| A / D | Set pre-roll angle. |
-| Q / E | Set pre-roll spin. |
-| Space | Bowl with the selected technique. |
+| Key          | Action                            |
+| ------------ | --------------------------------- |
+| Up / Down    | Set pre-roll power.               |
+| Left / Right | Set pre-roll start position.      |
+| A / D        | Set pre-roll angle.               |
+| Q / E        | Set pre-roll spin.                |
+| Space        | Bowl with the selected technique. |
 
 Classic two-bowl frames use strikes, spares, and the standard tenth-frame bonus rolls. A classic
 perfect game is `30 * actual_pin_count`, so the 1,000 scale's 990 physical pins matter more than
@@ -129,6 +136,10 @@ Start here:
 - [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) - Review the lower-motion presentation contract.
 - [docs/LANE_MASTER_VIDEO_FINDINGS.md](docs/LANE_MASTER_VIDEO_FINDINGS.md) - Read the durable
   design findings behind the game's original screen-bowling and arcade-action synthesis.
+- [docs/showcase/THOUSAND_PIN_ACTION.md](docs/showcase/THOUSAND_PIN_ACTION.md) - Follow one
+  full-power 990-pin roll from approach through its expanding physical cascade.
+- [docs/showcase/ARCADE_MOMENTS.md](docs/showcase/ARCADE_MOMENTS.md) - See 105-pin action,
+  classic result stingers, an earned record, and local multiplayer handoff.
 
 Understand the implementation:
 

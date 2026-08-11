@@ -1,95 +1,47 @@
-export const collision_bucket_ms = 90;
 export const collision_intensity_pin_cap = 12;
-export const maximum_collision_voices_per_roll = 8;
 
+export type ImpactPathCue = {
+  contact_count: number;
+  impulse: number;
+};
+
+/**
+ * A bounded, simulation-independent description of one physical impact window.
+ * Values are normalized before reaching Web Audio so this module stays a stable
+ * seam between the worker protocol and the presentation layer.
+ */
 export type CollisionSound = {
-  intensity: number;
+  first_contact: boolean;
+  ball_pin: ImpactPathCue;
+  pin_pin: ImpactPathCue;
+  deck_impulse: number;
+  pan?: number;
 };
 
-export type CollisionAggregator = {
-  begin_roll(): void;
-  record(fallen_pin_delta: number, timestamp_ms: number): CollisionSound | undefined;
-  flush(timestamp_ms: number): CollisionSound | undefined;
-  end_roll(): void;
-};
-
-type AggregatorState = {
-  bucket_started_at_ms: number | undefined;
-  fallen_pin_total: number;
-  emitted_voice_count: number;
-  roll_active: boolean;
-};
-
-function create_collision_sound(fallen_pin_total: number): CollisionSound {
-  const capped_total = Math.min(fallen_pin_total, collision_intensity_pin_cap);
-  const intensity = capped_total / collision_intensity_pin_cap;
-  return { intensity };
+function clamp_unit(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
 
-function clear_bucket(state: AggregatorState): void {
-  state.bucket_started_at_ms = undefined;
-  state.fallen_pin_total = 0;
-}
+/** Safely accepts transport values without making audio depend on simulation types. */
+export function create_collision_sound(input: CollisionSound): CollisionSound | undefined {
+  const ball_pin_contacts = Math.max(0, Math.floor(input.ball_pin.contact_count));
+  const pin_pin_contacts = Math.max(0, Math.floor(input.pin_pin.contact_count));
+  const ball_pin_impulse = clamp_unit(input.ball_pin.impulse);
+  const pin_pin_impulse = clamp_unit(input.pin_pin.impulse);
+  const deck_impulse = clamp_unit(input.deck_impulse);
+  if (ball_pin_contacts + pin_pin_contacts === 0 && deck_impulse === 0) return undefined;
 
-function can_emit(state: AggregatorState): boolean {
-  const has_collision = state.fallen_pin_total > 0;
-  const below_voice_limit = state.emitted_voice_count < maximum_collision_voices_per_roll;
-  return has_collision && below_voice_limit;
-}
-
-function emit_bucket(state: AggregatorState): CollisionSound | undefined {
-  if (!can_emit(state)) {
-    clear_bucket(state);
-    return undefined;
-  }
-  const sound = create_collision_sound(state.fallen_pin_total);
-  state.emitted_voice_count += 1;
-  clear_bucket(state);
-  return sound;
-}
-
-export function create_collision_aggregator(): CollisionAggregator {
-  const state: AggregatorState = {
-    bucket_started_at_ms: undefined,
-    fallen_pin_total: 0,
-    emitted_voice_count: 0,
-    roll_active: false,
+  return {
+    first_contact: input.first_contact && ball_pin_contacts > 0,
+    ball_pin: {
+      contact_count: Math.min(ball_pin_contacts, collision_intensity_pin_cap),
+      impulse: ball_pin_impulse,
+    },
+    pin_pin: {
+      contact_count: Math.min(pin_pin_contacts, collision_intensity_pin_cap),
+      impulse: pin_pin_impulse,
+    },
+    deck_impulse,
+    ...(input.pan === undefined ? {} : { pan: Math.max(-1, Math.min(1, input.pan)) }),
   };
-
-  function begin_roll(): void {
-    state.emitted_voice_count = 0;
-    state.roll_active = true;
-    clear_bucket(state);
-  }
-
-  function record(fallen_pin_delta: number, timestamp_ms: number): CollisionSound | undefined {
-    if (!state.roll_active || fallen_pin_delta <= 0) return undefined;
-
-    const bucket_started_at_ms = state.bucket_started_at_ms;
-    if (
-      bucket_started_at_ms !== undefined &&
-      timestamp_ms - bucket_started_at_ms >= collision_bucket_ms
-    ) {
-      const sound = emit_bucket(state);
-      state.bucket_started_at_ms = timestamp_ms;
-      state.fallen_pin_total = fallen_pin_delta;
-      return sound;
-    }
-
-    if (bucket_started_at_ms === undefined) state.bucket_started_at_ms = timestamp_ms;
-    state.fallen_pin_total += fallen_pin_delta;
-    return undefined;
-  }
-
-  function flush(_timestamp_ms: number): CollisionSound | undefined {
-    if (!state.roll_active) return undefined;
-    return emit_bucket(state);
-  }
-
-  function end_roll(): void {
-    state.roll_active = false;
-    clear_bucket(state);
-  }
-
-  return { begin_roll, record, flush, end_roll };
 }

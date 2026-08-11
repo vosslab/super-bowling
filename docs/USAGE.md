@@ -66,11 +66,18 @@ npm run test:playwright -- --build
 
 ## Alternate pages
 
-The production build also includes `benchmark.html` and `designer_fixture.html` in `dist/`.
-They support benchmark and ball-designer checks rather than ordinary game setup. The build contract
-and produced files are defined by [pipeline/build.mjs](../pipeline/build.mjs).
+The production build includes two developer diagnostic pages. They are not part of ordinary game
+setup, but they are supported local workflows. Start a predictable local preview:
 
-## Known gaps
+```bash
+PORT=8123 ./run_web_server.sh
+```
 
-- TODO: Add a documented player-facing URL or command for each diagnostic page when it becomes a
-  supported workflow.
+Then open either route in the built artifact:
+
+- `http://localhost:8123/benchmark.html` checks renderer work against the benchmark fixture.
+- `http://localhost:8123/designer_fixture.html` shows the ball-designer fixture used by browser
+  tests.
+
+Use `Ctrl-C` to stop the preview. The build contract and produced files are defined by
+[pipeline/build.mjs](../pipeline/build.mjs).

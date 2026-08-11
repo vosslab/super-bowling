@@ -44,7 +44,7 @@ function draw(pin_count, ball_y = 0, aim_lateral_offset) {
     canvas.width,
     canvas.height,
     undefined,
-    create_camera_state(pin_count, false),
+    create_camera_state(pin_count),
     undefined,
     aim_lateral_offset,
   );
@@ -71,11 +71,7 @@ function assert_finite_point(point, label) {
 }
 
 test("shared rational projection returns finite points and rejects non-finite or hidden points", () => {
-  const projection = create_camera_projection(
-    create_camera_state(10, false),
-    canvas.width,
-    canvas.height,
-  );
+  const projection = create_camera_projection(create_camera_state(10), canvas.width, canvas.height);
   const visible = project_world_point(projection, { x: 1, y: 0, z: 0 });
   assert.ok(visible);
   assert.ok(
@@ -94,7 +90,7 @@ test("shared rational projection returns finite points and rejects non-finite or
 });
 
 test("camera projection rejects invalid canvas dimensions before drawing", () => {
-  const camera = create_camera_state(10, false);
+  const camera = create_camera_state(10);
   for (const [width, height] of [
     [0, canvas.height],
     [-1, canvas.height],

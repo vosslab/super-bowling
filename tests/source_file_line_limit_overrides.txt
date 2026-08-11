@@ -1,0 +1,5 @@
+# Long-lived planning and history records whose continuity is intentional.
+docs/active_plans/active/practice_records_and_earned_moments.md
+docs/active_plans/user-feedback-plan.md
+docs/archive/ancient-shimmying-adleman.md
+docs/archive/regulation_lane_rebuild_plan.md

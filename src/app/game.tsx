@@ -27,7 +27,6 @@ import {
   aim_control_steps,
   angle_in_degrees,
   board_position_limits,
-  start_position_from_boards,
   start_position_in_boards,
 } from "../game/aim";
 import {
@@ -49,21 +48,12 @@ import {
 } from "../simulation/protocol";
 import { create_input_controller, type InputController } from "./input_controller";
 import { earned_moment, earned_moment_state, type EarnedMoment } from "./earned_moments";
-import {
-  describe_power,
-  describe_spin,
-  format_angle,
-  format_shot_plan,
-  format_start_position,
-} from "./aim_feedback";
-import {
-  centered_slider_tick,
-  centered_slider_value,
-  create_centered_slider_scale,
-  type CenteredSliderScale,
-} from "./aim_slider";
+import { format_shot_plan } from "./aim_feedback";
+import { create_centered_slider_scale, type CenteredSliderScale } from "./aim_slider";
+import { GameControlDeck, GameDialogs } from "./game_controls";
 import type { SimulationClient } from "./simulation_client";
 import { roll_celebration, type RollCelebration } from "./roll_celebration";
+import { map_impact_presentation, normalize_ball_roll_speed } from "./impact_presentation";
 
 type SnapshotHolder = {
   previous: Float32Array | undefined;
@@ -75,14 +65,14 @@ export type GameProps = {
   client: SimulationClient;
   setup: MatchSetup;
   auto_run?: boolean;
-  mute_enabled(): boolean;
-  reduced_motion(): boolean;
-  on_set_mute(mute_enabled: boolean): void;
-  on_set_reduced_motion(reduced_motion: boolean): void;
-  on_match_complete(summaries: readonly PlayerMatchSummary[]): void;
-  on_exit(): void;
-  on_replay(): void;
-  previous_record(): ModeRecord | undefined;
+  mute_enabled: () => boolean;
+  reduced_motion: () => boolean;
+  on_set_mute: (mute_enabled: boolean) => void;
+  on_set_reduced_motion: (reduced_motion: boolean) => void;
+  on_match_complete: (summaries: readonly PlayerMatchSummary[]) => void;
+  on_exit: () => void;
+  on_replay: () => void;
+  previous_record: () => ModeRecord | undefined;
 };
 
 const result_minimum_hold_ms = 900;
@@ -101,21 +91,6 @@ const celebration_confetti = [
   { x: 87, drift: -2.1, delay: 105, color: "#FFF8E7", turn: -230 },
   { x: 94, drift: 2.5, delay: 35, color: "#F3B63F", turn: 170 },
 ] as const;
-
-function phase_label(phase: MatchState["phase"]): string {
-  const labels: Record<MatchState["phase"], string> = {
-    setup: "Preparing match",
-    rack_resetting: "Setting a fresh rack",
-    aiming: "Aim your ball",
-    rolling: "Ball rolling",
-    result: "Roll complete",
-    sweeping: "Clearing fallen pins",
-    handoff: "Pass the keyboard",
-    final: "Match complete",
-    fatal: "Lane needs attention",
-  };
-  return labels[phase];
-}
 
 function score_text(score: number | undefined): string {
   return score === undefined ? "-" : String(score);
@@ -165,6 +140,10 @@ export function Game(props: GameProps): JSX.Element {
     number | undefined
   >();
   const [camera_progress, set_camera_progress] = createSignal(0);
+  const [camera_physical_progress, set_camera_physical_progress] = createSignal(0);
+  const [impact_window_count, set_impact_window_count] = createSignal(0);
+  const [first_impact_seen, set_first_impact_seen] = createSignal(false);
+  const [last_impact_strength, set_last_impact_strength] = createSignal(0);
   const [ball_in_pit, set_ball_in_pit] = createSignal(false);
   const [preview_path, set_preview_path] = createSignal<Float32Array | undefined>();
   const [current_earned_moment, set_current_earned_moment] = createSignal<
@@ -184,7 +163,6 @@ export function Game(props: GameProps): JSX.Element {
   let renderer: GameRenderer | undefined;
   let audio: AudioController | undefined;
   let camera: CameraState | undefined;
-  let previous_fallen_pin_count = 0;
   let animation_frame = 0;
   let result_timer: number | undefined;
   let result_available_at = 0;
@@ -199,19 +177,31 @@ export function Game(props: GameProps): JSX.Element {
 
   function apply_camera(next_camera: CameraState): void {
     camera = next_camera;
-    renderer?.set_camera(camera);
-    if (camera_progress() !== camera.shot_progress) set_camera_progress(camera.shot_progress);
+    const presentation_camera = with_reduced_motion(camera, props.reduced_motion());
+    renderer?.set_camera(presentation_camera);
+    if (camera_physical_progress() !== camera.shot_progress) {
+      set_camera_physical_progress(camera.shot_progress);
+    }
+    if (camera_progress() !== presentation_camera.shot_progress) {
+      set_camera_progress(presentation_camera.shot_progress);
+    }
+  }
+
+  function reset_impact_diagnostics(): void {
+    set_impact_window_count(0);
+    set_first_impact_seen(false);
+    set_last_impact_strength(0);
   }
 
   function execute_effect(effect: MatchEffect): void {
     if (effect.type === "reset_rack") {
-      previous_fallen_pin_count = 0;
       if (camera !== undefined && renderer !== undefined) {
         apply_camera(reset_camera_for_roll(camera));
       }
       props.client.send({ type: "reset_rack", pin_count: effect.pin_count });
     }
     if (effect.type === "launch") {
+      reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
         apply_camera(reset_camera_for_roll(camera));
       }
@@ -225,6 +215,7 @@ export function Game(props: GameProps): JSX.Element {
     }
     if (effect.type === "sweep_deadwood") props.client.send({ type: "sweep_deadwood" });
     if (effect.type === "prepare_next_roll") {
+      reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
         apply_camera(reset_camera_for_roll(camera));
       }
@@ -305,11 +296,6 @@ export function Game(props: GameProps): JSX.Element {
   }
 
   function accept_snapshot(event: Extract<SimulationEvent, { type: "snapshot" }>): void {
-    const fallen_pin_delta = Math.max(0, event.fallen_pin_count - previous_fallen_pin_count);
-    previous_fallen_pin_count = event.fallen_pin_count;
-    if (match_state().phase === "rolling") {
-      audio?.record_collision(fallen_pin_delta, performance.now());
-    }
     snapshot_holder.previous = snapshot_holder.current ?? event.snapshot_data;
     snapshot_holder.current = event.snapshot_data;
     snapshot_holder.received_at = performance.now();
@@ -325,11 +311,16 @@ export function Game(props: GameProps): JSX.Element {
       });
       const ball = read_snapshot_ball(event.snapshot_data, event.pin_count * pin_snapshot_stride);
       set_ball_in_pit(ball.in_pit);
+      if (match_state().phase === "rolling" && event.pin_count === match_state().pin_count) {
+        audio?.update_roll_speed(
+          normalize_ball_roll_speed(Math.hypot(ball.velocity_x, ball.velocity_y)),
+        );
+      }
       // The worker may settle immediately after pit capture, before another
       // animation frame can interpolate the terminal snapshot. Latch that
       // physical endpoint so the result holds the roll's final framing.
       if (camera !== undefined && match_state().phase === "rolling" && ball.in_pit) {
-        apply_camera(advance_camera_for_ball(camera, ball.y, props.reduced_motion()));
+        apply_camera(advance_camera_for_ball(camera, ball.y));
       }
     }
     if (match_state().phase !== "rack_resetting") return;
@@ -339,6 +330,29 @@ export function Game(props: GameProps): JSX.Element {
 
   function accept_event(event: SimulationEvent): void {
     if (event.type === "snapshot") return accept_snapshot(event);
+    if (event.type === "impact") {
+      const state = match_state();
+      if (state.phase !== "rolling" || event.pin_count !== state.pin_count) return;
+      const cues = map_impact_presentation(event);
+      const timestamp = performance.now();
+      if (cues.audio !== undefined) audio?.record_impact(cues.audio);
+      if (!props.reduced_motion() && cues.visual !== undefined) {
+        renderer?.record_impact(cues.visual, timestamp);
+      }
+      set_impact_window_count((count) => count + 1);
+      if (event.first_ball_pin_impact) set_first_impact_seen(true);
+      const audio_strength =
+        cues.audio === undefined
+          ? 0
+          : Math.max(
+              cues.audio.ball_pin.impulse,
+              cues.audio.pin_pin.impulse,
+              cues.audio.deck_impulse,
+            );
+      const strength = Math.max(cues.visual?.strength ?? 0, audio_strength);
+      if (last_impact_strength() !== strength) set_last_impact_strength(strength);
+      return;
+    }
     if (event.type === "ready") {
       // Worker events carry the complete triangle total, while setup retains the scale label.
       if (event.pin_count === match_state().pin_count) dispatch({ type: "start" });
@@ -362,7 +376,6 @@ export function Game(props: GameProps): JSX.Element {
       const before = match_state();
       if (before.phase !== "rolling") return;
       if (event.timed_out) {
-        audio?.flush_collisions(performance.now());
         audio?.stop_roll();
         dispatch({
           type: "fatal",
@@ -370,7 +383,6 @@ export function Game(props: GameProps): JSX.Element {
         });
       } else {
         const next = dispatch({ type: "settled", settled_roll: event });
-        audio?.flush_collisions(performance.now());
         audio?.stop_roll();
         evaluate_earned_moment(before, next);
         const result = select_result_sound(before, next, event);
@@ -432,9 +444,9 @@ export function Game(props: GameProps): JSX.Element {
         const previous_ball = read_snapshot_ball(snapshot_holder.previous, ball_offset);
         const current_ball = read_snapshot_ball(snapshot_holder.current, ball_offset);
         const interpolated_y = previous_ball.y + (current_ball.y - previous_ball.y) * alpha;
-        apply_camera(advance_camera_for_ball(camera, interpolated_y, props.reduced_motion()));
+        apply_camera(advance_camera_for_ball(camera, interpolated_y));
       }
-      const commands = renderer.draw(alpha);
+      const commands = renderer.draw(alpha, timestamp);
       const pin_count = commands.filter(
         (command) => command.kind === "standing_pin" || command.kind === "fallen_pin",
       ).length;
@@ -523,8 +535,8 @@ export function Game(props: GameProps): JSX.Element {
     renderer = create_game_renderer(context);
     audio = create_audio_controller();
     audio.set_muted(props.mute_enabled());
-    camera = create_camera_state(get_rack_pin_count(props.setup.pin_count), props.reduced_motion());
-    renderer.set_camera(camera);
+    camera = create_camera_state(get_rack_pin_count(props.setup.pin_count));
+    apply_camera(camera);
     const resize_observer = new ResizeObserver(resize_canvas);
     resize_observer.observe(canvas);
     unsubscribe = props.client.subscribe(accept_event);
@@ -578,7 +590,7 @@ export function Game(props: GameProps): JSX.Element {
     );
     audio?.set_muted(props.mute_enabled());
     if (camera !== undefined && renderer !== undefined) {
-      apply_camera(with_reduced_motion(camera, props.reduced_motion()));
+      apply_camera(camera);
     }
     if (state.phase === "handoff") queueMicrotask(() => handoff_button?.focus());
     if (state.phase === "final") {
@@ -683,11 +695,7 @@ export function Game(props: GameProps): JSX.Element {
     roll_celebration(match_state());
   const current_camera_zoom = (): number => {
     if (camera === undefined) return 1;
-    return get_camera_zoom({
-      ...camera,
-      shot_progress: camera_progress(),
-      reduced_motion: props.reduced_motion(),
-    });
+    return get_camera_zoom(with_reduced_motion(camera, props.reduced_motion()));
   };
 
   return (
@@ -705,7 +713,11 @@ export function Game(props: GameProps): JSX.Element {
       data-drawn-aim-guide-first-screen-x={drawn_aim_guide_first_screen_x()?.toFixed(2) ?? ""}
       data-camera-mode="centered-shot"
       data-camera-progress={camera_progress().toFixed(4)}
+      data-camera-physical-progress={camera_physical_progress().toFixed(4)}
       data-camera-zoom={current_camera_zoom().toFixed(4)}
+      data-impact-window-count={String(impact_window_count())}
+      data-first-impact-seen={first_impact_seen() ? "true" : "false"}
+      data-last-impact-strength={last_impact_strength().toFixed(4)}
       data-ball-in-pit={ball_in_pit() ? "true" : "false"}
       data-earned-moment={current_earned_moment()?.kind ?? ""}
       data-reduced-motion={props.reduced_motion() ? "true" : "false"}
@@ -828,7 +840,12 @@ export function Game(props: GameProps): JSX.Element {
         </Show>
         <Show when={current_roll_celebration()}>
           {(celebration) => (
-            <div class="roll_celebration" data-celebration={celebration().kind} aria-hidden="true">
+            <div
+              class="roll_celebration"
+              data-celebration={celebration().kind}
+              data-celebration-presentation="deck-safe-stinger"
+              aria-hidden="true"
+            >
               <div class="celebration_confetti">
                 <Index each={celebration_confetti}>
                   {(piece) => (
@@ -851,337 +868,54 @@ export function Game(props: GameProps): JSX.Element {
           )}
         </Show>
       </section>
-      <section
-        class="control_deck"
-        classList={{ final_control_deck: match_state().phase === "final" }}
-        aria-label="Bowling controls and match status"
-      >
-        <Show
-          when={match_state().phase === "final"}
-          fallback={
-            <>
-              <div class="status_block" aria-live="polite">
-                <p class="status_label">{phase_label(match_state().phase)}</p>
-                <Show when={match_state().phase === "result" && match_state().result_message}>
-                  {(message) => (
-                    <p class="roll_result" role="status">
-                      {message()}
-                    </p>
-                  )}
-                </Show>
-                <p data-standing-count>
-                  {match_state().standing_pin_count} of {match_state().pin_count.toLocaleString()}{" "}
-                  pins standing
-                </p>
-                <p>
-                  Frame {match_state().current_frame_index + 1}, roll{" "}
-                  {match_state().current_roll_index + 1}
-                </p>
-              </div>
-              <div class="aim_block">
-                <div class="aim_control">
-                  <label for="start_position_control">
-                    Start position{" "}
-                    <output aria-live="polite">
-                      {format_start_position(current_start_position_boards())}
-                    </output>
-                  </label>
-                  <input
-                    id="start_position_control"
-                    data-control="start-position"
-                    type="range"
-                    min={-current_start_position_scale().maximum_tick}
-                    max={current_start_position_scale().maximum_tick}
-                    step="1"
-                    value={centered_slider_tick(
-                      current_start_position_scale(),
-                      current_start_position_boards(),
-                    )}
-                    aria-valuetext={format_start_position(current_start_position_boards())}
-                    disabled={match_state().phase !== "aiming"}
-                    onInput={(event) =>
-                      update_aim({
-                        ...match_state().aim,
-                        start_position: start_position_from_boards(
-                          match_state().pin_count,
-                          centered_slider_value(
-                            current_start_position_scale(),
-                            Number(event.currentTarget.value),
-                          ),
-                        ),
-                      })
-                    }
-                  />
-                  <span class="range_legend" aria-hidden="true">
-                    <span>Left</span>
-                    <span>Center</span>
-                    <span>Right</span>
-                  </span>
-                </div>
-                <div class="aim_control">
-                  <label for="power_control">
-                    Power{" "}
-                    <output aria-live="polite">
-                      {match_state().aim.power.toFixed(0)} -{" "}
-                      {describe_power(
-                        match_state().aim.power,
-                        current_aim_limits().minimum_power,
-                        current_aim_limits().maximum_power,
-                      )}
-                    </output>
-                  </label>
-                  <input
-                    id="power_control"
-                    data-control="power"
-                    type="range"
-                    min={current_aim_limits().minimum_power}
-                    max={current_aim_limits().maximum_power}
-                    step="1"
-                    value={match_state().aim.power}
-                    disabled={match_state().phase !== "aiming"}
-                    onInput={(event) =>
-                      update_aim({ ...match_state().aim, power: Number(event.currentTarget.value) })
-                    }
-                  />
-                  <span class="range_legend" aria-hidden="true">
-                    <span>Soft</span>
-                    <span>Hard</span>
-                  </span>
-                </div>
-                <div class="aim_control">
-                  <label for="angle_control">
-                    Angle{" "}
-                    <output aria-live="polite">{format_angle(current_angle_degrees())}</output>
-                  </label>
-                  <input
-                    id="angle_control"
-                    data-control="angle"
-                    type="range"
-                    min={-current_angle_scale().maximum_tick}
-                    max={current_angle_scale().maximum_tick}
-                    step="1"
-                    value={centered_slider_tick(current_angle_scale(), current_angle_degrees())}
-                    aria-valuetext={format_angle(current_angle_degrees())}
-                    disabled={match_state().phase !== "aiming"}
-                    onInput={(event) =>
-                      update_aim({
-                        ...match_state().aim,
-                        angle:
-                          (centered_slider_value(
-                            current_angle_scale(),
-                            Number(event.currentTarget.value),
-                          ) *
-                            Math.PI) /
-                          180,
-                      })
-                    }
-                  />
-                  <span class="range_legend" aria-hidden="true">
-                    <span>Left</span>
-                    <span>Straight</span>
-                    <span>Right</span>
-                  </span>
-                </div>
-                <div class="aim_control">
-                  <label for="spin_control">
-                    Spin{" "}
-                    <output aria-live="polite">
-                      {match_state().aim.spin.toFixed(2)} -{" "}
-                      {describe_spin(match_state().aim.spin, current_maximum_spin_magnitude())}
-                    </output>
-                  </label>
-                  <input
-                    id="spin_control"
-                    data-control="spin"
-                    type="range"
-                    min={-current_spin_scale().maximum_tick}
-                    max={current_spin_scale().maximum_tick}
-                    step="1"
-                    value={centered_slider_tick(current_spin_scale(), match_state().aim.spin)}
-                    aria-valuetext={`${match_state().aim.spin.toFixed(2)} - ${describe_spin(
-                      match_state().aim.spin,
-                      current_maximum_spin_magnitude(),
-                    )}`}
-                    disabled={match_state().phase !== "aiming"}
-                    onInput={(event) =>
-                      update_aim({
-                        ...match_state().aim,
-                        spin: centered_slider_value(
-                          current_spin_scale(),
-                          Number(event.currentTarget.value),
-                        ),
-                      })
-                    }
-                  />
-                  <span class="range_legend" aria-hidden="true">
-                    <span>Left hook</span>
-                    <span>Straight</span>
-                    <span>Right hook</span>
-                  </span>
-                </div>
-                <p>Arrows set position and power. A/D aims. Q/E hooks. Space bowls.</p>
-                <p class="aim_guide_readout" data-aim-guide-readout aria-live="polite">
-                  {current_shot_plan()}
-                </p>
-              </div>
-              <div class="play_preference_controls" aria-label="Game preferences">
-                <button
-                  class="preference_button"
-                  type="button"
-                  aria-pressed={props.mute_enabled()}
-                  onClick={() => {
-                    audio?.activate();
-                    props.on_set_mute(!props.mute_enabled());
-                  }}
-                >
-                  Mute {props.mute_enabled() ? "on" : "off"}
-                </button>
-                <button
-                  class="preference_button"
-                  type="button"
-                  aria-pressed={props.reduced_motion()}
-                  onClick={() => props.on_set_reduced_motion(!props.reduced_motion())}
-                >
-                  Reduced motion {props.reduced_motion() ? "on" : "off"}
-                </button>
-              </div>
-              <Show when={match_state().phase === "aiming"}>
-                <button class="bowl_button" type="button" onClick={launch}>
-                  Bowl now
-                </button>
-              </Show>
-              <Show when={match_state().phase === "result"}>
-                <button
-                  class="continue_button"
-                  type="button"
-                  aria-label="Continue to the next roll"
-                  onClick={request_result_advance}
-                >
-                  Continue <span>Space or Enter</span>
-                </button>
-              </Show>
-              <Show when={props.auto_run}>
-                <button class="fixture_button" type="button" onClick={run_deterministic_game}>
-                  Run deterministic perfect game
-                </button>
-              </Show>
-              <Show when={match_state().phase === "fatal"}>
-                <div class="fatal_result" role="alert">
-                  <p>{match_state().fatal_message}</p>
-                  <button type="button" onClick={() => props.on_exit()}>
-                    Return to setup
-                  </button>
-                </div>
-              </Show>
-            </>
-          }
-        >
-          <section class="final_result match_summary" aria-labelledby="final_score_heading">
-            <div class="final_score_hero" role="status">
-              <p class="eyebrow">Match complete</p>
-              <h2 id="final_score_heading">Final score</h2>
-              <strong>{score_text(final_record()?.top_score)}</strong>
-            </div>
-            <dl class="match_summary_details">
-              <div>
-                <dt>Previous high game</dt>
-                <dd>{props.previous_record()?.best_score ?? "First result"}</dd>
-              </div>
-              <div>
-                <dt>Record change</dt>
-                <dd>{final_delta_text()}</dd>
-              </div>
-              <div>
-                <dt>{scoreboard_labels.best_frame}</dt>
-                <dd>{final_best_frame_text()}</dd>
-              </div>
-              <div>
-                <dt>Best run</dt>
-                <dd>{final_best_run_label()}</dd>
-              </div>
-            </dl>
-            <div class="final_actions">
-              <button
-                ref={(element) => {
-                  replay_button = element;
-                }}
-                class="replay_button"
-                type="button"
-                onClick={replay_match}
-              >
-                Play again
-              </button>
-              <button class="change_setup_button" type="button" onClick={() => props.on_exit()}>
-                Change setup
-              </button>
-            </div>
-          </section>
-        </Show>
-      </section>
-      <Show when={handoff_players()}>
-        {(players) => (
-          <section
-            class="handoff_panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="handoff_heading"
-          >
-            <div>
-              <p class="eyebrow">Frame {match_state().handoff!.frame_index + 1} complete</p>
-              <h2 id="handoff_heading">Pass the keyboard</h2>
-              <p>
-                {players().completed.name} is done. {players().next.name}, your fresh rack is ready
-                next.
-              </p>
-              <button
-                ref={(element) => {
-                  handoff_button = element;
-                }}
-                class="start_button"
-                type="button"
-                onClick={continue_turn}
-              >
-                {players().next.name}, start your turn
-              </button>
-            </div>
-          </section>
-        )}
-      </Show>
-      <Show when={exit_confirmation_open()}>
-        <section
-          class="exit_confirmation"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="exit_confirmation_heading"
-          aria-describedby="exit_confirmation_description"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") set_exit_confirmation_open(false);
-          }}
-        >
-          <div>
-            <p class="eyebrow">Unfinished match</p>
-            <h2 id="exit_confirmation_heading">End this match?</h2>
-            <p id="exit_confirmation_description">
-              Your unfinished score will not be added to the practice record.
-            </p>
-            <div class="exit_confirmation_actions">
-              <button
-                ref={(element) => {
-                  exit_cancel_button = element;
-                }}
-                class="keep_bowling_button"
-                type="button"
-                onClick={() => set_exit_confirmation_open(false)}
-              >
-                Keep bowling
-              </button>
-              <button class="confirm_exit_button" type="button" onClick={confirm_exit}>
-                End match
-              </button>
-            </div>
-          </div>
-        </section>
-      </Show>
+      <GameControlDeck
+        state={match_state}
+        auto_run={props.auto_run}
+        mute_enabled={() => props.mute_enabled()}
+        reduced_motion={() => props.reduced_motion()}
+        start_position_scale={current_start_position_scale}
+        start_position_boards={current_start_position_boards}
+        angle_scale={current_angle_scale}
+        angle_degrees={current_angle_degrees}
+        spin_scale={current_spin_scale}
+        maximum_spin_magnitude={current_maximum_spin_magnitude}
+        minimum_power={() => current_aim_limits().minimum_power}
+        maximum_power={() => current_aim_limits().maximum_power}
+        shot_plan={current_shot_plan}
+        update_aim={update_aim}
+        on_toggle_mute={() => {
+          audio?.activate();
+          props.on_set_mute(!props.mute_enabled());
+        }}
+        on_toggle_reduced_motion={() => props.on_set_reduced_motion(!props.reduced_motion())}
+        on_launch={launch}
+        on_request_result_advance={request_result_advance}
+        on_run_deterministic_game={run_deterministic_game}
+        on_exit={() => props.on_exit()}
+        final_record={final_record}
+        previous_record={() => props.previous_record()}
+        final_delta_text={final_delta_text}
+        final_best_frame_text={final_best_frame_text}
+        final_best_run_label={final_best_run_label}
+        on_replay={replay_match}
+        replay_ref={(element) => {
+          replay_button = element;
+        }}
+      />
+      <GameDialogs
+        handoff_players={handoff_players}
+        handoff_frame_index={() => match_state().handoff?.frame_index}
+        on_continue_turn={continue_turn}
+        handoff_ref={(element) => {
+          handoff_button = element;
+        }}
+        exit_confirmation_open={exit_confirmation_open}
+        on_close_exit_confirmation={() => set_exit_confirmation_open(false)}
+        on_confirm_exit={confirm_exit}
+        exit_cancel_ref={(element) => {
+          exit_cancel_button = element;
+        }}
+      />
     </main>
   );
 }

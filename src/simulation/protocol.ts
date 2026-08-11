@@ -68,6 +68,45 @@ export type SettledEvent = {
   fallen_pin_count: number;
   timed_out: boolean;
 };
+/**
+ * A compact summary of collision starts collected during one worker tick.
+ * Coordinates are in rack-local world space, with positive y toward the pit.
+ */
+export type ImpactPathSummary = {
+  contact_count: number;
+  total_impulse: number;
+  maximum_impulse: number;
+  centroid_x: number;
+  centroid_y: number;
+};
+
+/**
+ * Standing-to-fallen transitions collected during one worker tick. Speeds are
+ * the pin bodies' linear speeds at their real state transition; this is a
+ * presentation cue for pin-body/deck weight, not a claimed floor collision.
+ */
+export type FallTransitionSummary = {
+  transition_count: number;
+  total_speed: number;
+  maximum_speed: number;
+  centroid_x: number;
+  centroid_y: number;
+};
+
+/**
+ * One physics-derived presentation window. The worker publishes at most one
+ * of these per tick, so consumers never need to react to individual Rapier
+ * pairs or state transitions.
+ */
+export type ImpactEvent = {
+  type: "impact";
+  simulation_time_ms: number;
+  pin_count: RackPinCount;
+  first_ball_pin_impact: boolean;
+  ball_pin: ImpactPathSummary | undefined;
+  pin_pin: ImpactPathSummary | undefined;
+  fallen: FallTransitionSummary | undefined;
+};
 /** Confirms that a same-rack sweep restored the ball and removed deadwood. */
 export type SweepCompleteEvent = { type: "sweep_complete"; pin_count: RackPinCount };
 export type FatalEvent = { type: "fatal"; message: string };
@@ -79,7 +118,13 @@ export type PreviewPathEvent = {
   points: Float32Array;
 };
 export type SimulationEvent =
-  ReadyEvent | SnapshotEvent | SettledEvent | SweepCompleteEvent | PreviewPathEvent | FatalEvent;
+  | ReadyEvent
+  | SnapshotEvent
+  | ImpactEvent
+  | SettledEvent
+  | SweepCompleteEvent
+  | PreviewPathEvent
+  | FatalEvent;
 
 export type SnapshotPin = {
   x: number;

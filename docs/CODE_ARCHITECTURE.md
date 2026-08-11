@@ -15,20 +15,24 @@ artifact, and publishes it.
 
 - [../src/main.ts](../src/main.ts) mounts the Solid application into the page root.
 - [../src/app/](../src/app/) owns setup, active-match orchestration, keyboard input, worker-client
-  communication, aim feedback, celebrations, and hot-seat handoff.
+  communication, aim feedback, celebrations, and hot-seat handoff. `game.tsx` retains state,
+  timing, worker, camera, and audio ownership; `game_controls.tsx` is the view-only control deck.
 - [../src/game/](../src/game/) contains framework-independent bowling rules, scoring, match
   transitions, player-facing terms, and match-record calculations.
 - [../src/simulation/](../src/simulation/) owns the authoritative physical world. It uses
   `@dimforge/rapier2d-compat`, creates racks and colliders, applies ball force and spin,
-  tracks pin state, produces aim previews, and publishes compact snapshots.
+  tracks pin state, produces aim previews, publishes compact snapshots, and aggregates bounded
+  physical impact windows from real ball-pin and pin-pin contacts plus pin fall transitions.
 - [../src/simulation/worker.ts](../src/simulation/worker.ts) runs fixed simulation ticks off the
   main thread and transfers snapshots, settle results, previews, and fatal errors over the typed
   protocol in [../src/simulation/protocol.ts](../src/simulation/protocol.ts).
 - [../src/render/](../src/render/) projects physical snapshots into a faux-3D Canvas lane. It
-  owns camera framing, interpolation, ball surface rotation and lighting, pin presentation, and
-  asset loading without duplicating game or physics state.
-- [../src/audio/](../src/audio/) owns browser-audio playback and aggregates collision changes into
-  short, bounded impact cues.
+  owns camera framing, interpolation, ball surface rotation and lighting, pin presentation,
+  localized impact accents, and asset loading without duplicating game or physics state. Committed
+  SVG artwork remains the source of truth, then is rasterized once into reusable Canvas assets so
+  dense racks do not repeat SVG rasterization inside the frame loop.
+- [../src/audio/](../src/audio/) owns browser-audio playback. It schedules bounded rolling and
+  impact voices from presentation cues, rather than inferring sound from fallen-pin count deltas.
 - [../src/designer/](../src/designer/) defines player ball designs and the standalone ball-design
   fixture.
 - [../src/save/](../src/save/) validates versioned local-save data, migrates supported historical
@@ -46,13 +50,17 @@ artifact, and publishes it.
 3. Game actions go through the reducer in [../src/game/match.ts](../src/game/match.ts). Reducer
    effects send initialize, launch, sweep, next-roll, pause, and preview requests to the worker.
 4. [../src/simulation/world.ts](../src/simulation/world.ts) remains the source of truth for ball
-   and pin collisions. It emits typed-array snapshots that the worker transfers to the main
-   thread, avoiding a second mutable physics model in the UI.
-5. Game interpolates the latest snapshots, advances camera progress from the physical ball
-   position, and asks [../src/render/game_renderer.ts](../src/render/game_renderer.ts) to draw the
-   frame. The JSX layer presents score, controls, result calls, celebration overlays, and
-   accessible status alongside Canvas.
-6. A settled event returns to the reducer. It records pinfall and either sweeps deadwood for an
+   and pin collisions. Its focused `impact_window.ts`, `world_factories.ts`, `world_snapshot.ts`,
+   and `world_contracts.ts` modules respectively accumulate physical windows, create Rapier bodies,
+   serialize snapshots, and define the simulation boundary.
+5. The worker transfers typed-array snapshots and an `ImpactEvent` for each nonempty bounded window.
+   That event preserves ball-pin and pin-pin impulse summaries, fall-transition speed summaries,
+   and the first ball-pin contact flag; it is not a UI-derived fallen-count aggregate.
+6. Game interpolates the latest snapshots, advances camera progress from the physical ball
+   position, maps each `ImpactEvent` through `impact_presentation.ts`, then sends the resulting
+   cues to audio and Canvas. The JSX layer presents score, controls, result calls, celebration
+   overlays, and accessible status alongside Canvas.
+7. A settled event returns to the reducer. It records pinfall and either sweeps deadwood for an
    eligible same-rack roll, moves to the next player, or completes the match. Completed results
    update local mode records through [../src/save/settings.ts](../src/save/settings.ts).
 
@@ -63,9 +71,11 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
 ## Presentation boundaries
 
 - Camera zoom derives from physical ball travel in [../src/render/camera.ts](../src/render/camera.ts).
-  The release-driven push is tuned as the normal presentation. The current rendering path also
-  carries the saved lower-motion preference; keep it a presentation adaptation rather than a
-  physics or result constraint.
+  The release-driven push and rack-scale framing are the normal presentation. Lower motion adapts
+  that final presentation path; it never changes physics, impact events, scoring, or results.
+- [../src/app/impact_presentation.ts](../src/app/impact_presentation.ts) maps worker-owned physical
+  summaries into normalized sound and accent cues. It contains the perceptual curve; audio and
+  render modules do not reinterpret raw physics independently.
 - Result overlays use the reducer's result message through
   [../src/app/roll_celebration.ts](../src/app/roll_celebration.ts); strikes and spares receive the
   stronger visual treatment while ordinary rolls remain restrained.
@@ -73,7 +83,8 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
   holes and a player-selected surface. [../src/render/pins.ts](../src/render/pins.ts) uses the
   physical fallen-pin axis and velocity-derived presentation cues without changing collision
   truth.
-- [../src/style.css](../src/style.css) supplies the responsive layout and normal result effects.
+- [../src/style_setup.css](../src/style_setup.css) supplies the cascade-order setup layer and
+  [../src/style.css](../src/style.css) supplies responsive layout and normal result effects.
   [ACCESSIBILITY.md](ACCESSIBILITY.md) defines the lower-motion presentation contract, while
   [COLOR_CONTRAST_ACCESSIBILITY.md](COLOR_CONTRAST_ACCESSIBILITY.md) records color-readability
   guidance.
@@ -81,8 +92,8 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
 ## Build and delivery
 
 [../pipeline/build.mjs](../pipeline/build.mjs) runs the production type check, bundles the main
-Solid entry, worker, benchmark entry, and designer fixture with esbuild, copies the static HTML,
-CSS, and SVG assets, and writes `dist/.nojekyll`. The canonical front door
+Solid entry, worker, benchmark entry, and designer fixture with esbuild, copies static HTML, both
+CSS layers, and SVG assets, and writes `dist/.nojekyll`. The canonical front door
 is [../build_github_pages.sh](../build_github_pages.sh); [../run_web_server.sh](../run_web_server.sh)
 builds then serves the same artifact for local review.
 
@@ -95,6 +106,9 @@ builds then serves the same artifact for local review.
   contracts.
 - [../tests/playwright/](../tests/playwright/) contains browser smoke and end-to-end journeys;
   [../run_playwright_tests.sh](../run_playwright_tests.sh) owns their build and runner boundary.
+- [../devel/capture_screenshots.mjs](../devel/capture_screenshots.mjs) is the visual-evidence front
+  door. Its documentation mode calls `capture_documentation_showcase.mjs` to reproduce committed
+  screenshots and the short 105-pin cascade GIF from the built browser game.
 - [../src/simulation/benchmark.ts](../src/simulation/benchmark.ts) and
   [../devel/run_simulation_benchmark.mjs](../devel/run_simulation_benchmark.mjs) measure fixed-step
   and emitted-frame behavior for the supported rack fixtures.
@@ -106,7 +120,8 @@ builds then serves the same artifact for local review.
 - Add a supported scale by extending [../src/config/pin_counts.ts](../src/config/pin_counts.ts),
   then keep rack geometry, physics tuning, labels, scoring, setup, and fixtures consistent.
 - Add simulation behavior in [../src/simulation/](../src/simulation/) and extend the worker
-  protocol deliberately. Keep the worker snapshot as the only browser-to-render physics boundary.
+  protocol deliberately. Keep snapshots and typed physical events as the only browser-to-render
+  physics boundaries; do not rebuild collision meaning from UI state.
 - Add player-visible rules in [../src/game/](../src/game/) first, then map reducer effects in
   [../src/app/game.tsx](../src/app/game.tsx).
 - Add Canvas effects in [../src/render/](../src/render/) and CSS/JSX effects in [../src/app/](../src/app/)
@@ -119,9 +134,9 @@ builds then serves the same artifact for local review.
 
 ## Known gaps
 
-- Verify a real-device performance budget for the dramatic camera, Canvas, and audio presentation
-  at every supported rack scale; benchmark fixtures measure simulation behavior, not every GPU or
-  audio implementation.
+- Confirm the measured 990-pin browser frame budget and physical audio mix on representative real
+  hardware. Automated Chromium evidence covers the complete roll, but not every GPU, browser audio
+  implementation, speaker system, or human perception.
 - Verify the local GitHub Pages workflow after its root
   [../deploy-pages.yml](../deploy-pages.yml) is copied to `.github/workflows/` in the publishing
   repository.

@@ -48,6 +48,23 @@ Install Playwright's Chromium and Firefox browsers before running the browser su
 Then run `npm run test:playwright -- --build`. See
 [PLAYWRIGHT_USAGE.md](PLAYWRIGHT_USAGE.md) for the browser-test workflow.
 
-## Known gaps
+## Verified toolchain
 
-- TODO: Record the oldest Node.js and browser versions verified for a release.
+This repository does not declare a lowest supported Node.js or browser version. Do not infer a
+compatibility promise from transitive dependency metadata. The current checkout was verified with
+Node.js `v26.7.0`, npm `11.19.0`, Playwright `1.62.0`, Playwright Chromium `151.0.7922.34`, and
+Playwright Firefox `153.0`. These are a tested-environment record, not an oldest-supported-version
+claim.
+
+To verify the toolchain in a checkout, run:
+
+```bash
+node --version
+npm --version
+npx playwright --version
+npm run check
+npm run test:playwright -- --build
+```
+
+Playwright downloads the browser revisions pinned by its installed package. Run
+`./devel/setup_playwright.sh` again when dependencies change or the browser executable is missing.

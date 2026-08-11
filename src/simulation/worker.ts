@@ -17,6 +17,7 @@ type WorkerState = {
   ticking: boolean;
   generation: number;
   preview_generation: number;
+  has_emitted_ball_pin_impact: boolean;
 };
 
 const worker_scope: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
@@ -32,6 +33,7 @@ const worker_state: WorkerState = {
   ticking: false,
   generation: 0,
   preview_generation: 0,
+  has_emitted_ball_pin_impact: false,
 };
 
 function assert_never(value: never): never {
@@ -94,6 +96,23 @@ function tick_worker(timestamp_ms: number, generation: number): void {
   const pin_count = worker_state.pin_count;
   if (pin_count === undefined) throw new Error("Simulation pin count is unavailable.");
   const snapshot_interval = 1 / get_mode_tuning(get_mode_for_rack_pin_count(pin_count)).snapshot_hz;
+  const impact_window = worker_state.world.drain_impact_window();
+  if (
+    impact_window.ball_pin !== undefined ||
+    impact_window.pin_pin !== undefined ||
+    impact_window.fallen !== undefined
+  ) {
+    const first_ball_pin_impact =
+      impact_window.ball_pin !== undefined && !worker_state.has_emitted_ball_pin_impact;
+    if (first_ball_pin_impact) worker_state.has_emitted_ball_pin_impact = true;
+    post_event({
+      type: "impact",
+      simulation_time_ms: Math.round(worker_state.simulation_seconds * 1000),
+      pin_count,
+      first_ball_pin_impact,
+      ...impact_window,
+    });
+  }
   if (worker_state.simulation_seconds - worker_state.last_snapshot_seconds >= snapshot_interval) {
     emit_snapshot();
     worker_state.last_snapshot_seconds = worker_state.simulation_seconds;
@@ -133,6 +152,7 @@ async function reset_world(pin_count: RackPinCount): Promise<boolean> {
   worker_state.simulation_seconds = 0;
   worker_state.last_snapshot_seconds = 0;
   worker_state.last_tick_ms = 0;
+  worker_state.has_emitted_ball_pin_impact = false;
   emit_snapshot();
   return true;
 }
@@ -149,6 +169,7 @@ async function handle_reset_rack(pin_count: RackPinCount): Promise<void> {
 
 function handle_launch(power: number, start_position: number, angle: number, spin: number): void {
   get_world().launch(power, start_position, angle, spin);
+  worker_state.has_emitted_ball_pin_impact = false;
   begin_ticking();
 }
 
@@ -159,6 +180,7 @@ function handle_sweep_deadwood(): void {
 
 function handle_prepare_next_roll(): void {
   get_world().prepare_next_roll();
+  worker_state.has_emitted_ball_pin_impact = false;
   emit_snapshot();
   const pin_count = worker_state.pin_count;
   if (pin_count === undefined) throw new Error("Simulation pin count is unavailable.");

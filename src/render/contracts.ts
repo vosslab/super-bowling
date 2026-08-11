@@ -17,7 +17,6 @@ export type CameraState = {
   rack_bounds: RackBounds;
   /** Monotonic physical travel that drives the deck-focused shot projection. */
   shot_progress: number;
-  reduced_motion: boolean;
 };
 
 export type RenderSnapshotPair = {
