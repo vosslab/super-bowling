@@ -1,39 +1,42 @@
 # Super Bowling
 
-An original browser bowling game for friends sharing one keyboard, where technique-driven shots
-curve through regulation-inspired lanes toward triangular racks from 10 to 990 pins.
+An original browser bowling game for friends sharing one keyboard, turning familiar ten-pin
+technique into dramatic arcade action across triangular racks from 10 to 990 pins.
 
 [Play Super Bowling live](https://vosslab.github.io/super-bowling/)
 
-<!-- screenshots:begin (managed by screenshot-docs) -->
+## Bowling without the hardware
 
+Super Bowling combines the readability of Nintendo Wii-style screen bowling, without a motion
+controller, with the camera drive and high-impact arcade energy of UNIS Lane Master, without a
+physical ball, cabinet, or sensors. It is an original keyboard-and-pointer game: choose a line,
+power, angle, and spin, watch the projected path, then commit to the roll.
+
+The lane reacts to the shot. A release-driven camera advances toward the rack, the custom ball
+rolls with visible depth and surface rotation, and physically simulated pins separate into
+readable paths. Strikes and spares earn quick, distinct lane-side celebrations while ordinary
+rolls keep the next decision in view.
+
+<!-- screenshots:begin (managed by screenshot-docs) -->
 ![1,000-mode BEST FRAME earned-moment toast above the 990-pin lane and technique controls](docs/screenshots/thousand_pin_deck.png)
 ![Four-player pass-the-keyboard handoff over a fresh ten-pin lane with technique controls in the side panel](docs/screenshots/pass_the_keyboard.png)
 <!-- screenshots:end -->
 
-## One keyboard, giant rack
+## Make the shot yours
 
-This is bowling for the moment when ten pins feel a little too sensible. Pick an exact
-rack scale, pass the keyboard between up to four people, and send a custom rolling
-ball toward a deck with hundreds of individually countable pins. Its circular
-silhouette stays familiar while the selected surface pattern visibly rolls.
-
-- Choose the convenient 10, 20, 50, 100, 500, or 1,000 scale label; setup and the HUD show the
-  actual complete-triangle total used for play and scoring.
-- Every rack forms one centered triangular deck with a head pin and complete rows 1, 2, 3, and onward.
-- The super lane and deck widen with the selected rack so its ball and pins remain recognizable
-  at every count.
-- Play a familiar ten-frame bowling match whose strike, spare, and bonus values scale
-  with the selected rack.
-- Share one browser and keyboard with one to four local hot-seat players.
-- Give each player a recognizable ball with two colors, a pattern, and an optional
-  two-character monogram.
-- Keep the presentation original: a faux-3D lane, Canvas rendering, and synthesized
-  sound built for a 16:10 landscape browser.
-- Keep the next local session ready with recent-player restore, per-rack best scores, mute,
-  and reduced-motion preferences.
-- Build a practice record for each rack and bowls-per-frame choice: high game, last five scores,
-  best frame, best named strike run, and games bowled stay with the mode that earned them.
+- Choose a 10, 20, 50, 100, 500, or 1,000 scale label; the setup and HUD always show the actual
+  complete-triangle pin total used for play and scoring.
+- Set power, release position, angle, and spin before the ball leaves your hand. A worker-backed
+  preview shows the same pins-free path the live roll follows up to first contact.
+- Pass one keyboard among one to four local players, each with a two-color ball, surface pattern,
+  and optional two-character monogram.
+- Play a familiar ten-frame match with classic strikes, spares, and bonus scoring, or choose one
+  through five bowls per frame for a super-frame challenge.
+- Keep a practice record for each rack and bowls-per-frame mode: high game, recent scores, best
+  frame, longest named strike run, and games bowled.
+- Use original dark-teal lane art, geometric controls, Canvas rendering, synthesized sound, and
+  amber `STRIKE` or cyan `SPARE` result language.
+- Keep the next local session ready with recent-player restore, mute, and reduced-motion settings.
 
 | Scale label | Actual pins |
 | ----------: | ----------: |
@@ -44,64 +47,54 @@ silhouette stays familiar while the selected surface pattern visibly rolls.
 |         500 |         496 |
 |       1,000 |         990 |
 
-## Current playable lane
+## What a roll feels like
 
-The shipped game starts a complete-triangle match with one to four named players. Setup keeps
-each player's colors, pattern, and optional monogram in the same production ball renderer used on
-the lane. The four pre-roll controls set power, start position, angle, and spin; the worker-backed
-preview shows the same free path the roll will follow before its first pin contact. A focused
-pass-the-keyboard card advances each hot-seat turn while the score strip and phase feedback stay
-visible.
+Aim before release rather than steering after it: move the start point, shape the launch angle
+and hook, then press Space. The camera begins its push as the ball travels, holds the deck through
+the collision, and resets before the next aim. Rapier physics keeps the contact and standing-pin
+state authoritative; the renderer adds depth, shadows, brief motion emphasis, and original
+celebration flare without changing the result.
 
-Every roll reports its result, including visible Strike and Spare calls. When a player earns it,
-the game also calls out a new high game, best frame, or named strike run without stopping the next
-turn. At match end, the final score, prior high game, record difference, best frame, and best run
-stay visible before returning to setup for another attempt.
+Reduced motion keeps the full-lane composition fixed and preserves result information while
+removing camera movement and decorative confetti. The game targets a 16:10 landscape desktop
+browser experience; narrow layouts remain usable, but the lane is designed to be seen wide.
 
 ## Quick start
 
-Use Node.js with npm. The repository setup script installs the pinned browser-game
-toolchain, and the web server builds then serves the same `dist/` artifact intended for
-GitHub Pages.
+Use a current Node.js installation with npm. The setup script installs the pinned browser-game
+toolchain; the server builds and serves the same `dist/` artifact intended for GitHub Pages.
 
 ```bash
 ./devel/setup_typescript.sh
 ./run_web_server.sh
 ```
 
-Open the local URL printed by the server, choose a rack, add one to four players, and customize
-their balls before starting the match.
-Use Up/Down for power, Left/Right for start position, A/D for angle, Q/E for spin, and Space to
-bowl. Technique is selected before release; the rolling ball has no steering control. The setup
-and in-game controls keep Mute and Reduced motion choices visible.
-Stop the server with `Ctrl-C`.
-The preview session expires after 600 seconds; set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a
-positive whole-second value when a shorter or longer local session is useful.
+Open the local URL printed by the server. Choose a rack, add one to four players, customize their
+balls, then start the match. Select a technique before release with the controls below; after the
+roll begins, the ball cannot be steered. Stop the server with `Ctrl-C`.
 
-## Controls and play
+The preview server expires after 600 seconds. Set `WEB_SERVER_MAX_LIFETIME_SECONDS` to a positive
+whole-second value when a shorter or longer local session is useful.
 
-Every rack uses the same deliberately simple keyboard control scheme:
+## Controls and scoring
 
-| Key          | Action                            |
-| ------------ | --------------------------------- |
-| Up / Down    | Set pre-roll power.               |
-| Left / Right | Set pre-roll start position.      |
-| A / D        | Set pre-roll angle.               |
-| Q / E        | Set pre-roll spin.                |
-| Space        | Bowl with the selected technique. |
+| Key | Action |
+| --- | --- |
+| Up / Down | Set pre-roll power. |
+| Left / Right | Set pre-roll start position. |
+| A / D | Set pre-roll angle. |
+| Q / E | Set pre-roll spin. |
+| Space | Bowl with the selected technique. |
 
-The completed match follows classic strikes, spares, and tenth-frame bonus rolls.
-The shared [docs/GAME_RULES.md](docs/GAME_RULES.md) contract generalizes the same rules to
-every supported rack: a perfect game scores `30 * pin_count`.
-Here `pin_count` is the displayed actual total, rather than the convenient scale label.
-V4 local saves keep compatible V2 and V3 high scores with their matching practice mode. Older V1
-saves keep player details and preferences but start fresh records because the rebuilt lane and
-controls made those old scores incomparable.
+Classic two-bowl frames use strikes, spares, and the standard tenth-frame bonus rolls. A classic
+perfect game is `30 * actual_pin_count`, so the 1,000 scale's 990 physical pins matter more than
+the convenient label. Super-frame mode scores actual pinfall and ends early when a rack clears;
+[docs/GAME_RULES.md](docs/GAME_RULES.md) explains the full scoring and save-migration contract.
 
 ## Verify and build
 
-Run the repository front doors to check the TypeScript code, create the static Pages
-artifact, and exercise the browser shell headlessly.
+Run the repository front doors to check TypeScript, create the Pages artifact, exercise browser
+journeys, and measure simulation behavior.
 
 ```bash
 ./check_codebase.sh
@@ -110,39 +103,52 @@ artifact, and exercise the browser shell headlessly.
 npm run benchmark
 ```
 
-`./build_github_pages.sh` writes the deployable site to `dist/`. The Playwright suite uses
-a 1600 x 1000 headless viewport, matching the game's 16:10 desktop target.
-`npm run benchmark` generates a local 30-shot rack report at
-`artifacts/benchmark/simulation_benchmark.json`; `artifacts/` stays ignored.
+`./build_github_pages.sh` writes the deployable site to `dist/`. The headless browser suite uses a
+1600 x 1000 viewport, matching the primary desktop target. `npm run benchmark` writes a local
+30-shot rack report to `artifacts/benchmark/simulation_benchmark.json`; `artifacts/` is ignored.
 
-## GitHub Pages setup
+## Status and boundaries
 
-The repository includes [deploy-pages.yml](deploy-pages.yml), a user-copyable root GitHub Actions
-workflow. Copy it to `.github/workflows/deploy-pages.yml` in GitHub to refresh the Pages deploy.
-The workflow checks the codebase, builds `dist/`, and deploys the uploaded Pages artifact.
+The regulation-lane rebuild and the action presentation pass are shipped in the playable build:
+worker-backed previews, four pre-roll controls, shot-driven deck framing, enhanced ball and pin
+rendering, and strike/spare bursts all have code and browser coverage. The game has no account,
+server-owned state, motion controller, physical-ball hardware, cabinet integration, tickets, or
+prize mechanics. Its reference inspirations inform pacing and readability, not copied art,
+branding, interface assets, or hardware behavior.
+
+The repository includes [deploy-pages.yml](deploy-pages.yml), a copyable root GitHub Actions
+workflow. Copy it to `.github/workflows/deploy-pages.yml` to build `dist/` and publish the Pages
+artifact from GitHub.
 
 ## Documentation
 
-- [docs/SOLID_MODEL.md](docs/SOLID_MODEL.md)
-  - Solid reactivity boundaries for the UI, Canvas renderer, and simulation worker.
-- [docs/PLAYWRIGHT_USAGE.md](docs/PLAYWRIGHT_USAGE.md)
-  - Run and extend the headless browser checks.
-- [docs/E2E_TESTS.md](docs/E2E_TESTS.md)
-  - Choose the appropriate test home for browser and non-browser workflows.
-- [docs/COLOR_CONTRAST_ACCESSIBILITY.md](docs/COLOR_CONTRAST_ACCESSIBILITY.md)
-  - Readability guidance for the game's high-energy interface.
-- [docs/GEOMETRY_MODEL.md](docs/GEOMETRY_MODEL.md)
-  - Foot-based lane dimensions, fixed travel and gutters, and the shared preview boundary.
-- [docs/GAME_RULES.md](docs/GAME_RULES.md)
-  - Four-control technique play, rack cleanup, generalized scoring, and save migration.
+Start here:
 
-## Roadmap status
+- [docs/USAGE.md](docs/USAGE.md) - Run a match, use controls, and understand local preferences.
+- [docs/INSTALL.md](docs/INSTALL.md) - Install the browser-game toolchain and prepare a local run.
+- [docs/GAME_RULES.md](docs/GAME_RULES.md) - Learn rack totals, scoring modes, controls, and saves.
+- [docs/LANE_MASTER_VIDEO_FINDINGS.md](docs/LANE_MASTER_VIDEO_FINDINGS.md) - Read the durable
+  design findings behind the game's original screen-bowling and arcade-action synthesis.
 
-The regulation-lane rebuild is delivered: fixed lane geometry, real worker previews, four
-pre-roll controls, same-rack fallen-pin cleanup, and V4 practice-record migration are part of
-the playable build. Retained front doors cover code checks, Pages builds, headless browser
-journeys, and the simulation benchmark. The active plan records the current evidence, including
-the final browser-run caveat; the README screenshots were visually inspected at the 1600 x 1000
-target viewport.
+Understand the implementation:
 
-The active plan is the source of truth for milestone status and evidence.
+- [docs/CODE_ARCHITECTURE.md](docs/CODE_ARCHITECTURE.md) - Follow Solid UI, Canvas rendering, and
+  simulation-worker responsibilities.
+- [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) - Find source, tests, build, and documentation
+  homes.
+- [docs/SOLID_MODEL.md](docs/SOLID_MODEL.md) - See the reactivity and worker-snapshot boundaries.
+- [docs/GEOMETRY_MODEL.md](docs/GEOMETRY_MODEL.md) - Review lane dimensions, gutters, and the
+  shared preview boundary.
+
+Validate and evolve the project:
+
+- [docs/PLAYWRIGHT_USAGE.md](docs/PLAYWRIGHT_USAGE.md) - Run and extend browser checks.
+- [docs/E2E_TESTS.md](docs/E2E_TESTS.md) - Choose the appropriate test home for browser and
+  non-browser workflows.
+- [docs/COLOR_CONTRAST_ACCESSIBILITY.md](docs/COLOR_CONTRAST_ACCESSIBILITY.md) - Review contrast
+  and high-energy interface readability.
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) - Read the chronological record of shipped changes.
+
+## License
+
+This project is available under the [MIT License](LICENSE.MIT.md).
