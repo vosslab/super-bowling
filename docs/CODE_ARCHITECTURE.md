@@ -62,8 +62,10 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
 
 ## Presentation boundaries
 
-- Camera zoom derives from physical ball travel in [../src/render/camera.ts](../src/render/camera.ts);
-  the reduced-motion setting keeps a stable full-lane view.
+- Camera zoom derives from physical ball travel in [../src/render/camera.ts](../src/render/camera.ts).
+  The release-driven push is tuned as the normal presentation. The current rendering path also
+  carries the saved lower-motion preference; keep it a presentation adaptation rather than a
+  physics or result constraint.
 - Result overlays use the reducer's result message through
   [../src/app/roll_celebration.ts](../src/app/roll_celebration.ts); strikes and spares receive the
   stronger visual treatment while ordinary rolls remain restrained.
@@ -71,9 +73,10 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
   holes and a player-selected surface. [../src/render/pins.ts](../src/render/pins.ts) uses the
   physical fallen-pin axis and velocity-derived presentation cues without changing collision
   truth.
-- [../src/style.css](../src/style.css) supplies the responsive layout, result effects, and
-  reduced-motion CSS. [COLOR_CONTRAST_ACCESSIBILITY.md](COLOR_CONTRAST_ACCESSIBILITY.md) records
-  color-readability guidance.
+- [../src/style.css](../src/style.css) supplies the responsive layout and normal result effects.
+  [ACCESSIBILITY.md](ACCESSIBILITY.md) defines the lower-motion presentation contract, while
+  [COLOR_CONTRAST_ACCESSIBILITY.md](COLOR_CONTRAST_ACCESSIBILITY.md) records color-readability
+  guidance.
 
 ## Build and delivery
 
@@ -107,7 +110,8 @@ builds then serves the same artifact for local review.
 - Add player-visible rules in [../src/game/](../src/game/) first, then map reducer effects in
   [../src/app/game.tsx](../src/app/game.tsx).
 - Add Canvas effects in [../src/render/](../src/render/) and CSS/JSX effects in [../src/app/](../src/app/)
-  plus [../src/style.css](../src/style.css). Preserve the reduced-motion path.
+  plus [../src/style.css](../src/style.css). Author and validate the energetic normal presentation
+  first, then adapt it through the [ACCESSIBILITY.md](ACCESSIBILITY.md) contract.
 - Add durable browser state through [../src/save/contracts.ts](../src/save/contracts.ts) and
   [../src/save/save_file.ts](../src/save/save_file.ts), including explicit migration coverage.
 - Add browser journeys under [../tests/playwright/](../tests/playwright/) and deterministic model

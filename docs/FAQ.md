@@ -52,8 +52,9 @@ bowls-per-frame choice, so a Super frame score does not replace a Classic record
 
 ### What does Reduced motion change?
 
-Reduced motion keeps the same result information while using a fixed camera and no moving
-confetti. It preserves readable status and scoring without requiring the arcade motion effects.
+It is a saved lower-motion presentation alternative. It keeps the game information and controls
+usable without redefining the normal arcade presentation; see [ACCESSIBILITY.md](ACCESSIBILITY.md)
+for the complete contract.
 
 ### Is Super Bowling a copy of Wii Bowling or Lane Master?
 

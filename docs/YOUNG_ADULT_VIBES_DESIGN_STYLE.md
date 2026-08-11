@@ -103,8 +103,9 @@ When rules conflict, these principles decide the tradeoff.
   without competing with the action.
 - Use motion to show force, trajectory, settling, or state change. Avoid
   looping celebration and ornamental movement that delays the next decision.
-- Respect reduced-motion preferences while retaining the static information
-  each animation communicates.
+- Tune motion for force, trajectory, settling, and earned results before adding
+  a lower-motion alternative. That alternative preserves information without
+  defining the normal presentation; see [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 ## Progress and reward signals
 
@@ -166,11 +167,9 @@ for attention.
 Review this contract by following the visible path, not a mockup: start with no
 record, establish a positive frame, continue from a saved record, complete a
 spare and a strike run, and finish the match. Each case must leave a readable
-text result while controls remain usable. Reduced motion preserves the same
-labels, ordering, and final comparison; animation may change, information may
-not. Do not add a toast for every roll: ordinary result text teaches cause and
-effect, while the toast remains reserved for the few outcomes that earn a
-practice milestone.
+text result while controls remain usable. Do not add a toast for every roll:
+ordinary result text teaches cause and effect, while the toast remains reserved
+for the few outcomes that earn a practice milestone.
 
 ## Engineering rules for tone
 

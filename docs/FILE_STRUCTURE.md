@@ -87,6 +87,7 @@ super-bowling/
   observations and the project's original-design boundary; it has no dependency on local-only
   research media.
 - [COLOR_CONTRAST_ACCESSIBILITY.md](COLOR_CONTRAST_ACCESSIBILITY.md),
+  [ACCESSIBILITY.md](ACCESSIBILITY.md),
   [YOUNG_ADULT_VIBES_DESIGN_STYLE.md](YOUNG_ADULT_VIBES_DESIGN_STYLE.md),
   [FUN_VIBES_DESIGN_STYLE.md](FUN_VIBES_DESIGN_STYLE.md), and
   [PLAYFUL_TRAINING_GAME_STYLE.md](PLAYFUL_TRAINING_GAME_STYLE.md) document accessible and

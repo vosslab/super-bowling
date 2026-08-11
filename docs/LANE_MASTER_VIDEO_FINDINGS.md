@@ -145,7 +145,6 @@ branding, or hardware interaction.
 
 - Camera progress begins with the released ball, increases smoothly, and resets before aiming.
 - Lane, ball, pins, and shadows remain aligned because they share one projection.
-- Reduced motion preserves the result information with a fixed camera and no confetti motion.
 - Moving fallen pins may receive lift and a short afterimage; resting pins receive neither.
 - Strike and spare presentations are visually distinct and never appear for an ordinary roll.
 - The existing visible status remains the single accessible result announcement.

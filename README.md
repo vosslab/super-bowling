@@ -36,7 +36,7 @@ rolls keep the next decision in view.
   frame, longest named strike run, and games bowled.
 - Use original dark-teal lane art, geometric controls, Canvas rendering, synthesized sound, and
   amber `STRIKE` or cyan `SPARE` result language.
-- Keep the next local session ready with recent-player restore, mute, and reduced-motion settings.
+- Keep the next local session ready with recent-player restore and saved presentation settings.
 
 | Scale label | Actual pins |
 | ----------: | ----------: |
@@ -55,9 +55,8 @@ the collision, and resets before the next aim. Rapier physics keeps the contact 
 state authoritative; the renderer adds depth, shadows, brief motion emphasis, and original
 celebration flare without changing the result.
 
-Reduced motion keeps the full-lane composition fixed and preserves result information while
-removing camera movement and decorative confetti. The game targets a 16:10 landscape desktop
-browser experience; narrow layouts remain usable, but the lane is designed to be seen wide.
+The game targets a 16:10 landscape desktop browser experience; narrow layouts remain usable, but
+the lane is designed to be seen wide.
 
 ## Quick start
 
@@ -127,6 +126,7 @@ Start here:
 - [docs/USAGE.md](docs/USAGE.md) - Run a match, use controls, and understand local preferences.
 - [docs/INSTALL.md](docs/INSTALL.md) - Install the browser-game toolchain and prepare a local run.
 - [docs/GAME_RULES.md](docs/GAME_RULES.md) - Learn rack totals, scoring modes, controls, and saves.
+- [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) - Review the lower-motion presentation contract.
 - [docs/LANE_MASTER_VIDEO_FINDINGS.md](docs/LANE_MASTER_VIDEO_FINDINGS.md) - Read the durable
   design findings behind the game's original screen-bowling and arcade-action synthesis.
 

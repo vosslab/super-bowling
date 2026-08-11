@@ -13,7 +13,6 @@ The playable build now combines technique-driven bowling with an arcade presenta
 - The ball has lighting, surface rotation, finger holes, contact shadow, and lane reflection.
 - Pin presentation derives lift, shadows, and a short afterimage from physical snapshots.
 - Strike and spare results use distinct, short celebration bursts while ordinary rolls stay quiet.
-- Reduced motion retains result information without decorative camera or confetti movement.
 
 ## Next priority
 

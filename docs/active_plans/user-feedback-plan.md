@@ -118,7 +118,7 @@ strikes in a row is called.
 - Change the `match_complete` effect to carry per-player match summaries instead
   of bare totals.
 - Render an in-play toast, an end-of-match summary panel, and a setup-screen
-  practice-record block, each respecting the reduced-motion preference.
+  practice-record block while preserving readable information and usable controls.
 - Extend Node unit tests, add Playwright coverage, and update the changelog,
   README feature text, and the style guide's Super Bowling worked example.
 
@@ -294,9 +294,9 @@ payload, calling into the derivation boundary to build it.
 - Deliverables: WP-V1, WP-V2, WP-V3.
 - Workstreams: WS-V.
 - Done checks: a new Playwright spec proves the shared toast seam, final summary
-  including best-frame context, setup record, duplicate two-match history, and
-  reduced-motion text; the changelog, README, and style guide describe the
-  shipped behavior. The pure Node coverage proves the earned-moment priority and
+  including best-frame context, setup record, and duplicate two-match history;
+  the changelog, README, and style guide describe the shipped behavior. The pure
+  Node coverage proves the earned-moment priority and
   named-run decision; an ordinary live observation proves the exact transient
   BEST FRAME toast without turning its timing into a permanent browser gate.
 - Entry criteria: M3 exit criteria met.
@@ -634,9 +634,8 @@ payload, calling into the derivation boundary to build it.
     practice-record block, styled from the existing palette and following the
     guide's "Restraint creates emphasis" rule: no new saturated accent, no
     looping animation.
-  - Toast motion is wrapped so a reduced-motion state renders the toast
-    statically with identical text, per the guide's requirement that reduced
-    motion retain the information the animation carried.
+  - Presentation alternatives keep the same toast text and usable controls;
+    animation does not carry unique information.
   - Existing `.best_score`, `.final_result`, and `.handoff_panel` regions are
     left in place; the summary panel extends `.final_result` rather than
     replacing it.
@@ -681,9 +680,6 @@ payload, calling into the derivation boundary to build it.
   - A new moment arriving while a toast is visible REPLACES it and restarts the
     dismiss timer. No queue: in a fast game a queued toast would describe a roll
     the player has already moved past.
-  - Reduced motion changes the transition only. The toast keeps the same text
-    and the same visible duration, so the information does not depend on the
-    animation.
   - The dismiss timer is cleared in `onCleanup`, matching the existing
     `result_timer` and `preview_timer` handling.
   - The component receives the pre-match record through a new
@@ -790,7 +786,6 @@ payload, calling into the derivation boundary to build it.
     entries. History records completed games, not distinct scores, so the same
     deterministic fixture may produce two identical entries and both must be
     kept.
-  - A reduced-motion case confirms the toast text still renders.
   - The whole existing suite still passes; the two preserved literal strings and
     the changed miss mark are the specific regression risks.
   - The spec pins `viewport: { width: 1600, height: 1000 }`, matching every
@@ -954,8 +949,8 @@ Tests land in the tier that matches their cost, per
   goal is to prove the recovery boundary, not to enumerate malformed JSON.
 - **Playwright** (`tests/playwright/e2e/`, run by `./run_playwright_tests.sh`)
   carries durable browser integration: the shared toast seam, final summary
-  including best-frame context, setup record, duplicate two-match history, and
-  reduced-motion text. Pure Node logic covers the exact BEST FRAME decision;
+  including best-frame context, setup record, and duplicate two-match history.
+  Pure Node logic covers the exact BEST FRAME decision;
   one ordinary live observation verifies its transient DOM surface. No new
   fixture, fake clock, fixed delay, screenshot, pixel, or dismissal assertion.
 - **pytest** (`pytest tests/`) stays the thin cross-ecosystem hygiene lane:

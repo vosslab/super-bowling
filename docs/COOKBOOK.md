@@ -54,8 +54,8 @@ bonuses.
 Use the preferences when a player needs less sensory activity without losing game information.
 
 - Toggle `Mute` in setup or during a match to control synthesized sound.
-- Toggle `Reduced motion` in setup or during a match to reduce movement while retaining result
-  text, controls, and score information.
+- Toggle `Reduced motion` in setup or during a match when a player wants the saved lower-motion
+  presentation; [ACCESSIBILITY.md](ACCESSIBILITY.md) defines what it preserves.
 - Use the keyboard controls or the visible range controls; both operate the same launch values.
 - The browser remembers mute, reduced-motion, recent setup, and practice records for later local
   sessions when browser storage is available.

@@ -40,8 +40,11 @@ guide.
 
 Camera progress comes from the interpolated physical ball `y`, not from a timer
 or a render-only animation. It is monotonic during the roll, resets before a
-fresh or swept roll is enabled, and is held for the result. The reduced-motion
-preference keeps the centered full-lane view while setting camera zoom to zero.
+fresh or swept roll is enabled, and is held for the result. The release-driven
+camera is the normal presentation model. The current renderer receives the
+saved lower-motion preference as a presentation adaptation; it does not alter
+the worker, reducer, scoring, or collision contracts described here. See
+[ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 ## Lifecycle model
 

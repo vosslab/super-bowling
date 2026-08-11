@@ -31,6 +31,14 @@
   `SimulationClient` test boundary so browser journeys can verify the complete
   Solid result flow without direct state mutation or a slow full-physics gate.
 
+### Fixes and Maintenance
+
+- Refreshed the complete repository documentation routes and rebalanced current
+  presentation guidance around the energetic arcade experience as the normal
+  design and acceptance target. Motion accessibility now has one compact
+  contract for preserved information, a usable lower-motion alternative, and
+  saved preference behavior instead of repeated camera and effect constraints.
+
 ### Decisions and Failures
 
 - Defined Super Bowling's design lineage as Nintendo Wii-style screen bowling without a motion
