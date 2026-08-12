@@ -24,7 +24,13 @@ import {
   type ImpactAccentState,
   type ImpactPresentation,
 } from "./impact_accent";
-import { choose_pin_sprite, draw_pin, type PinDrawState } from "./pins";
+import {
+  choose_pin_sprite,
+  draw_pin_body,
+  draw_pin_shadow,
+  get_pin_body_center_y,
+  type PinDrawState,
+} from "./pins";
 
 export {
   select_impact_accent,
@@ -122,9 +128,7 @@ export type LaneGeometry = {
 
 export type WorldPoint = { x: number; y: number; z: number };
 type ProjectedBody = { base: ScreenPoint; crown: ScreenPoint; width: number; base_depth: number };
-// Values below one compress the complete deck; values above one exaggerate it.
-// The finite interval solves the shipped reveal target at every supported rack
-// size without a rack-specific factor.
+// This finite interval solves the deck reveal target without rack-specific factors.
 const deck_exaggeration_bounds = { minimum: 0.02, maximum: 12 } as const;
 
 const default_ball_design = normalize_ball_design({});
@@ -295,10 +299,7 @@ function solve_rack_framing(
   const scale = get_depth_scale(unframed, rear_y);
   if (scale === undefined || scale >= 1) throw new Error("Rack framing requires a receding scale.");
 
-  // Rear crown: h * (1 - rearScale) + n * rearScale - pinHeightPx * rearScale.
-  // Keep the physical near lane edge at the foot of the canvas, then solve the
-  // horizon from the rear crown. The aiming ball can now move forward without
-  // pulling the lane edge up and creating a blank strip beneath it.
+  // Solve the horizon from the rear crown while the near lane edge stays at the canvas foot.
   const crown_target_y = height * camera_config.rack_top_fraction;
   const rear_horizon_weight = 1 - scale;
   const rear_target_with_crown = crown_target_y + 1.25 * unframed.pixels_per_world_unit * scale;
@@ -315,9 +316,6 @@ function solve_rack_framing(
         `[${camera_config.horizon_fraction_bounds.minimum}, ` +
         `${camera_config.horizon_fraction_bounds.maximum}].`,
     );
-  // Do not clamp the horizon: the two-anchor solve is only valid when both
-  // solved endpoints share this exact value. An infeasible request is rejected
-  // above rather than silently returning a mis-framed camera.
   const horizon_fraction = requested_fraction;
   const framed = create_projection(
     camera,
@@ -660,11 +658,6 @@ function create_pin_command(
       )
     : 0;
   const speed = Math.hypot(velocity_x, velocity_y);
-  // Velocity is part of the authoritative worker snapshot, so it is the one
-  // signal the renderer can use to make a collision wave visible before the
-  // contact solver declares a pin fallen. Keep standing pins deliberately
-  // quieter: a dense rack should reveal the wave, never turn into one bright
-  // mass of afterimages.
   const speed_energy = clamp((speed - 0.35) / 11.5, 0, 1);
   const axis_turn = fallen
     ? Math.abs(
@@ -689,12 +682,15 @@ function create_pin_command(
   const trail_scale = raw_trail_length > maximum_trail ? maximum_trail / raw_trail_length : 1;
   const trail_x = raw_trail_x * trail_scale;
   const trail_y = raw_trail_y * trail_scale;
-  return {
+  const fallen_presentation = fallen
+    ? derive_fallen_pin_presentation(pin_index, angle, velocity_x, velocity_y, motion_energy)
+    : undefined;
+  const pin: Extract<GameDrawCommand, { kind: "standing_pin" | "fallen_pin" }> = {
     kind,
     pin_index,
     base_depth: body.base_depth,
     x: body.base.x,
-    y: fallen ? body.base.y - body.width / 2 - lift : (body.base.y + body.crown.y) / 2,
+    y: 0,
     ground_x: body.base.x,
     ground_y: body.base.y,
     width: fallen ? standing_height : body.width,
@@ -704,10 +700,10 @@ function create_pin_command(
     motion_energy,
     trail_x,
     trail_y,
-    fallen_presentation: fallen
-      ? derive_fallen_pin_presentation(pin_index, angle, velocity_x, velocity_y, motion_energy)
-      : undefined,
+    fallen_presentation,
   };
+  pin.y = get_pin_body_center_y(pin);
+  return pin;
 }
 
 export function derive_ball_roll_angle(
@@ -722,8 +718,6 @@ export function derive_ball_roll_angle(
 }
 
 export function derive_ball_surface_offset(forward_y: number, physical_rotation = 0): number {
-  // Physical travel begins at the foul line; the aiming presentation below
-  // supplies its own upright starting surface.
   const offset = physical_rotation + forward_y / ball_radius;
   return Number.isFinite(offset) ? offset : 0;
 }
@@ -899,14 +893,20 @@ function draw_commands(
   context: CanvasRenderingContext2D,
   commands: GameDrawCommand[],
   assets: GameAssets,
+  shadows: boolean,
 ): void {
   for (const command of commands) {
     if (command.kind === "lane")
       draw_lane(context, command.width, command.height, command.geometry);
     else if (command.kind === "impact_accent") draw_impact_accent(context, command);
-    else if (command.kind === "ball") draw_ball(context, command, assets.ball);
+    else if (shadows && (command.kind === "standing_pin" || command.kind === "fallen_pin"))
+      draw_pin_shadow(context, command);
+  }
+  for (const command of commands) {
+    if (command.kind === "ball") draw_ball(context, command, assets.ball);
     else if (command.kind === "aim_guide") draw_aim_guide(context, command);
-    else draw_pin(context, assets, command);
+    else if (command.kind === "standing_pin" || command.kind === "fallen_pin")
+      draw_pin_body(context, assets, command);
   }
 }
 
@@ -991,7 +991,8 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
           commands.sort(compare_depth);
         }
       }
-      if (asset_state.status === "ready") draw_commands(context, commands, asset_state.assets);
+      if (asset_state.status === "ready")
+        draw_commands(context, commands, asset_state.assets, snapshot_pair.pin_count <= 105);
       return commands;
     },
   };

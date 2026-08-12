@@ -51,6 +51,9 @@
 
 ### Behavior or Interface Changes
 
+- Pin shadows are now a deliberately small background contact cue in modes through 105 pins: every
+  shadow stays below its pin's projected ground contact and is painted before every pin body. The
+  performance-sensitive 496- and 990-pin modes omit this low-priority decoration entirely.
 - Reframed the 990-pin roll from a wide establishing view into a maximum-frame 4.6482x impact
   view, then an eased 1.5849x result pullback. The close collision framing holds through the
   readable cascade instead of treating a small camera-progress change as sufficient impact
@@ -89,6 +92,8 @@
 
 ### Fixes and Maintenance
 
+- Grounded fallen-pin artwork by its complete rotated and presentation-scaled screen extent. Angled
+  pins no longer pass through their ground contact or leave a shadow visibly above the body.
 - Stabilized each fallen pin's presentation-only roll pose by pin identity. Tiny late physics-axis
   corrections now preserve apparent depth, scale, side lighting, and deck contact instead of
   making nearly settled pins twitch between unrelated dimensional poses.
@@ -119,6 +124,8 @@
 
 ### Decisions and Failures
 
+- Kept shadows subordinate to playability: dense 496- and 990-pin play spends no draw calls on pin
+  shadows, while smaller modes retain one flat cue without changing simulation positions.
 - Kept authoritative physics, technique-driven input, and scoring unchanged. The current arcade
   work strengthens how a real roll is framed and rendered rather than adding artificial forces or
   scoring exceptions.
@@ -157,6 +164,15 @@
 
 ### Developer Tests and Notes
 
+- The focused renderer suite passed 29/29, including upright and rotated fallen-pin ground-contact
+  invariants. Fresh 10- and 105-pin lane captures show shadows below and behind every pin body; a
+  fresh 990-pin impact capture shows the intentionally shadow-free dense rack.
+- A real-worker 990-pin impact window retained 181 frame samples at a 16.7 ms median and 18.0 ms
+  p95 after the change. The broader milestone capture produced the requested lane-state matrix but
+  later stopped at its separate centered-shot camera-y diagnostic, so the maintained frame-window
+  probe was run directly for the performance acceptance evidence.
+- `./check_codebase.sh` passed all five gates with 183 Node tests, the GitHub Pages-ready build
+  completed, and the full Playwright suite passed 29/29 in 14.1 seconds.
 - The maintained complete-roll 990-pin frame window improved from a 34.9 ms median and 40.6 ms
   p95 to a 16.7 ms median and 18.3 ms p95 across 181 impact-window samples. Two separate profiling
   runs reproduced the 60 Hz result while retaining roughly 990 live pin images plus bounded trails,

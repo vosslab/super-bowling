@@ -24,6 +24,18 @@ export type PinAssets = {
   fallen: CanvasImageSource;
 };
 
+type PinGeometryState = Pick<
+  PinDrawState,
+  "kind" | "ground_x" | "ground_y" | "width" | "height" | "angle" | "lift" | "fallen_presentation"
+>;
+
+export type PinShadowGeometry = {
+  x: number;
+  y: number;
+  radius_x: number;
+  radius_y: number;
+};
+
 export function choose_pin_sprite(is_fallen: boolean): PinSpriteKind {
   return is_fallen ? "fallen_pin" : "standing_pin";
 }
@@ -52,40 +64,76 @@ function set_rotated_transform(
   context.setTransform(cosine, sine, -sine, cosine, x, y);
 }
 
-export function draw_pin(
-  context: CanvasRenderingContext2D,
-  assets: PinAssets,
-  state: PinDrawState,
-): void {
-  const source = state.kind === "standing_pin" ? assets.upright : assets.fallen;
-  const physical_angle =
-    state.kind === "fallen_pin" ? canonical_fallen_pin_angle(state.angle) : state.angle;
-  const pose = state.kind === "fallen_pin" ? state.fallen_presentation : undefined;
-  const presentation_offset = pose?.screen_rotation_offset ?? 0;
+function get_pin_display_angle(state: PinGeometryState): number {
+  if (state.kind === "standing_pin") return state.angle;
+  const physical_angle = canonical_fallen_pin_angle(state.angle);
+  const presentation_offset = state.fallen_presentation?.screen_rotation_offset ?? 0;
   const display_angle =
     physical_angle +
     (Math.sin(physical_angle + presentation_offset) > 0
       ? -Math.abs(presentation_offset)
       : presentation_offset);
+  return display_angle;
+}
+
+function get_scaled_pin_size(state: PinGeometryState): { width: number; height: number } {
+  const size = {
+    width: state.width * (state.fallen_presentation?.long_axis_scale ?? 1),
+    height: state.height * (state.fallen_presentation?.cross_axis_scale ?? 1),
+  };
+  return size;
+}
+
+export function get_pin_vertical_extent(state: PinGeometryState): number {
+  if (state.kind === "standing_pin") return state.height / 2;
+  const display_angle = get_pin_display_angle(state);
+  const size = get_scaled_pin_size(state);
+  const extent =
+    (Math.abs(Math.sin(display_angle)) * size.width +
+      Math.abs(Math.cos(display_angle)) * size.height) /
+    2;
+  return extent;
+}
+
+export function get_pin_body_center_y(state: PinGeometryState): number {
+  return state.ground_y - get_pin_vertical_extent(state) - state.lift;
+}
+
+export function get_pin_shadow_geometry(state: PinGeometryState): PinShadowGeometry {
+  const display_angle = get_pin_display_angle(state);
+  const size = get_scaled_pin_size(state);
+  const horizontal_extent =
+    (Math.abs(Math.cos(display_angle)) * size.width +
+      Math.abs(Math.sin(display_angle)) * size.height) /
+    2;
+  const radius_x = Math.max(1, horizontal_extent * (state.kind === "fallen_pin" ? 0.78 : 0.76));
+  const radius_y = Math.max(
+    1,
+    Math.min(size.width, size.height) *
+      (state.kind === "fallen_pin"
+        ? 0.18 + (state.fallen_presentation?.contact_softness ?? 0) * 0.08
+        : 0.17),
+  );
+  const gap = Math.max(1, radius_y * 0.25);
+  return { x: state.ground_x, y: state.ground_y + radius_y + gap, radius_x, radius_y };
+}
+
+export function draw_pin_shadow(context: CanvasRenderingContext2D, state: PinDrawState): void {
+  const shadow = get_pin_shadow_geometry(state);
   context.fillStyle = `rgba(39, 27, 20, ${Math.max(0.16, 0.54 - state.motion_energy * 0.28)})`;
   context.beginPath();
-  context.ellipse(
-    state.ground_x,
-    state.ground_y,
-    Math.max(
-      1,
-      state.width * (state.kind === "fallen_pin" ? 0.43 * (pose?.long_axis_scale ?? 1) : 0.38),
-    ),
-    Math.max(
-      1,
-      state.height *
-        (state.kind === "fallen_pin" ? 0.18 + (pose?.contact_softness ?? 0) * 0.08 : 0.055),
-    ),
-    display_angle,
-    0,
-    Math.PI * 2,
-  );
+  context.ellipse(shadow.x, shadow.y, shadow.radius_x, shadow.radius_y, 0, 0, Math.PI * 2);
   context.fill();
+}
+
+export function draw_pin_body(
+  context: CanvasRenderingContext2D,
+  assets: PinAssets,
+  state: PinDrawState,
+): void {
+  const source = state.kind === "standing_pin" ? assets.upright : assets.fallen;
+  const pose = state.kind === "fallen_pin" ? state.fallen_presentation : undefined;
+  const display_angle = get_pin_display_angle(state);
 
   if (state.motion_energy > 0.16) {
     // This is an intentionally small, single trailing exposure. It makes a
@@ -127,4 +175,13 @@ export function draw_pin(
     context.fill();
   }
   context.resetTransform();
+}
+
+export function draw_pin(
+  context: CanvasRenderingContext2D,
+  assets: PinAssets,
+  state: PinDrawState,
+): void {
+  draw_pin_shadow(context, state);
+  draw_pin_body(context, assets, state);
 }

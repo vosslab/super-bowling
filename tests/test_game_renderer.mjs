@@ -15,7 +15,13 @@ import {
 } from "../src/render/game_renderer.ts";
 import { derive_fallen_pin_presentation } from "../src/render/fallen_pin_presentation.ts";
 import { create_rack } from "../src/simulation/rack.ts";
-import { canonical_fallen_pin_angle, choose_pin_sprite, draw_pin } from "../src/render/pins.ts";
+import {
+  canonical_fallen_pin_angle,
+  choose_pin_sprite,
+  draw_pin,
+  get_pin_shadow_geometry,
+  get_pin_vertical_extent,
+} from "../src/render/pins.ts";
 import {
   ball_snapshot_stride,
   pin_snapshot_stride,
@@ -453,6 +459,24 @@ test("keeps a resting fallen pin's dimensional pose stable through tiny axis cor
   const corrected = derive_fallen_pin_presentation(7, 0.4001, 0, 0, 0);
 
   assert.deepEqual(corrected, first);
+});
+
+test("keeps transformed pin bodies above their contact and shadows entirely below it", () => {
+  for (const angle of [undefined, -Math.PI / 2, -0.65, 0]) {
+    const snapshot = create_snapshot(10);
+    if (angle !== undefined) {
+      snapshot[snapshot_state_flag_offset] = 1;
+      snapshot[snapshot_fallen_axis_angle_offset] = angle;
+    }
+    const pin = get_pin_command(
+      create_game_draw_commands(snapshot, snapshot, 10, 1, 1600, 1000),
+      0,
+    );
+    const body_bottom = pin.y + get_pin_vertical_extent(pin);
+    const shadow = get_pin_shadow_geometry(pin);
+    assert.ok(body_bottom <= pin.ground_y);
+    assert.ok(shadow.y - shadow.radius_y > pin.ground_y);
+  }
 });
 
 test("shows a directional motion cue on an upright pin receiving force", () => {
