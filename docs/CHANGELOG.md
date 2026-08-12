@@ -98,6 +98,10 @@
 
 ### Fixes and Maintenance
 
+- Layered ball-pin knocks, pin-pin clatter, hard deck clacks, and low deck thumps from the same
+  physical impact window instead of choosing only one contact sample. Removed the additional
+  wall-clock suppression and age fade that made hundreds of real pin falls sound like a few hits;
+  the live cue budget and compressor still bound the mix.
 - Refreshed all fourteen maintained gameplay screenshots and the five-second 105-pin animation
   from the current production build. Result-state captures now wait for the configured camera
   transition before recording the settled, complete fallen-pin frame.

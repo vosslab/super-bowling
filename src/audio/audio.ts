@@ -536,24 +536,16 @@ function play_collision_sound(
         play_resonant_thump(context, destination, 310, 0.05 + ball_intensity * 0.06, 0.035),
       );
   }
-  if (sound.ball_pin.contact_count > 0 || sound.pin_pin.contact_count > 0) {
-    const contact_mix = Math.min(
-      1,
-      (sound.ball_pin.contact_count + sound.pin_pin.contact_count) / 12,
-    );
-    const sample =
-      sound.deck_impulse > pin_intensity
-        ? sample_bank.clack
-        : sound.ball_pin.contact_count > 0
-          ? sample_bank.knock
-          : sample_bank.clatter;
+  if (sound.ball_pin.contact_count > 0) {
+    const contact_mix = Math.min(1, sound.ball_pin.contact_count / 12);
+    const sample = sample_bank.knock;
     if (sample !== undefined)
       stop_layers.push(
         play_sample(
           context,
           destination,
           sample,
-          (0.16 + contact_mix * 0.2 + (ball_intensity + pin_intensity) * 0.12) * gain_scale,
+          (0.12 + contact_mix * 0.12 + ball_intensity * 0.12) * gain_scale,
           variation,
           cue_duration_s,
         ),
@@ -564,28 +556,83 @@ function play_collision_sound(
           context,
           destination,
           noise,
-          720 + pin_intensity * 750,
-          0.075 + (ball_intensity + pin_intensity) * 0.09,
+          900 + ball_intensity * 900,
+          (0.07 + ball_intensity * 0.09) * gain_scale,
           0.04 + contact_mix * 0.035,
         ),
       );
   }
-  if (sound.deck_impulse > 0) {
-    const sample = sample_bank.thump;
+  if (sound.pin_pin.contact_count > 0) {
+    const contact_mix = Math.min(1, sound.pin_pin.contact_count / 12);
+    const sample = sample_bank.clatter;
     if (sample !== undefined)
       stop_layers.push(
         play_sample(
           context,
           destination,
           sample,
-          (0.12 + sound.deck_impulse * 0.18) * gain_scale,
+          (0.11 + contact_mix * 0.15 + pin_intensity * 0.11) * gain_scale,
           variation,
           cue_duration_s,
         ),
       );
     else
       stop_layers.push(
-        play_resonant_thump(context, destination, 68, 0.055 + sound.deck_impulse * 0.085, 0.105),
+        play_noise_transient(
+          context,
+          destination,
+          noise,
+          700 + pin_intensity * 700,
+          (0.065 + pin_intensity * 0.085) * gain_scale,
+          0.04 + contact_mix * 0.035,
+        ),
+      );
+  }
+  if (sound.deck_impulse > 0) {
+    const clack_sample = sample_bank.clack;
+    const thump_sample = sample_bank.thump;
+    if (clack_sample !== undefined)
+      stop_layers.push(
+        play_sample(
+          context,
+          destination,
+          clack_sample,
+          (0.055 + sound.deck_impulse * 0.085) * gain_scale,
+          variation,
+          cue_duration_s,
+        ),
+      );
+    else
+      stop_layers.push(
+        play_noise_transient(
+          context,
+          destination,
+          noise,
+          1350 + sound.deck_impulse * 550,
+          (0.045 + sound.deck_impulse * 0.06) * gain_scale,
+          0.045,
+        ),
+      );
+    if (thump_sample !== undefined)
+      stop_layers.push(
+        play_sample(
+          context,
+          destination,
+          thump_sample,
+          (0.08 + sound.deck_impulse * 0.12) * gain_scale,
+          variation,
+          cue_duration_s,
+        ),
+      );
+    else
+      stop_layers.push(
+        play_resonant_thump(
+          context,
+          destination,
+          68,
+          (0.055 + sound.deck_impulse * 0.085) * gain_scale,
+          0.105,
+        ),
       );
   }
   return stop_layers;
@@ -666,8 +713,6 @@ export function create_audio_controller(
   let impact_started = false;
   let disposed = false;
   let roll_speed = 0;
-  let first_impact_time_s: number | undefined;
-  let last_collision_time_s = Number.NEGATIVE_INFINITY;
   let active_collision_cues: ActiveCollisionCue[] = [];
   let active_result_cues: ActiveCollisionCue[] = [];
   function can_play(): boolean {
@@ -752,8 +797,6 @@ export function create_audio_controller(
     if (disposed) return;
     roll_active = true;
     impact_started = false;
-    first_impact_time_s = undefined;
-    last_collision_time_s = Number.NEGATIVE_INFINITY;
     active_collision_cues.forEach((cue) => cue.stop());
     active_collision_cues = [];
     active_result_cues.forEach((cue) => cue.stop());
@@ -792,19 +835,11 @@ export function create_audio_controller(
     prune_collision_cues(time_s);
     if (sound.first_contact)
       return active_collision_cues.length < maximum_concurrent_collision_cues;
-    const impact_age_s = Math.max(0, time_s - (first_impact_time_s ?? time_s));
-    const energy = Math.max(sound.ball_pin.impulse, sound.pin_pin.impulse, sound.deck_impulse);
-    const base_interval_s = impact_age_s < 1 ? 0.14 : impact_age_s < 3 ? 0.25 : 0.42;
-    const minimum_interval_s = Math.max(0.11, base_interval_s - energy * 0.08);
-    if (time_s - last_collision_time_s < minimum_interval_s) return false;
     return active_collision_cues.length < maximum_secondary_collision_cues;
   }
-  function secondary_gain_scale(sound: CollisionSound, time_s: number): number {
+  function secondary_gain_scale(sound: CollisionSound): number {
     const energy = Math.max(sound.ball_pin.impulse, sound.pin_pin.impulse, sound.deck_impulse);
-    const impact_age_s = Math.max(0, time_s - (first_impact_time_s ?? time_s));
-    if (impact_age_s < 1) return 0.65 + energy * 0.2;
-    if (impact_age_s < 3) return 0.5 + energy * 0.18;
-    return 0.34 + energy * 0.14;
+    return 0.65 + energy * 0.2;
   }
   function emit_collision(sound: CollisionSound | undefined): void {
     if (sound === undefined || !can_play() || context === undefined) return;
@@ -816,7 +851,7 @@ export function create_audio_controller(
     const cue_duration_s = sound.first_contact
       ? first_contact_cue_duration_s
       : secondary_collision_cue_duration_s;
-    const gain_scale = sound.first_contact ? 1 : secondary_gain_scale(sound, context.currentTime);
+    const gain_scale = sound.first_contact ? 1 : secondary_gain_scale(sound);
     const stop_layers = play_collision_sound(
       context,
       mix.collision,
@@ -833,11 +868,9 @@ export function create_audio_controller(
     });
     if (sound.first_contact) {
       impact_started = true;
-      first_impact_time_s = context.currentTime;
       stop_rolling_voice(rolling_voice, context.currentTime);
       rolling_voice = undefined;
     }
-    last_collision_time_s = context.currentTime;
   }
   function record_impact(cue: CollisionSound): void {
     if (!roll_active || !can_play()) return;

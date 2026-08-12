@@ -1,4 +1,6 @@
 import type { CollisionSound } from "../audio/collision_audio";
+import { lane_width } from "../config/lane";
+import type { RackPinCount } from "../config/pin_counts";
 import type { FallTransitionSummary, ImpactEvent, ImpactPathSummary } from "../simulation/protocol";
 
 /**
@@ -28,6 +30,7 @@ export type ImpactPresentationCues = {
 type PhysicalCueSource = {
   contact_count: number;
   impulse: number;
+  pan: number;
   x: number;
   y: number;
 };
@@ -64,23 +67,35 @@ export function normalize_ball_roll_speed(snapshot_speed: number): number {
   return clamp_unit(finite_nonnegative(snapshot_speed) / legal_roll_speed_reference);
 }
 
-function map_path(path: ImpactPathSummary | undefined): PhysicalCueSource {
-  if (path === undefined) return { contact_count: 0, impulse: 0, x: 0, y: 0 };
+function normalized_pan(x: number, pin_count: RackPinCount): number {
+  const half_lane_width = lane_width(pin_count) / 2;
+  return Math.min(1, Math.max(-1, x / half_lane_width));
+}
+
+function map_path(path: ImpactPathSummary | undefined, pin_count: RackPinCount): PhysicalCueSource {
+  if (path === undefined) return { contact_count: 0, impulse: 0, pan: 0, x: 0, y: 0 };
+  const x = finite_coordinate(path.centroid_x);
   return {
     contact_count: contact_count(path.contact_count),
     impulse: normalize_impact_impulse(Math.max(path.total_impulse, path.maximum_impulse)),
-    x: finite_coordinate(path.centroid_x),
+    pan: normalized_pan(x, pin_count),
+    x,
     y: finite_coordinate(path.centroid_y),
   };
 }
 
-function map_fall_transition(fallen: FallTransitionSummary | undefined): PhysicalCueSource {
-  if (fallen === undefined) return { contact_count: 0, impulse: 0, x: 0, y: 0 };
+function map_fall_transition(
+  fallen: FallTransitionSummary | undefined,
+  pin_count: RackPinCount,
+): PhysicalCueSource {
+  if (fallen === undefined) return { contact_count: 0, impulse: 0, pan: 0, x: 0, y: 0 };
+  const x = finite_coordinate(fallen.centroid_x);
   return {
     contact_count: contact_count(fallen.transition_count),
     // A deck cue comes only from observed standing-to-fallen body speed.
     impulse: normalize_ball_roll_speed(fallen.maximum_speed),
-    x: finite_coordinate(fallen.centroid_x),
+    pan: normalized_pan(x, pin_count),
+    x,
     y: finite_coordinate(fallen.centroid_y),
   };
 }
@@ -111,17 +126,29 @@ function strongest_source(
  * voice cap so visual and sound layers see the same physical event.
  */
 export function map_impact_presentation(event: ImpactEvent): ImpactPresentationCues {
-  const ball_pin = map_path(event.ball_pin);
-  const pin_pin = map_path(event.pin_pin);
-  const fallen = map_fall_transition(event.fallen);
+  const ball_pin = map_path(event.ball_pin, event.pin_count);
+  const pin_pin = map_path(event.pin_pin, event.pin_count);
+  const fallen = map_fall_transition(event.fallen, event.pin_count);
   const visual_source = strongest_source(event.first_ball_pin_impact, ball_pin, pin_pin, fallen);
   const audio =
     has_physical_signal(ball_pin) || has_physical_signal(pin_pin) || fallen.impulse > 0
       ? {
           first_contact: event.first_ball_pin_impact && ball_pin.contact_count > 0,
-          ball_pin: { contact_count: ball_pin.contact_count, impulse: ball_pin.impulse },
-          pin_pin: { contact_count: pin_pin.contact_count, impulse: pin_pin.impulse },
-          deck_impulse: fallen.impulse,
+          ball_pin: {
+            contact_count: ball_pin.contact_count,
+            impulse: ball_pin.impulse,
+            pan: ball_pin.pan,
+          },
+          pin_pin: {
+            contact_count: pin_pin.contact_count,
+            impulse: pin_pin.impulse,
+            pan: pin_pin.pan,
+          },
+          deck: {
+            contact_count: fallen.contact_count,
+            impulse: fallen.impulse,
+            pan: fallen.pan,
+          },
         }
       : undefined;
   const visual =
