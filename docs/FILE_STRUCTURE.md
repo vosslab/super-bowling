@@ -40,7 +40,8 @@ super-bowling/
   separately reviewable.
 - [../src/render/](../src/render/) contains Canvas projection, interpolation, and the dynamic
   physical-shot camera. `camera.ts` follows the ball corridor before first contact, latches the
-  real ball-pin impact centroid through the cascade, and eases the result back to centered framing.
+  real ball-pin impact centroid through the cascade, while `result_camera.ts` fits the settled
+  frame around every visible fallen pin.
 - [../src/audio/](../src/audio/) contains gesture-gated Web Audio playback, sample prefetch/decode,
   physics-timed cue scheduling, bounded mix buses, compression, and procedural fallback voices.
 - [../src/designer/](../src/designer/) contains ball-design data and the designer fixture.

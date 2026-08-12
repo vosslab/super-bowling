@@ -39,11 +39,10 @@ export const camera_config = {
    */
   ten_pin_shot_zoom: 1.5,
   /**
-   * The 990-pin collision is a deliberately cropped impact shot. The early
-   * lane view establishes the complete field; this close ceiling then makes
-   * the central collision corridor fill the frame before the ball reaches it.
+   * Dense-rack impact scale stays close while leaving enough projection room
+   * for the physical ball path and camera push to advance in one direction.
    */
-  large_rack_impact_zoom: 5,
+  large_rack_impact_zoom: 2,
   /** The ten-pin result stays close enough to support its lane celebration. */
   ten_pin_result_zoom: 1.36,
   /** The settled-result shot restores enough of the huge field to read it. */
@@ -61,21 +60,15 @@ export const camera_config = {
   shot_focus_edge_context: 0.8,
   /** Keep an actual edge/gutter ball away from the canvas edge at close zoom. */
   shot_focus_subject_margin_fraction: 0.06,
-  /** The close shot temporarily raises its projection anchor while the ball is still separated from the deck. */
-  shot_vertical_focus_start_progress: 0.54,
-  /** Peak vertical relief keeps the moving ball in a lower safe band before entry. */
-  shot_vertical_focus_peak_progress: 0.76,
-  /** The projection returns to the deck anchor before physical first contact. */
-  shot_vertical_focus_release_progress: 0.98,
-  /** Bounded extra screen anchor for the ball-plus-entry corridor composition. */
-  shot_vertical_focus_relief_fraction: 0.13,
-  /**
-   * First contact returns to the stable deck anchor. A deeper real contact is
-   * already drawn higher by perspective; moving the anchor downward would
-   * compound that projection and push the ball below the frame.
-   */
-  shot_vertical_impact_focus_fraction: 0.04,
+  /** The one-way forward composition leads the zoom so the view never drifts backward. */
+  shot_vertical_focus_start_progress: 0.38,
+  /** The forward composition reaches its held deck anchor before first contact. */
+  shot_vertical_focus_full_progress: 0.9,
   shot_zoom_focus_y_fraction: 0.08,
+  /** Dense-rack impact-anchor ceiling; smaller modes retain their compact base composition. */
+  shot_vertical_impact_focus_fraction: 0.16,
+  /** Empty canvas border retained around every visible fallen pin at the result. */
+  result_pin_screen_padding_fraction: 0.035,
   near_rail_half_width_fraction: 0.475,
   near_lane_y_fraction: 0.99,
   // Measured in lane-depth world units. A larger value makes the deck denser.

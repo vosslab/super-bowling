@@ -26,7 +26,16 @@ export type PinAssets = {
 
 type PinGeometryState = Pick<
   PinDrawState,
-  "kind" | "ground_x" | "ground_y" | "width" | "height" | "angle" | "lift" | "fallen_presentation"
+  | "kind"
+  | "x"
+  | "y"
+  | "ground_x"
+  | "ground_y"
+  | "width"
+  | "height"
+  | "angle"
+  | "lift"
+  | "fallen_presentation"
 >;
 
 export type PinShadowGeometry = {
@@ -34,6 +43,13 @@ export type PinShadowGeometry = {
   y: number;
   radius_x: number;
   radius_y: number;
+};
+
+export type PinScreenBounds = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
 };
 
 export function choose_pin_sprite(is_fallen: boolean): PinSpriteKind {
@@ -82,6 +98,26 @@ function get_scaled_pin_size(state: PinGeometryState): { width: number; height: 
     height: state.height * (state.fallen_presentation?.cross_axis_scale ?? 1),
   };
   return size;
+}
+
+/** Returns the complete rotated sprite footprint used by result-camera fitting. */
+export function get_pin_screen_bounds(state: PinGeometryState): PinScreenBounds {
+  const display_angle = get_pin_display_angle(state);
+  const size = get_scaled_pin_size(state);
+  const half_width =
+    (Math.abs(Math.cos(display_angle)) * size.width +
+      Math.abs(Math.sin(display_angle)) * size.height) /
+    2;
+  const half_height =
+    (Math.abs(Math.sin(display_angle)) * size.width +
+      Math.abs(Math.cos(display_angle)) * size.height) /
+    2;
+  return {
+    left: state.x - half_width,
+    right: state.x + half_width,
+    top: state.y - half_height,
+    bottom: state.y + half_height,
+  };
 }
 
 export function get_pin_vertical_extent(state: PinGeometryState): number {

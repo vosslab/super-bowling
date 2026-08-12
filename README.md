@@ -14,10 +14,10 @@ power, angle, and spin, watch the projected path, then commit to the roll.
 
 The lane reacts to the shot. A camera starts wide, then derives its late close focus from the
 ball's real approach before latching the first physical impact corridor through the cascade. It
-keeps safe edge and gutter context, then eases back to a centered result; reduced-motion play
-stays neutral. The custom ball rolls with visible depth and surface rotation, and physically
-simulated pins separate into readable paths. Strikes and spares earn big, distinct lane
-celebrations while ordinary rolls keep the next decision in view.
+keeps safe edge and gutter context, then eases into a frame containing every visible fallen pin;
+reduced-motion play stays neutral. The custom ball rolls with visible depth and surface rotation,
+and physically simulated pins separate into readable paths. Strikes and spares earn big, distinct
+lane celebrations while ordinary rolls keep the next decision in view.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 

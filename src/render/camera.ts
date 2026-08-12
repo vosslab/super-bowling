@@ -2,7 +2,7 @@ import { camera_config, get_camera_composition } from "../config/camera";
 import { gutter_width, lane_width } from "../config/lane";
 import type { RackPinCount } from "../config/pin_counts";
 import { create_rack } from "../simulation/rack";
-import type { CameraState, RackBounds } from "./contracts";
+import type { CameraResultFrame, CameraState, RackBounds } from "./contracts";
 
 function create_bounds_from_rack(pin_count: RackPinCount): RackBounds {
   const rack = create_rack(pin_count);
@@ -33,12 +33,15 @@ export function create_camera_state(pin_count: RackPinCount): CameraState {
   return {
     rack_bounds: create_rack_bounds(pin_count),
     shot_progress: 0,
+    rolling_zoom: 1,
     focus_x: 0,
     focus_subject_x: 0,
     focus_y: 0,
+    focus_subject_y: 0,
     focus_latched: false,
     shot_phase: "rolling",
     result_transition_progress: 0,
+    result_frame: undefined,
   };
 }
 
@@ -134,24 +137,21 @@ function smoothstep(progress: number): number {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-/** Returns the rendered corridor; result progress eases the held focus back to neutral. */
+/** Returns the rendered corridor; result progress eases toward its settled content frame. */
 export function get_camera_focus_x(camera: CameraState): number {
   if (camera.shot_phase !== "result") return camera.focus_x;
-  return camera.focus_x * (1 - smoothstep(camera.result_transition_progress));
+  const target_focus_x = camera.result_frame?.focus_x ?? 0;
+  const transition = smoothstep(camera.result_transition_progress);
+  return camera.focus_x + (target_focus_x - camera.focus_x) * transition;
 }
 
-function get_vertical_focus_relief(progress: number): number {
-  const rising = smoothstep(
+function get_vertical_focus_progress(progress: number): number {
+  const focus_progress = smoothstep(
     (progress - camera_config.shot_vertical_focus_start_progress) /
-      (camera_config.shot_vertical_focus_peak_progress -
+      (camera_config.shot_vertical_focus_full_progress -
         camera_config.shot_vertical_focus_start_progress),
   );
-  const releasing = smoothstep(
-    (progress - camera_config.shot_vertical_focus_peak_progress) /
-      (camera_config.shot_vertical_focus_release_progress -
-        camera_config.shot_vertical_focus_peak_progress),
-  );
-  return rising * (1 - releasing);
+  return focus_progress;
 }
 
 /**
@@ -162,23 +162,21 @@ function get_vertical_focus_relief(progress: number): number {
 export function get_camera_focus_y_fraction(camera: CameraState): number {
   const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
   const focused_progress = Math.min(1, Math.max(0, camera.focus_y / head_pin_y));
+  const forward_progress = get_vertical_focus_progress(focused_progress);
   const large_rack_weight = get_large_rack_weight(camera.rack_bounds.pin_count);
-  const rack_relief =
-    camera_config.shot_vertical_focus_relief_fraction * large_rack_weight * large_rack_weight;
+  const impact_fraction =
+    camera_config.shot_zoom_focus_y_fraction +
+    (camera_config.shot_vertical_impact_focus_fraction - camera_config.shot_zoom_focus_y_fraction) *
+      large_rack_weight *
+      large_rack_weight;
   const approach_fraction =
     camera_config.shot_zoom_focus_y_fraction +
-    rack_relief * get_vertical_focus_relief(focused_progress);
-  // The close deck projection has a natural depth lift: a real deeper impact
-  // already moves upward on screen. Keep its common anchor instead of adding
-  // a second depth shift that can crop the ball at the bottom edge.
-  const bounded_fraction = camera.focus_latched
-    ? camera_config.shot_vertical_impact_focus_fraction
-    : approach_fraction;
-  if (camera.shot_phase !== "result") return bounded_fraction;
+    (impact_fraction - camera_config.shot_zoom_focus_y_fraction) * forward_progress;
+  if (camera.shot_phase !== "result") return approach_fraction;
   const transition = smoothstep(camera.result_transition_progress);
-  return (
-    bounded_fraction + (camera_config.shot_zoom_focus_y_fraction - bounded_fraction) * transition
-  );
+  const result_fraction =
+    camera.result_frame?.focus_y_fraction ?? camera_config.shot_zoom_focus_y_fraction;
+  return approach_fraction + (result_fraction - approach_fraction) * transition;
 }
 
 function get_large_rack_weight(pin_count: RackPinCount): number {
@@ -206,7 +204,7 @@ function get_corridor_zoom_limit(camera: CameraState): number {
   if (camera.shot_progress < camera_config.shot_focus_start_progress)
     return Number.POSITIVE_INFINITY;
   const subject_x = camera.focus_subject_x;
-  const subject_y = camera.focus_y;
+  const subject_y = camera.focus_subject_y;
   if (!Number.isFinite(subject_x) || !Number.isFinite(subject_y)) return Number.POSITIVE_INFINITY;
   const entry = get_entry_side_rack_point(camera, subject_x);
   const full_half_width = lane_width(camera.rack_bounds.pin_count) / 2 + gutter_width;
@@ -223,10 +221,10 @@ function get_corridor_zoom_limit(camera: CameraState): number {
 
 /** Returns the shared projection scale for the ball's physical lane progress. */
 export function get_camera_zoom(camera: CameraState): number {
-  const impact_zoom = get_rolling_camera_zoom(camera);
-  const held_zoom = Math.min(impact_zoom, get_corridor_zoom_limit(camera));
+  const held_zoom = camera.rolling_zoom;
   if (camera.shot_phase === "result") {
-    const result_zoom = get_mode_result_zoom(camera.rack_bounds.pin_count);
+    const result_zoom =
+      camera.result_frame?.zoom ?? get_mode_result_zoom(camera.rack_bounds.pin_count);
     const transition = smoothstep(camera.result_transition_progress);
     return held_zoom + (result_zoom - held_zoom) * transition;
   }
@@ -253,17 +251,27 @@ export function advance_camera_for_ball(
   const shot_progress = Math.max(camera.shot_progress, sampled_progress);
   const progressed_camera = { ...camera, shot_progress };
   if (camera.focus_latched) return progressed_camera;
-  const focus_progress = get_focus_progress(progressed_camera);
+  const sampled_y = Number.isFinite(ball_y) ? ball_y : 0;
+  const focus_y = Math.max(camera.focus_y, sampled_y);
+  const focused_camera = { ...progressed_camera, focus_y };
+  const focus_progress = get_focus_progress(focused_camera);
   const target_x = Number.isFinite(ball_x) ? ball_x : 0;
-  const target_y = Number.isFinite(ball_y) ? ball_y : 0;
   const subject_camera = {
-    ...progressed_camera,
+    ...focused_camera,
     focus_subject_x: target_x,
-    focus_y: target_y,
+    focus_subject_y: sampled_y,
+  };
+  const requested_zoom = Math.min(
+    get_rolling_camera_zoom(subject_camera),
+    get_corridor_zoom_limit(subject_camera),
+  );
+  const zoomed_camera = {
+    ...subject_camera,
+    rolling_zoom: Math.max(camera.rolling_zoom, requested_zoom),
   };
   return {
-    ...subject_camera,
-    focus_x: clamp_focus_x(subject_camera, target_x * focus_progress, target_y),
+    ...zoomed_camera,
+    focus_x: clamp_focus_x(zoomed_camera, target_x * focus_progress, sampled_y),
   };
 }
 
@@ -275,15 +283,28 @@ export function latch_camera_impact(
 ): CameraState {
   if (camera.focus_latched) return camera;
   const subject_x = Number.isFinite(impact_x) ? impact_x : 0;
-  const subject_y = Number.isFinite(impact_y) ? impact_y : camera.rack_bounds.front;
+  const sampled_y = Number.isFinite(impact_y) ? impact_y : camera.rack_bounds.front;
+  const subject_y = Math.max(camera.focus_y, sampled_y);
+  const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
+  const sampled_progress = Math.min(1, Math.max(0, subject_y / head_pin_y));
   const subject_camera = {
     ...camera,
+    shot_progress: Math.max(camera.shot_progress, sampled_progress),
     focus_subject_x: subject_x,
     focus_y: subject_y,
+    focus_subject_y: sampled_y,
+  };
+  const requested_zoom = Math.min(
+    get_rolling_camera_zoom(subject_camera),
+    get_corridor_zoom_limit(subject_camera),
+  );
+  const zoomed_camera = {
+    ...subject_camera,
+    rolling_zoom: Math.max(camera.rolling_zoom, requested_zoom),
   };
   return {
-    ...subject_camera,
-    focus_x: clamp_focus_x(subject_camera, subject_x, subject_y),
+    ...zoomed_camera,
+    focus_x: clamp_focus_x(zoomed_camera, subject_x, sampled_y),
     focus_latched: true,
   };
 }
@@ -292,12 +313,15 @@ export function reset_camera_for_roll(camera: CameraState): CameraState {
   return {
     ...camera,
     shot_progress: 0,
+    rolling_zoom: 1,
     focus_x: 0,
     focus_subject_x: 0,
     focus_y: 0,
+    focus_subject_y: 0,
     focus_latched: false,
     shot_phase: "rolling",
     result_transition_progress: 0,
+    result_frame: undefined,
   };
 }
 
@@ -305,8 +329,11 @@ export function reset_camera_for_roll(camera: CameraState): CameraState {
  * Switches from the held impact corridor to the resolving result composition.
  * Call this only after a non-timeout authoritative physics settlement.
  */
-export function show_camera_result(camera: CameraState): CameraState {
-  return { ...camera, shot_phase: "result", result_transition_progress: 0 };
+export function show_camera_result(
+  camera: CameraState,
+  result_frame: CameraResultFrame | undefined = undefined,
+): CameraState {
+  return { ...camera, shot_phase: "result", result_transition_progress: 0, result_frame };
 }
 
 /** Advances a bounded presentation-only result transition after physics has settled. */
@@ -334,12 +361,15 @@ export function with_reduced_motion(camera: CameraState, reduced_motion: boolean
     ? {
         ...camera,
         shot_progress: 0,
+        rolling_zoom: 1,
         focus_x: 0,
         focus_subject_x: 0,
         focus_y: 0,
+        focus_subject_y: 0,
         focus_latched: false,
         shot_phase: "rolling",
         result_transition_progress: 0,
+        result_frame: undefined,
       }
     : camera;
 }

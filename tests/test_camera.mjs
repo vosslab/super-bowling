@@ -22,11 +22,15 @@ import {
   create_game_draw_commands,
   project_world_point,
 } from "../src/render/game_renderer.ts";
+import { get_pin_screen_bounds } from "../src/render/pins.ts";
+import { frame_camera_result } from "../src/render/result_camera.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import {
   ball_snapshot_stride,
   pin_snapshot_stride,
   snapshot_removed_flag_offset,
+  snapshot_fallen_axis_angle_offset,
+  snapshot_state_flag_offset,
   snapshot_x_offset,
   snapshot_y_offset,
   write_snapshot_ball,
@@ -189,6 +193,29 @@ test("pushes the shared projection toward the deck from release through impact",
     ),
     "reduced motion and the next decision return to the neutral centered view",
   );
+});
+
+test("keeps rolling zoom and forward camera focus monotonic through noisy ball samples", () => {
+  let camera = create_camera_state(990);
+  const fractions = [0.48, 0.64, 0.61, 0.78, 0.75, 0.93, 1];
+  const states = [];
+  for (const fraction of fractions) {
+    camera = advance_camera_for_ball(camera, camera.rack_bounds.front * fraction, 0);
+    states.push(camera);
+  }
+  for (let index = 1; index < states.length; index += 1) {
+    const previous = states[index - 1];
+    const current = states[index];
+    assert.ok(current.focus_y >= previous.focus_y, "raw ball corrections cannot reverse focus");
+    assert.ok(
+      get_camera_zoom(current) >= get_camera_zoom(previous),
+      "rolling scale cannot reverse while the ball advances",
+    );
+    assert.ok(
+      get_camera_focus_y_fraction(current) >= get_camera_focus_y_fraction(previous),
+      "the forward composition cannot release backward before impact",
+    );
+  }
 });
 
 test("eases each settled impact view into its readable result composition", () => {
@@ -422,6 +449,77 @@ test("holds the first physical impact corridor until the next roll", () => {
     get_camera_focus_y_fraction(create_camera_state(990)),
     "the settled result releases the impact depth back to the neutral composition",
   );
+});
+
+test("fits every visible fallen pin inside the settled result frame", () => {
+  const scenarios = [
+    { pin_count: 10, fallen_pin_count: 10, scatter: "symmetric" },
+    { pin_count: 10, fallen_pin_count: 7, scatter: "right" },
+    { pin_count: 990, fallen_pin_count: 990, scatter: "none" },
+    { pin_count: 990, fallen_pin_count: 120, scatter: "none" },
+  ];
+  for (const { pin_count, fallen_pin_count, scatter } of scenarios) {
+    const snapshot = create_snapshot(pin_count);
+    fill_rack(snapshot, pin_count);
+    const rack = create_rack(pin_count);
+    for (let pin_index = 0; pin_index < fallen_pin_count; pin_index += 1) {
+      const offset = pin_index * pin_snapshot_stride;
+      if (scatter === "symmetric") {
+        const direction = pin_index % 2 === 0 ? -1 : 1;
+        snapshot[offset + snapshot_x_offset] = direction * (5 + pin_index * 0.7);
+      } else if (scatter === "right") {
+        snapshot[offset + snapshot_x_offset] = 4 + pin_index * 0.7;
+        snapshot[offset + snapshot_y_offset] = rack.bounds.min_y + (pin_index % 3) * 1.1;
+      }
+      snapshot[offset + snapshot_state_flag_offset] = 1;
+      snapshot[offset + snapshot_fallen_axis_angle_offset] = (pin_index * Math.PI) / 9;
+    }
+    const initial = create_camera_state(pin_count);
+    const impact = latch_camera_impact(
+      advance_camera_for_ball(initial, initial.rack_bounds.front, 0),
+      0,
+    );
+    const result_start = frame_camera_result(impact, snapshot, canvas.width, canvas.height);
+    const result_end = advance_camera_result(result_start, 1);
+    const commands = create_game_draw_commands(
+      snapshot,
+      snapshot,
+      pin_count,
+      1,
+      canvas.width,
+      canvas.height,
+      undefined,
+      result_end,
+    );
+    const fallen = commands.filter((command) => command.kind === "fallen_pin");
+    assert.equal(fallen.length, fallen_pin_count);
+    const fallen_bounds = fallen.map(get_pin_screen_bounds);
+    assert.ok(
+      fallen_bounds.every((bounds) => {
+        return (
+          bounds.left >= 0 &&
+          bounds.right <= canvas.width &&
+          bounds.top >= 0 &&
+          bounds.bottom <= canvas.height
+        );
+      }),
+      `${pin_count}-pin result retains every complete fallen-pin sprite after ${fallen_pin_count} falls`,
+    );
+    const envelope = {
+      left: Math.min(...fallen_bounds.map((bounds) => bounds.left)),
+      right: Math.max(...fallen_bounds.map((bounds) => bounds.right)),
+      top: Math.min(...fallen_bounds.map((bounds) => bounds.top)),
+      bottom: Math.max(...fallen_bounds.map((bounds) => bounds.bottom)),
+    };
+    assert.ok(
+      Math.abs((envelope.left + envelope.right) / 2 - canvas.width / 2) < 0.000001,
+      `${pin_count}-pin result centers its settled horizontal footprint`,
+    );
+    assert.ok(
+      Math.abs((envelope.top + envelope.bottom) / 2 - canvas.height / 2) < 0.000001,
+      `${pin_count}-pin result centers its settled vertical footprint`,
+    );
+  }
 });
 
 test("keeps every legal aiming scene inside a representative play canvas", () => {

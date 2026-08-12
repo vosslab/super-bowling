@@ -51,13 +51,19 @@
 
 ### Behavior or Interface Changes
 
+- The live shot camera now advances monotonically in both forward focus and zoom, holding its
+  furthest physical sample instead of reacting to tiny backward interpolation corrections or
+  releasing its vertical anchor just before impact.
+- The settled result camera now fits the authoritative visible fallen-pin footprint with a small
+  screen border, so wide cascades pull back far enough to show every complete fallen pin instead
+  of relying on one mode-wide result zoom.
 - Pin shadows are now a deliberately small background contact cue in modes through 105 pins: every
   shadow stays below its pin's projected ground contact and is painted before every pin body. The
   performance-sensitive 496- and 990-pin modes omit this low-priority decoration entirely.
-- Reframed the 990-pin roll from a wide establishing view into a maximum-frame 4.6482x impact
-  view, then an eased 1.5849x result pullback. The close collision framing holds through the
-  readable cascade instead of treating a small camera-progress change as sufficient impact
-  emphasis or cutting abruptly to the result.
+- Reframed the 990-pin roll from its formerly over-driven close-up into a 1.9497x impact view,
+  whose forward push and zoom remain one-way, then an eased content-aware result pullback. The
+  close collision framing holds through the readable cascade before the settled snapshot supplies
+  the complete fallen-pin frame.
 - Rebuilt the moving ball as a visibly dimensional object with coherent lighting, recessed rolling
   finger holes, surface bands, reflection, and contact shadow while retaining player-selected
   appearance and physical roll data.
@@ -68,8 +74,8 @@
   color, rays, and confetti. Reduced-motion play retains the strong readable result without the
   decorative motion.
 - The shot camera now follows the real ball corridor during approach, latches its first-impact
-  centroid through the cascade, and eases back to a centered result. Edge and gutter entries retain
-  their nearby rack context, while reduced motion keeps the neutral composition.
+  centroid through the cascade, and eases into the settled fallen-pin footprint. Edge and gutter
+  entries retain their nearby rack context, while reduced motion keeps the neutral composition.
 - Audio now leads with the verified CC0 physical samples for rolling, first impact, collision
   cascade, and deck contact. It preloads bytes before the player gesture, decodes on activation,
   falls back procedurally if a sample is unavailable, bounds simultaneous voices through a
@@ -92,6 +98,9 @@
 
 ### Fixes and Maintenance
 
+- Refreshed all fourteen maintained gameplay screenshots and the five-second 105-pin animation
+  from the current production build. Result-state captures now wait for the configured camera
+  transition before recording the settled, complete fallen-pin frame.
 - Grounded fallen-pin artwork by its complete rotated and presentation-scaled screen extent. Angled
   pins no longer pass through their ground contact or leave a shadow visibly above the body.
 - Stabilized each fallen pin's presentation-only roll pose by pin identity. Tiny late physics-axis
@@ -163,6 +172,13 @@
   passed when rerun outside that sandbox boundary.
 
 ### Developer Tests and Notes
+
+- `./devel/capture_screenshots.sh --documentation` completed with the production worker and
+  refreshed every managed documentation asset. Original-resolution review covered all fourteen
+  1600 x 1000 PNGs; the one-play GIF was verified at 960 x 600, five seconds, 12 fps, and 3.64 MB,
+  and the capture's reduced-motion static-HUD check passed.
+- Added deterministic camera behavior coverage for noisy backward ball samples and for complete
+  fallen-pin sprite containment in a snapshot-derived result frame.
 
 - The focused renderer suite passed 29/29, including upright and rotated fallen-pin ground-contact
   invariants. Fresh 10- and 105-pin lane captures show shadows below and behind every pin body; a

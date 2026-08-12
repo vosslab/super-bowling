@@ -1,10 +1,11 @@
-/* global document, HTMLInputElement */
+/* global document, HTMLInputElement, requestAnimationFrame */
 
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { camera_config } from "../src/config/camera.ts";
 import {
   capture_live_screenshot,
   freeze_mid_roll_canvas,
@@ -38,6 +39,14 @@ async function wait_for_phase(page, phase) {
     (expected_phase) =>
       document.querySelector("main.play_shell")?.getAttribute("data-phase") === expected_phase,
     phase,
+  );
+}
+
+async function wait_for_settled_result_camera(page) {
+  await wait_for_phase(page, "result");
+  await page.waitForTimeout(camera_config.result_camera_transition_ms + 100);
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
 }
 
@@ -129,7 +138,7 @@ async function capture_thousand_pin_action(browser, base_url) {
         990,
       ),
     );
-    await wait_for_phase(page, "result");
+    await wait_for_settled_result_camera(page);
     captures.push(
       await capture_documentation_image(
         page,
@@ -290,6 +299,7 @@ async function capture_result(browser, base_url, fixture, celebration, filename)
       await page.keyboard.press("Space");
       await wait_for_phase(page, "result");
     }
+    await wait_for_settled_result_camera(page);
     await finish_animation(page.locator(`[data-celebration="${celebration}"]`));
     const capture = await capture_documentation_image(page, filename, `${celebration}_result`, 10);
     return capture;
@@ -345,7 +355,7 @@ async function capture_real_ten_pin_arcade_evidence(browser, base_url) {
     } finally {
       await remove_frozen_mid_roll_canvas(page, frozen_ball);
     }
-    await wait_for_phase(page, "result");
+    await wait_for_settled_result_camera(page);
     const strike_celebration = page.locator('[data-celebration="strike"]');
     await strike_celebration.waitFor();
     await strike_celebration.evaluate((element) => {
@@ -395,6 +405,7 @@ async function capture_best_frame(browser, base_url) {
     await wait_for_phase(page, "aiming");
     await page.keyboard.press("Space");
     await wait_for_best_frame_earned(page);
+    await wait_for_settled_result_camera(page);
     const capture = await capture_documentation_image(
       page,
       "thousand_pin_deck.png",

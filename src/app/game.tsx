@@ -36,7 +36,6 @@ import {
   get_camera_zoom,
   latch_camera_impact,
   reset_camera_for_roll,
-  show_camera_result,
   with_reduced_motion,
 } from "../render/camera";
 import { camera_config } from "../config/camera";
@@ -45,6 +44,7 @@ import { format_frame_roll_slots } from "../game/score_display";
 import { bowls_per_frame_rule_text } from "../game/bowls_per_frame";
 import type { ModeRecord } from "../save/contracts";
 import { create_game_renderer, type GameRenderer } from "../render/game_renderer";
+import { frame_camera_result } from "../render/result_camera";
 import {
   pin_snapshot_stride,
   read_snapshot_ball,
@@ -401,8 +401,13 @@ export function Game(props: GameProps): JSX.Element {
         });
       } else {
         if (camera !== undefined) {
+          if (canvas === undefined || snapshot_holder.current === undefined) {
+            throw new Error("A settled roll requires its terminal rendered snapshot.");
+          }
           camera_result_transition_started_at = performance.now();
-          apply_camera(show_camera_result(camera));
+          apply_camera(
+            frame_camera_result(camera, snapshot_holder.current, canvas.width, canvas.height),
+          );
         }
         const next = dispatch({ type: "settled", settled_roll: event });
         audio?.stop_roll();
