@@ -312,19 +312,13 @@ Super Bowling should continue to use its own lane palette, geometric presentatio
 
 The final game should feel influenced by good arcade pacing while still looking clearly original.
 
-## Real-time review standard
+## Autonomous motion-evidence standard
 
-The most important validation is watching complete rolls in real time.
+The most important validation is an unattended captured roll from release through settlement.
 
-Static screenshots remain useful for checking composition, layout, ball appearance, result typography, and final pin readability. They cannot prove that the roll feels good.
+Static screenshots check composition, layout, ball appearance, result typography, and final pin readability. Synthetic transitions and browser behavior tests check motion ordering; offline audio rendering and real-worker probes check articulation, timing, and scale.
 
-Automated tests remain useful for stable behavior, game rules, state transitions, accessibility contracts, camera state, and projection consistency. They cannot prove that an effect has enough presence to matter.
-
-Benchmarks remain useful for detecting performance regressions. They cannot prove excitement.
-
-The experience should therefore be reviewed as motion.
-
-A useful review shot is a hard off-center pocket hit in ten-pin mode. The reviewer should watch from aim through result and evaluate the complete sequence.
+The manager closes this objective with captured fixtures, automated behavior/probe gates, and independent-subagent review. A hard off-center pocket-hit fixture exercises the complete sequence from aim through result.
 
 The ball release should clearly begin the action.
 
@@ -350,11 +344,13 @@ A strike or spare should feel substantially more satisfying than an ordinary res
 
 The game should then return attention to the next useful decision without unnecessary delay.
 
-If those qualities are not obvious during normal play, the objective is not complete even if the corresponding systems technically exist.
+If the captured fixtures, behavior probes, or independent review expose a missing quality, the
+manager opens a bounded follow-up even if the corresponding systems technically exist.
 
 ## Completion standard
 
-This objective is complete when Super Bowling no longer feels like a correct simulation with presentation layered on top, but like a cohesive arcade bowling experience built around its simulation.
+This objective closes when its unattended fixtures and evidence gates establish a cohesive arcade
+bowling presentation built around the simulation.
 
 The difference should be immediately visible and audible during ordinary play.
 
@@ -376,9 +372,12 @@ Ordinary rolls should remain restrained enough that those stronger moments retai
 
 The game should preserve the existing technique-driven rules, scoring, accessibility, reduced-motion support, saves, rack geometry, physical collision truth, and original visual identity.
 
-The final judgment should be based on the complete player experience.
+The terminal decision is based on the captured fixture reports, automated behavior/probe results,
+and an independent-subagent review of their evidence.
 
-If the game technically contains camera movement, enhanced ball rendering, collision emphasis, sound effects, and result effects but a normal roll still feels flat, quiet, distant, weak, or visually unchanged, continue refining the experience.
+If those artifacts show camera movement, ball rendering, collision emphasis, sound effects, or
+result effects remain flat, quiet, distant, weak, or visually unchanged, continue with a bounded
+automated follow-up.
 
 The intended end state is simple to describe even if it requires substantial iteration to achieve:
 

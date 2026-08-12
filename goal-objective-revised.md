@@ -318,25 +318,21 @@ Strike and spare screenshots should demonstrate that result presentation has eno
 
 At least one gameplay screenshot should clearly demonstrate the improved ball rendering at a useful visible size.
 
-Screenshots remain evidence, not the sole acceptance test. Real-time play remains the authority for timing, impact, motion, sound, and overall excitement.
+Screenshots remain evidence, not the sole acceptance test. Captured real-worker fixtures, synthetic
+transitions, automated behavior probes, and independent-subagent review establish timing, impact,
+motion, sound, and overall excitement without a direct-perception dependency.
 
-## Real-time review standard
+## Autonomous motion-evidence standard
 
-The most important validation is watching complete rolls in real time.
+The most important validation is unattended real-worker fixtures from release through settlement.
 
-Static screenshots remain useful for checking composition, layout, ball appearance, result typography, and final pin readability. They cannot prove that the roll feels good.
+Static screenshots check composition, layout, ball appearance, result typography, and final pin
+readability. Synthetic transitions and browser behavior tests check motion ordering; offline audio
+rendering and real-worker probes check articulation, timing, and scale.
 
-Automated tests remain useful for stable behavior, game rules, state transitions, accessibility contracts, camera state, and projection consistency. They cannot prove that an effect has enough presence to matter.
-
-Benchmarks remain useful for detecting performance regressions. They cannot prove excitement.
-
-The experience should therefore be reviewed as motion.
-
-Two review scenarios are required.
-
-The primary review is a complete 1,000-pin roll from release through the 990-pin cascade and final result. This is the signature Super Bowling experience and has the highest priority.
-
-The secondary review is a hard off-center pocket hit in ten-pin mode. This smaller rack makes individual pin pose, apparent depth, impact readability, and strike or spare presentation easier to judge.
+Two captured fixtures are required: a 1,000-pin roll through the 990-pin cascade and final result,
+and a hard off-center ten-pin pocket hit. The manager closes their evidence with automated behavior
+and probe gates plus an independent-subagent review.
 
 The ball release should clearly begin the action.
 
@@ -362,11 +358,13 @@ A strike or spare should feel substantially more satisfying than an ordinary res
 
 The game should then return attention to the next useful decision without unnecessary delay.
 
-If those qualities are not obvious during normal play, the objective is not complete even if the corresponding systems technically exist.
+If a fixture, behavior probe, or independent review exposes a missing quality, the manager opens a
+bounded follow-up even if the corresponding systems technically exist.
 
 ## Completion standard
 
-This objective is complete when Super Bowling no longer feels like a correct simulation with presentation layered on top, but like a cohesive arcade bowling experience built around its simulation.
+This objective closes when its unattended fixtures and evidence gates establish a cohesive arcade
+bowling presentation built around the simulation.
 
 The difference should be immediately visible and audible during ordinary play.
 
@@ -388,9 +386,12 @@ Ordinary rolls should remain restrained enough that those stronger moments retai
 
 The game should preserve the existing technique-driven rules, scoring, accessibility, reduced-motion support, saves, rack geometry, physical collision truth, and original visual identity.
 
-The final judgment should be based on the complete player experience.
+The terminal decision is based on captured fixture reports, automated behavior/probe results, and
+an independent-subagent review of their evidence.
 
-If the game technically contains camera movement, enhanced ball rendering, collision emphasis, sound effects, and result effects but a normal roll still feels flat, quiet, distant, weak, or visually unchanged, continue refining the experience.
+If those artifacts show camera movement, ball rendering, collision emphasis, sound effects, or
+result effects remain flat, quiet, distant, weak, or visually unchanged, continue with a bounded
+automated follow-up.
 
 The intended end state is simple to describe even if it requires substantial iteration to achieve:
 

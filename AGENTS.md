@@ -3,6 +3,7 @@ See Python coding style in docs/PYTHON_STYLE.md.
 See Markdown style in docs/MARKDOWN_STYLE.md.
 See repo style in docs/REPO_STYLE.md.
 See young-adult game design guidance in docs/YOUNG_ADULT_VIBES_DESIGN_STYLE.md.
+See docs/HUMAN_GUIDANCE.md for the autonomous completion-policy boundary.
 When making edits, document them in docs/CHANGELOG.md.
 
 ## Python Environment

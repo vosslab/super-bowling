@@ -348,7 +348,14 @@ export function Game(props: GameProps): JSX.Element {
       if (state.phase !== "rolling" || event.pin_count !== state.pin_count) return;
       const cues = map_impact_presentation(event);
       const timestamp = performance.now();
-      if (cues.audio !== undefined) audio?.record_impact(cues.audio);
+      if (cues.audio !== undefined)
+        audio?.record_impact({
+          ...cues.audio,
+          source_simulation_time_ms: cues.source_simulation_time_ms,
+          ...(cues.source_event_sequence === undefined
+            ? {}
+            : { source_event_sequence: cues.source_event_sequence }),
+        });
       if (!props.reduced_motion() && cues.visual !== undefined) {
         renderer?.record_impact(cues.visual, timestamp);
       }
@@ -365,7 +372,7 @@ export function Game(props: GameProps): JSX.Element {
           : Math.max(
               cues.audio.ball_pin.impulse,
               cues.audio.pin_pin.impulse,
-              cues.audio.deck_impulse,
+              cues.audio.deck.impulse,
             );
       const strength = Math.max(cues.visual?.strength ?? 0, audio_strength);
       if (last_impact_strength() !== strength) set_last_impact_strength(strength);

@@ -1,55 +1,28 @@
-import { create_collision_sound, type CollisionSound } from "./collision_audio";
+import type {
+  AudioBackendFactory,
+  AudioBufferLike,
+  AudioBufferSourceLike,
+  AudioContextLike,
+  AudioNodeLike,
+  AudioParamLike,
+  BiquadFilterLike,
+  GainLike,
+} from "./audio_backend";
+import { create_collision_sound } from "./collision_audio";
+import {
+  create_cascade_director,
+  type DirectedCollisionVoice,
+  type TimedCollisionSound,
+} from "./cascade_director";
+import {
+  collision_mix_levels,
+  collision_render_instruction,
+  maximum_concurrent_collision_cues,
+  safe_collision_slice,
+  type CollisionSampleBank,
+} from "./collision_render_contract";
 
 export type ResultSound = "strike" | "spare" | "open" | "complete";
-
-export type AudioParamLike = {
-  value: number;
-  setValueAtTime?(value: number, start_time: number): void;
-  linearRampToValueAtTime?(value: number, end_time: number): void;
-};
-
-export type AudioNodeLike = { connect(destination: AudioNodeLike): void; disconnect?(): void };
-export type OscillatorLike = AudioNodeLike & {
-  frequency: AudioParamLike;
-  type: OscillatorType;
-  start(start_time?: number): void;
-  stop(stop_time?: number): void;
-};
-export type GainLike = AudioNodeLike & { gain: AudioParamLike };
-export type BiquadFilterLike = AudioNodeLike & {
-  frequency: AudioParamLike;
-  type: BiquadFilterType;
-};
-export type DynamicsCompressorLike = AudioNodeLike & {
-  threshold: AudioParamLike;
-  knee: AudioParamLike;
-  ratio: AudioParamLike;
-  attack: AudioParamLike;
-  release: AudioParamLike;
-};
-export type AudioBufferLike = { getChannelData(channel: number): Float32Array };
-export type AudioBufferSourceLike = AudioNodeLike & {
-  buffer: AudioBufferLike | null;
-  loop?: boolean;
-  playbackRate?: AudioParamLike;
-  start(start_time?: number): void;
-  stop(stop_time?: number): void;
-};
-export type AudioContextLike = {
-  currentTime: number;
-  sampleRate: number;
-  destination: AudioNodeLike;
-  resume(): Promise<void>;
-  close(): Promise<void>;
-  createOscillator(): OscillatorLike;
-  createGain(): GainLike;
-  createBiquadFilter(): BiquadFilterLike;
-  createDynamicsCompressor(): DynamicsCompressorLike;
-  createBuffer(channel_count: number, length: number, sample_rate: number): AudioBufferLike;
-  createBufferSource(): AudioBufferSourceLike;
-  decodeAudioData?(audio_data: ArrayBuffer): Promise<AudioBufferLike>;
-};
-export type AudioBackendFactory = () => AudioContextLike;
 export type AudioController = {
   /** Starts local sample downloads without constructing or resuming an audio context. */
   preload(): void;
@@ -60,7 +33,7 @@ export type AudioController = {
   /** Shapes the rolling texture from a normalized physical speed without taking a simulation dependency. */
   update_roll_speed(normalized_speed: number): void;
   /** Preferred semantic input from real physics impact windows. */
-  record_impact(cue: CollisionSound): void;
+  record_impact(cue: TimedCollisionSound): void;
   play_result(result: ResultSound): void;
   dispose(): void;
 };
@@ -73,9 +46,14 @@ type RollingVoice = {
   gain_scale: number;
 };
 type ActiveCollisionCue = { end_time_s: number; stop(): void };
-type AudioMix = { lane: GainLike; collision: GainLike; result: GainLike };
+type AudioMix = {
+  lane: GainLike;
+  collision_attack: GainLike;
+  collision_body: GainLike;
+  result: GainLike;
+};
 type SampleName = "impact" | "clatter" | "roll" | "knock" | "thump" | "clack";
-type AudioSampleBank = Partial<Record<SampleName, AudioBufferLike>>;
+type AudioSampleBank = Partial<Record<SampleName, AudioBufferLike>> & CollisionSampleBank;
 type AudioSampleBytes = Partial<Record<SampleName, ArrayBuffer>>;
 type ResultHit = {
   at_s: number;
@@ -88,15 +66,11 @@ type ResultHit = {
   chime_frequency?: number;
   chime_gain?: number;
 };
-const maximum_concurrent_collision_cues = 4;
-const maximum_secondary_collision_cues = maximum_concurrent_collision_cues - 1;
 /**
  * The recorded samples need enough room to reach their physical attack and
  * decay.  This is also the scheduler's ownership window, so dense racks
  * cannot accumulate unbounded long-lived sample voices.
  */
-const first_contact_cue_duration_s = 0.48;
-const secondary_collision_cue_duration_s = 0.2;
 const recorded_roll_gain_scale = 25;
 const sample_paths: Record<SampleName, string> = {
   impact: "./assets/audio/bowling_impact_1.ogg",
@@ -254,26 +228,29 @@ function rolling_gain(speed: number): number {
  */
 function create_audio_mix(context: AudioContextLike): AudioMix {
   const lane = context.createGain();
-  const collision = context.createGain();
+  const collision_attack = context.createGain();
+  const collision_body = context.createGain();
   const result = context.createGain();
   const master = context.createGain();
   const limiter = context.createDynamicsCompressor();
   const time_s = context.currentTime;
   set_audio_value(lane.gain, 0.72, time_s);
-  set_audio_value(collision.gain, 0.94, time_s);
+  set_audio_value(collision_attack.gain, collision_mix_levels.attack, time_s);
+  set_audio_value(collision_body.gain, collision_mix_levels.body, time_s);
   set_audio_value(result.gain, 0.9, time_s);
-  set_audio_value(master.gain, 0.88, time_s);
+  set_audio_value(master.gain, collision_mix_levels.master, time_s);
   set_audio_value(limiter.threshold, -10, time_s);
   set_audio_value(limiter.knee, 14, time_s);
   set_audio_value(limiter.ratio, 12, time_s);
   set_audio_value(limiter.attack, 0.003, time_s);
   set_audio_value(limiter.release, 0.14, time_s);
   lane.connect(master);
-  collision.connect(master);
+  collision_attack.connect(master);
+  collision_body.connect(master);
   result.connect(master);
   master.connect(limiter);
   limiter.connect(context.destination);
-  return { lane, collision, result };
+  return { lane, collision_attack, collision_body, result };
 }
 
 function update_rolling_voice(voice: RollingVoice, speed: number, time_s: number): void {
@@ -361,6 +338,31 @@ function stop_source(source: { stop(stop_time?: number): void }, time_s: number)
   }
 }
 
+function clamp_pan(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(-1, value)) : 0;
+}
+
+/** Connects one short voice through an equal-power stereo position when the backend supports it. */
+function connect_spatial_output(
+  context: AudioContextLike,
+  output: AudioNodeLike,
+  destination: AudioNodeLike,
+  pan: number,
+): () => void {
+  const panner = context.createStereoPanner?.();
+  if (panner === undefined) {
+    output.connect(destination);
+    return () => output.disconnect?.();
+  }
+  set_audio_value(panner.pan, clamp_pan(pan), context.currentTime);
+  output.connect(panner);
+  panner.connect(destination);
+  return () => {
+    output.disconnect?.();
+    panner.disconnect?.();
+  };
+}
+
 /** Creates a deliberately quiet, non-tonal rolling surface rather than a motor-like pitch. */
 function create_lane_texture_buffer(context: AudioContextLike): AudioBufferLike {
   const length = Math.max(1, Math.floor(context.sampleRate * 0.32));
@@ -415,6 +417,7 @@ function play_noise_transient(
   peak_gain: number,
   duration_s: number,
   start_time_s = context.currentTime,
+  pan = 0,
 ): () => void {
   const source = context.createBufferSource();
   const filter = context.createBiquadFilter();
@@ -427,10 +430,15 @@ function play_noise_transient(
   ramp_audio_value(gain.gain, 0, start + duration_s);
   source.connect(filter);
   filter.connect(gain);
-  gain.connect(destination);
+  const disconnect_output = connect_spatial_output(context, gain, destination, pan);
   source.start(start);
   source.stop(start + duration_s + 0.005);
-  return () => stop_source(source, context.currentTime);
+  return () => {
+    stop_source(source, context.currentTime);
+    source.disconnect?.();
+    filter.disconnect?.();
+    disconnect_output();
+  };
 }
 function play_resonant_thump(
   context: AudioContextLike,
@@ -439,6 +447,7 @@ function play_resonant_thump(
   peak_gain: number,
   duration_s: number,
   start_time_s = context.currentTime,
+  pan = 0,
 ): () => void {
   const oscillator = context.createOscillator();
   const gain = context.createGain();
@@ -449,10 +458,14 @@ function play_resonant_thump(
   set_audio_value(gain.gain, peak_gain, start);
   ramp_audio_value(gain.gain, 0, start + duration_s);
   oscillator.connect(gain);
-  gain.connect(destination);
+  const disconnect_output = connect_spatial_output(context, gain, destination, pan);
   oscillator.start(start);
   oscillator.stop(start + duration_s + 0.005);
-  return () => stop_source(oscillator, context.currentTime);
+  return () => {
+    stop_source(oscillator, context.currentTime);
+    oscillator.disconnect?.();
+    disconnect_output();
+  };
 }
 function play_brief_chime(
   context: AudioContextLike,
@@ -468,10 +481,54 @@ function play_brief_chime(
   set_audio_value(gain.gain, peak_gain, start_time_s);
   ramp_audio_value(gain.gain, 0, start_time_s + 0.09);
   oscillator.connect(gain);
-  gain.connect(destination);
+  const disconnect_output = connect_spatial_output(context, gain, destination, 0);
   oscillator.start(start_time_s);
   oscillator.stop(start_time_s + 0.1);
-  return () => stop_source(oscillator, context.currentTime);
+  return () => {
+    stop_source(oscillator, context.currentTime);
+    oscillator.disconnect?.();
+    disconnect_output();
+  };
+}
+
+type RenderedVoice = { end_time_s: number; stop(): void };
+
+type CollisionLifecycle = {
+  source_simulation_time_ms: number;
+  source_event_sequence?: number;
+  path: DirectedCollisionVoice["source_path"];
+  role: DirectedCollisionVoice["role"];
+  scheduled_audio_time_s: number;
+  offset_s: number;
+  duration_s: number;
+  actual_end_time_s: number;
+  event: "scheduled" | "ended" | "stopped" | "disconnected";
+};
+function record_collision_lifecycle(entry: CollisionLifecycle): void {
+  const receiver = (
+    globalThis as typeof globalThis & {
+      __super_bowling_collision_audio_lifecycle__?: (entry: CollisionLifecycle) => void;
+    }
+  ).__super_bowling_collision_audio_lifecycle__;
+  receiver?.(Object.freeze({ ...entry }));
+}
+function record_collision_source(cue: TimedCollisionSound): void {
+  const receiver = (
+    globalThis as typeof globalThis & {
+      __super_bowling_collision_audio_source__?: (entry: {
+        source_simulation_time_ms: number;
+        source_event_sequence?: number;
+      }) => void;
+    }
+  ).__super_bowling_collision_audio_source__;
+  receiver?.(
+    Object.freeze({
+      source_simulation_time_ms: cue.source_simulation_time_ms,
+      ...(cue.source_event_sequence === undefined
+        ? {}
+        : { source_event_sequence: cue.source_event_sequence }),
+    }),
+  );
 }
 
 function play_sample(
@@ -481,161 +538,148 @@ function play_sample(
   peak_gain: number,
   playback_rate: number,
   duration_s: number,
-): () => void {
+  start_time_s = context.currentTime,
+  pan = 0,
+  offset_s = 0,
+  lowpass_hz?: number,
+  on_ended?: () => void,
+): RenderedVoice | undefined {
   const source = context.createBufferSource();
   const gain = context.createGain();
-  const start = context.currentTime;
+  const filter = lowpass_hz === undefined ? undefined : context.createBiquadFilter();
+  const start = start_time_s;
   source.buffer = buffer;
   source.loop = false;
   set_audio_value(source.playbackRate ?? { value: 1 }, playback_rate, start);
   set_audio_value(gain.gain, peak_gain, start);
-  ramp_audio_value(gain.gain, 0, start + duration_s);
   source.connect(gain);
-  gain.connect(destination);
-  source.start(start);
-  source.stop(start + duration_s + 0.01);
-  return () => stop_source(source, context.currentTime);
+  if (filter !== undefined) {
+    filter.type = "lowpass";
+    set_audio_value(filter.frequency, lowpass_hz!, start);
+    gain.connect(filter);
+  }
+  const disconnect_output = connect_spatial_output(context, filter ?? gain, destination, pan);
+  const slice = safe_collision_slice(buffer.duration, offset_s, duration_s);
+  if (slice === undefined) {
+    source.disconnect?.();
+    filter?.disconnect?.();
+    disconnect_output();
+    return undefined;
+  }
+  const safe_rate = Math.max(0.05, Number.isFinite(playback_rate) ? playback_rate : 1);
+  const rendered_duration_s = slice.duration_s / safe_rate;
+  ramp_audio_value(gain.gain, 0, start + rendered_duration_s);
+  source.start(start, slice.offset_s, slice.duration_s);
+  const end_time_s = start + rendered_duration_s;
+  source.onended = () => {
+    source.disconnect?.();
+    filter?.disconnect?.();
+    disconnect_output();
+    on_ended?.();
+  };
+  source.stop(end_time_s + 0.01);
+  return {
+    end_time_s,
+    stop: () => {
+      stop_source(source, context.currentTime);
+      source.disconnect?.();
+      filter?.disconnect?.();
+      disconnect_output();
+    },
+  };
 }
-function play_collision_sound(
+
+/** Renders the pure director's three roles without burst-clumping one window. */
+function play_directed_collision(
   context: AudioContextLike,
   destination: AudioNodeLike,
   noise: AudioBufferLike,
-  sound: CollisionSound,
   sample_bank: AudioSampleBank,
-  variation: number,
-  gain_scale: number,
-  cue_duration_s: number,
-): Array<() => void> {
-  const stop_layers: Array<() => void> = [];
-  const ball_intensity = sound.ball_pin.impulse;
-  const pin_intensity = sound.pin_pin.impulse;
-  if (sound.first_contact) {
-    const sample = sample_bank.impact;
-    if (sample !== undefined)
-      stop_layers.push(
-        play_sample(
-          context,
-          destination,
-          sample,
-          0.42 + ball_intensity * 0.3,
-          variation,
-          first_contact_cue_duration_s,
-        ),
-      );
-    else
-      stop_layers.push(
-        play_noise_transient(
-          context,
-          destination,
-          noise,
-          2200,
-          0.24 + ball_intensity * 0.16,
-          0.025,
-        ),
-        play_resonant_thump(context, destination, 104, 0.14 + ball_intensity * 0.1, 0.085),
-        play_resonant_thump(context, destination, 310, 0.05 + ball_intensity * 0.06, 0.035),
-      );
+  voice: DirectedCollisionVoice,
+  start_time_s: number,
+): RenderedVoice {
+  const instruction = collision_render_instruction(voice, sample_bank);
+  const sample = instruction === undefined ? undefined : sample_bank[instruction.sample_name];
+  if (sample !== undefined && instruction !== undefined) {
+    const lifecycle_base = {
+      source_simulation_time_ms: voice.source_simulation_time_ms,
+      ...(voice.source_event_sequence === undefined
+        ? {}
+        : { source_event_sequence: voice.source_event_sequence }),
+      path: voice.source_path,
+      role: voice.role,
+      scheduled_audio_time_s: start_time_s,
+      offset_s: instruction.offset_s,
+      duration_s: instruction.duration_s,
+      actual_end_time_s: start_time_s + instruction.duration_s / instruction.playback_rate,
+    } as const;
+    const rendered = play_sample(
+      context,
+      destination,
+      sample,
+      instruction.gain,
+      instruction.playback_rate,
+      instruction.duration_s,
+      start_time_s,
+      instruction.pan,
+      instruction.offset_s,
+      instruction.lowpass_hz,
+      () => {
+        record_collision_lifecycle({ ...lifecycle_base, event: "ended" });
+        record_collision_lifecycle({ ...lifecycle_base, event: "disconnected" });
+      },
+    );
+    if (rendered !== undefined) {
+      const lifecycle = { ...lifecycle_base, actual_end_time_s: rendered.end_time_s } as const;
+      record_collision_lifecycle({ ...lifecycle, event: "scheduled" });
+      return {
+        end_time_s: rendered.end_time_s,
+        stop: () => {
+          rendered.stop();
+          record_collision_lifecycle({ ...lifecycle, event: "stopped" });
+          record_collision_lifecycle({ ...lifecycle, event: "disconnected" });
+        },
+      };
+    }
   }
-  if (sound.ball_pin.contact_count > 0) {
-    const contact_mix = Math.min(1, sound.ball_pin.contact_count / 12);
-    const sample = sample_bank.knock;
-    if (sample !== undefined)
-      stop_layers.push(
-        play_sample(
-          context,
-          destination,
-          sample,
-          (0.12 + contact_mix * 0.12 + ball_intensity * 0.12) * gain_scale,
-          variation,
-          cue_duration_s,
-        ),
-      );
-    else
-      stop_layers.push(
-        play_noise_transient(
-          context,
-          destination,
-          noise,
-          900 + ball_intensity * 900,
-          (0.07 + ball_intensity * 0.09) * gain_scale,
-          0.04 + contact_mix * 0.035,
-        ),
-      );
+  if (voice.role === "body") {
+    const oscillator = context.createOscillator();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    oscillator.type = "triangle";
+    set_audio_value(oscillator.frequency, 86, start_time_s);
+    set_audio_value(filter.frequency, 280, start_time_s);
+    filter.type = "lowpass";
+    set_audio_value(gain.gain, voice.gain * 0.65, start_time_s);
+    ramp_audio_value(gain.gain, 0, start_time_s + voice.sample_duration_s);
+    oscillator.connect(filter);
+    filter.connect(gain);
+    const disconnect_output = connect_spatial_output(context, gain, destination, voice.pan);
+    oscillator.start(start_time_s);
+    const end_time_s = start_time_s + voice.sample_duration_s;
+    oscillator.stop(end_time_s + 0.005);
+    return {
+      end_time_s,
+      stop: () => {
+        stop_source(oscillator, context.currentTime);
+        oscillator.disconnect?.();
+        filter.disconnect?.();
+        disconnect_output();
+      },
+    };
   }
-  if (sound.pin_pin.contact_count > 0) {
-    const contact_mix = Math.min(1, sound.pin_pin.contact_count / 12);
-    const sample = sample_bank.clatter;
-    if (sample !== undefined)
-      stop_layers.push(
-        play_sample(
-          context,
-          destination,
-          sample,
-          (0.11 + contact_mix * 0.15 + pin_intensity * 0.11) * gain_scale,
-          variation,
-          cue_duration_s,
-        ),
-      );
-    else
-      stop_layers.push(
-        play_noise_transient(
-          context,
-          destination,
-          noise,
-          700 + pin_intensity * 700,
-          (0.065 + pin_intensity * 0.085) * gain_scale,
-          0.04 + contact_mix * 0.035,
-        ),
-      );
-  }
-  if (sound.deck_impulse > 0) {
-    const clack_sample = sample_bank.clack;
-    const thump_sample = sample_bank.thump;
-    if (clack_sample !== undefined)
-      stop_layers.push(
-        play_sample(
-          context,
-          destination,
-          clack_sample,
-          (0.055 + sound.deck_impulse * 0.085) * gain_scale,
-          variation,
-          cue_duration_s,
-        ),
-      );
-    else
-      stop_layers.push(
-        play_noise_transient(
-          context,
-          destination,
-          noise,
-          1350 + sound.deck_impulse * 550,
-          (0.045 + sound.deck_impulse * 0.06) * gain_scale,
-          0.045,
-        ),
-      );
-    if (thump_sample !== undefined)
-      stop_layers.push(
-        play_sample(
-          context,
-          destination,
-          thump_sample,
-          (0.08 + sound.deck_impulse * 0.12) * gain_scale,
-          variation,
-          cue_duration_s,
-        ),
-      );
-    else
-      stop_layers.push(
-        play_resonant_thump(
-          context,
-          destination,
-          68,
-          (0.055 + sound.deck_impulse * 0.085) * gain_scale,
-          0.105,
-        ),
-      );
-  }
-  return stop_layers;
+  const duration_s = Math.min(0.075, voice.sample_duration_s);
+  const stop = play_noise_transient(
+    context,
+    destination,
+    noise,
+    voice.role === "hero" ? 2100 : voice.source_path === "deck" ? 1250 : 940,
+    voice.gain * 0.72,
+    duration_s,
+    start_time_s,
+    voice.pan,
+  );
+  return { end_time_s: start_time_s + duration_s, stop };
 }
 function play_result_motif(
   context: AudioContextLike,
@@ -706,7 +750,6 @@ export function create_audio_controller(
   let sample_bank: AudioSampleBank = {};
   let sample_bytes_load: Promise<AudioSampleBytes> | undefined;
   let sample_decode_load: Promise<AudioSampleBank> | undefined;
-  let sample_variation = 0;
   let muted = false;
   let rolling_voice: RollingVoice | undefined;
   let roll_active = false;
@@ -715,6 +758,9 @@ export function create_audio_controller(
   let roll_speed = 0;
   let active_collision_cues: ActiveCollisionCue[] = [];
   let active_result_cues: ActiveCollisionCue[] = [];
+  const cascade_director = create_cascade_director();
+  let source_time_anchor_ms: number | undefined;
+  let audio_time_anchor_s: number | undefined;
   function can_play(): boolean {
     return context !== undefined && !muted && !disposed;
   }
@@ -801,6 +847,9 @@ export function create_audio_controller(
     active_collision_cues = [];
     active_result_cues.forEach((cue) => cue.stop());
     active_result_cues = [];
+    cascade_director.reset();
+    source_time_anchor_ms = undefined;
+    audio_time_anchor_s = undefined;
     if (!can_play() || rolling_voice !== undefined || context === undefined) return;
     if (lane_texture_buffer === undefined)
       lane_texture_buffer = create_lane_texture_buffer(context);
@@ -822,6 +871,9 @@ export function create_audio_controller(
     active_collision_cues = [];
     active_result_cues.forEach((cue) => cue.stop());
     active_result_cues = [];
+    cascade_director.reset();
+    source_time_anchor_ms = undefined;
+    audio_time_anchor_s = undefined;
   }
   function update_roll_speed(normalized_speed: number): void {
     roll_speed = clamp_normalized_speed(normalized_speed);
@@ -829,52 +881,73 @@ export function create_audio_controller(
     update_rolling_voice(rolling_voice, roll_speed, context.currentTime);
   }
   function prune_collision_cues(time_s: number): void {
-    active_collision_cues = active_collision_cues.filter((cue) => cue.end_time_s > time_s);
+    const live_cues: ActiveCollisionCue[] = [];
+    for (const cue of active_collision_cues) {
+      if (cue.end_time_s > time_s) live_cues.push(cue);
+      else cue.stop();
+    }
+    active_collision_cues = live_cues;
   }
-  function can_schedule_collision(sound: CollisionSound, time_s: number): boolean {
-    prune_collision_cues(time_s);
-    if (sound.first_contact)
-      return active_collision_cues.length < maximum_concurrent_collision_cues;
-    return active_collision_cues.length < maximum_secondary_collision_cues;
+  function anchored_audio_time(source_time_ms: number, delay_ms: number): number | undefined {
+    if (context === undefined || !Number.isFinite(source_time_ms)) return undefined;
+    if (source_time_anchor_ms === undefined || audio_time_anchor_s === undefined) {
+      source_time_anchor_ms = source_time_ms;
+      audio_time_anchor_s = context.currentTime;
+    }
+    return Math.max(
+      context.currentTime,
+      audio_time_anchor_s + (source_time_ms - source_time_anchor_ms + delay_ms) / 1000,
+    );
   }
-  function secondary_gain_scale(sound: CollisionSound): number {
-    const energy = Math.max(sound.ball_pin.impulse, sound.pin_pin.impulse, sound.deck_impulse);
-    return 0.65 + energy * 0.2;
-  }
-  function emit_collision(sound: CollisionSound | undefined): void {
-    if (sound === undefined || !can_play() || context === undefined) return;
-    if (!can_schedule_collision(sound, context.currentTime)) return;
+  function emit_collision(timed: TimedCollisionSound): void {
+    if (!can_play() || context === undefined) return;
+    const sound = create_collision_sound(timed);
+    if (sound === undefined) return;
     if (noise_buffer === undefined) noise_buffer = create_noise_buffer(context, 0.09);
     if (mix === undefined) return;
-    sample_variation = (sample_variation + 1) % 5;
-    const variation = 0.94 + sample_variation * 0.03;
-    const cue_duration_s = sound.first_contact
-      ? first_contact_cue_duration_s
-      : secondary_collision_cue_duration_s;
-    const gain_scale = sound.first_contact ? 1 : secondary_gain_scale(sound);
-    const stop_layers = play_collision_sound(
-      context,
-      mix.collision,
-      noise_buffer,
-      sound,
-      sample_bank,
-      variation,
-      gain_scale,
-      cue_duration_s,
-    );
-    active_collision_cues.push({
-      end_time_s: context.currentTime + cue_duration_s,
-      stop: () => stop_layers.forEach((stop_layer) => stop_layer()),
+    const plan = cascade_director.direct({ ...timed, ...sound });
+    if (plan.voices.length === 0) return;
+    // Attacks own their onset. Only the low body branch ducks; lane and result
+    // routes remain independent so a collision cannot erase game feedback.
+    for (const voice of plan.voices) {
+      if (voice.role === "body") continue;
+      const attack_time_s = anchored_audio_time(voice.source_simulation_time_ms, voice.delay_ms);
+      if (attack_time_s === undefined) continue;
+      set_audio_value(
+        mix.collision_body.gain,
+        0.52,
+        Math.max(context.currentTime, attack_time_s - 0.008),
+      );
+      ramp_audio_value(mix.collision_body.gain, 0.18, attack_time_s + 0.004);
+      ramp_audio_value(mix.collision_body.gain, 0.52, attack_time_s + 0.12);
+    }
+    prune_collision_cues(context.currentTime);
+    const available_voice_slots = maximum_concurrent_collision_cues - active_collision_cues.length;
+    const scheduled_layers = plan.voices.slice(0, available_voice_slots).flatMap((voice) => {
+      const start_time_s = anchored_audio_time(voice.source_simulation_time_ms, voice.delay_ms);
+      if (start_time_s === undefined) return [];
+      const rendered = play_directed_collision(
+        context!,
+        voice.role === "body" ? mix!.collision_body : mix!.collision_attack,
+        noise_buffer!,
+        sample_bank,
+        voice,
+        start_time_s,
+      );
+      return [{ stop: rendered.stop, end_time_s: rendered.end_time_s }];
     });
+    if (scheduled_layers.length === 0) return;
+    active_collision_cues.push(...scheduled_layers);
     if (sound.first_contact) {
       impact_started = true;
       stop_rolling_voice(rolling_voice, context.currentTime);
       rolling_voice = undefined;
     }
   }
-  function record_impact(cue: CollisionSound): void {
+  function record_impact(cue: TimedCollisionSound): void {
     if (!roll_active || !can_play()) return;
-    emit_collision(create_collision_sound(cue));
+    record_collision_source(cue);
+    emit_collision(cue);
   }
   function play_result(result: ResultSound): void {
     if (!can_play() || context === undefined) return;

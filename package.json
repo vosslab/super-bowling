@@ -14,7 +14,8 @@
     "strike-matrix": "tsx devel/probe_strike_matrix.mjs",
     "clean": "./dist_clean.sh",
     "format:write": "npx prettier --write '**/*.{ts,tsx,mts,cts,js,mjs,cjs}'",
-    "test:playwright": "./run_playwright_tests.sh"
+    "test:playwright": "./run_playwright_tests.sh",
+    "verify:audio-cascade": "tsx devel/verify_audio_cascade.mjs"
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": ">=0.19.3",

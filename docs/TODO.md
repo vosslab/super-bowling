@@ -19,16 +19,17 @@ current bowling and presentation work.
   and keep technique plus preview feedback learnable and fair. This is explicitly deferred from
   the current arcade-presentation rebuild.
 
-## Motion review
+## Motion evidence
 
-- Review one real-time, hard off-center pocket hit against the perceptual criteria in
-  [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md): grounded pin shadows,
-  restrained lift and afterimages, readable deck framing, and a result burst that starts after
-  the collision can be understood.
+- Run the captured normal-control hard off-center pocket-hit fixture, the deterministic
+  camera-and-impact transition probe, and the focused browser behavior checks described in
+  [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md). The generated report must prove
+  grounded pin shadows, restrained lift and afterimages, readable deck framing, and a result
+  burst that begins after the collision transition; a zero-exit command closes this follow-up.
 
 ## Evidence
 
 - [active_plans/active/practice_records_and_earned_moments.md](active_plans/active/practice_records_and_earned_moments.md)
   records the three deferred gameplay decisions and their data dependencies.
-- [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md) defines the remaining motion
-  review as a perceptual acceptance check rather than a frozen animation test.
+- [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md) defines the unattended fixture,
+  transition probe, and browser-contract evidence for the remaining motion follow-up.

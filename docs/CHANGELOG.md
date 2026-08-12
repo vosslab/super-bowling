@@ -1,6 +1,27 @@
 ## 2026-08-11
 
+### Fixes and Maintenance
+
+- Replaced the remaining motion-review completion wording with captured fixture, synthetic
+  transition, browser-probe, and independent-subagent evidence contracts; the autonomous-policy
+  verifier now covers those current documents and discovers every non-archive active plan.
+
+- Refreshed [docs/CODE_ARCHITECTURE.md](CODE_ARCHITECTURE.md) and
+  [docs/FILE_STRUCTURE.md](FILE_STRUCTURE.md) for the source-time cascade director, shared
+  production/evidence render contract, audio lifecycle telemetry, unattended verifier artifacts,
+  and autonomous completion policy; the remaining verification task stays documented.
+
 ### Additions and New Features
+
+- Added [docs/active_plans/active/collision_audio_excitement.md](active_plans/active/collision_audio_excitement.md),
+  the execution-ready plan for a physics-driven articulated collision field and unattended
+  synthetic, offline, and real-worker audio evidence. Its milestones explicitly replace direct-
+  perception gates with captured fixtures, automated behavior checks, and independent
+  subagent review.
+
+- Added [docs/HUMAN_GUIDANCE.md](HUMAN_GUIDANCE.md) and its executable policy verifier so active
+  plan completion closes through manager-run fixtures, probes, tests, and independent subagent
+  review rather than a direct-perception gate.
 
 - Added maintained real-worker gameplay evidence for the revised arcade presentation, including a
   dimensional moving ball and a real physical ten-pin strike aftermath. The action galleries now
@@ -98,6 +119,11 @@
 
 ### Fixes and Maintenance
 
+- Expanded each aggregate collision window into a bounded, count-scaled burst of overlapping
+  impacts. Ball-pin, pin-pin, and falling-pin centroids now keep independent stereo locations,
+  while short timing, pitch, and field-position variations articulate the cascade without changing
+  the authoritative physics or allowing unbounded Web Audio nodes. The real-worker audio probe now
+  accepts its ten-pin comparison only when that roll resolves as an actual strike.
 - Layered ball-pin knocks, pin-pin clatter, hard deck clacks, and low deck thumps from the same
   physical impact window instead of choosing only one contact sample. Removed the additional
   wall-clock suppression and age fade that made hundreds of real pin falls sound like a few hits;

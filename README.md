@@ -126,10 +126,10 @@ npm run benchmark
 The regulation-lane rebuild and the current action-presentation implementation are available in
 the playable build: worker-backed previews, four pre-roll controls, shot-driven deck framing,
 enhanced ball and pin rendering, and strike/spare bursts all have code and browser coverage. The
-maintained screenshots document the current visual state; complete real-time A/V recordings still
-require human listening and viewing before they establish perceptual quality. The maintainer
-workflow and that evidence boundary are documented in
-[devel/DEVEL_README.md](devel/DEVEL_README.md). The game has no account, server-owned state,
+maintained screenshots and real-time A/V recordings are diagnostic inputs to captured fixtures,
+synthetic transitions, automated behavior probes, and independent-subagent review. The unattended
+audio verifier is `npm run verify:audio-cascade`; the maintainership boundary is documented in
+[docs/HUMAN_GUIDANCE.md](docs/HUMAN_GUIDANCE.md). The game has no account, server-owned state,
 motion controller, physical-ball hardware, cabinet integration, tickets, or prize mechanics. Its
 reference inspirations inform pacing and readability, not copied art, branding, interface assets,
 or hardware behavior.

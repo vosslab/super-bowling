@@ -39,6 +39,7 @@ test("first ball-pin contact remains the visual focus of a stronger cascade", ()
 
   assert.deepEqual([cues.visual?.x, cues.visual?.y], [-2, 3]);
   assert.equal(cues.audio?.first_contact, true);
+  assert.ok(cues.audio.ball_pin.pan < 0 && cues.audio.pin_pin.pan > 0);
 });
 
 test("deck intensity depends on fall speed rather than pin-pin impulse", () => {
@@ -65,7 +66,8 @@ test("deck intensity depends on fall speed rather than pin-pin impulse", () => {
 
   const quieter_contacts = mapped_deck_impulse(20);
   const louder_contacts = mapped_deck_impulse(400);
-  assert.equal(quieter_contacts?.deck_impulse, louder_contacts?.deck_impulse);
+  assert.equal(quieter_contacts?.deck.impulse, louder_contacts?.deck.impulse);
+  assert.equal(quieter_contacts?.deck.contact_count, 2);
   assert.notEqual(quieter_contacts?.pin_pin.impulse, louder_contacts?.pin_pin.impulse);
 });
 
@@ -82,5 +84,5 @@ test("malformed transport values do not invent a presentation cue", () => {
     }),
   );
 
-  assert.deepEqual(cues, { audio: undefined, visual: undefined });
+  assert.deepEqual(cues, { audio: undefined, source_simulation_time_ms: 100, visual: undefined });
 });

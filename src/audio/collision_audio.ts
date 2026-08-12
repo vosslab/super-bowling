@@ -6,11 +6,7 @@ export type ImpactPathCue = {
   pan: number;
 };
 
-/**
- * A bounded, simulation-independent description of one physical impact window.
- * Values are normalized before reaching Web Audio so this module stays a stable
- * seam between the worker protocol and the presentation layer.
- */
+/** A bounded simulation-independent impact window at the audio boundary. */
 export type CollisionSound = {
   first_contact: boolean;
   ball_pin: ImpactPathCue;
@@ -47,7 +43,6 @@ export function create_collision_sound(input: CollisionSound): CollisionSound | 
     ball_pin.impulse + pin_pin.impulse + deck.impulse === 0
   )
     return undefined;
-
   return {
     first_contact: input.first_contact && ball_pin.contact_count > 0,
     ball_pin,

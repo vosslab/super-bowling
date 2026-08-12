@@ -82,6 +82,7 @@ class FakeCompressor extends FakeNode {
 class FakeBuffer {
   constructor(length) {
     this.samples = new Float32Array(length);
+    this.duration = length / 44_100;
   }
 
   getChannelData() {
@@ -98,8 +99,8 @@ class FakeBufferSource extends FakeNode {
     this.stopped = [];
   }
 
-  start(time = 0) {
-    this.started.push(time);
+  start(time = 0, offset = 0, duration) {
+    this.started.push({ time, offset, duration });
   }
 
   stop(time = 0) {
@@ -116,6 +117,7 @@ class FakeAudioContext {
     this.buffer_sources = [];
     this.gains = [];
     this.filters = [];
+    this.panners = [];
     this.compressors = [];
     this.resume_count = 0;
     this.close_count = 0;
@@ -142,6 +144,13 @@ class FakeAudioContext {
     return gain;
   }
 
+  createStereoPanner() {
+    const panner = new FakeNode();
+    panner.pan = new FakeParam();
+    this.panners.push(panner);
+    return panner;
+  }
+
   createBiquadFilter() {
     const filter = new FakeFilter();
     this.filters.push(filter);
@@ -166,7 +175,7 @@ class FakeAudioContext {
 
   async decodeAudioData() {
     this.decode_count += 1;
-    return new FakeBuffer(1);
+    return new FakeBuffer(44_100);
   }
 }
 
@@ -227,10 +236,11 @@ test("mute immediately stops the rolling voice and gates collision and result vo
     fixture.context.oscillators.flatMap((voice) => voice.started).length +
     fixture.context.buffer_sources.flatMap((source) => source.started).length;
   audio.record_impact({
+    source_simulation_time_ms: 100,
     first_contact: true,
-    ball_pin: { contact_count: 1, impulse: 0.8 },
-    pin_pin: { contact_count: 0, impulse: 0 },
-    deck_impulse: 0,
+    ball_pin: { contact_count: 1, impulse: 0.8, pan: 0 },
+    pin_pin: { contact_count: 0, impulse: 0, pan: 0 },
+    deck: { contact_count: 0, impulse: 0, pan: 0 },
   });
   audio.play_result("strike");
   const starts_after_muted_cues =
@@ -243,4 +253,128 @@ test("mute immediately stops the rolling voice and gates collision and result vo
     fixture.context.buffer_sources.flatMap((source) => source.started).length;
   assert.equal(starts_after_muted_cues, starts_before_muted_cues);
   assert.ok(starts_after_unmute > starts_after_muted_cues);
+});
+
+test("directed collision voices overlap safely, preserve signed pans, duck only body, and clean up", async () => {
+  const fixture = create_fake_backend();
+  const original_fetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  try {
+    const audio = create_audio_controller(fixture.create_backend);
+    audio.preload();
+    audio.activate();
+    await new Promise((resolve) => setImmediate(resolve));
+    audio.start_roll();
+    audio.record_impact({
+      source_simulation_time_ms: 100,
+      first_contact: true,
+      ball_pin: { contact_count: 5, impulse: 0.8, pan: -0.5 },
+      pin_pin: { contact_count: 3, impulse: 0.6, pan: 0.4 },
+      deck: { contact_count: 1, impulse: 0.3, pan: 0.1 },
+    });
+    const collision_sources = fixture.context.buffer_sources.filter((source) => !source.loop);
+    assert.ok(collision_sources.length >= 1);
+    const starts = collision_sources.flatMap((source) =>
+      source.started.map((start) => ({ ...start, source })),
+    );
+    assert.ok(
+      starts.every(
+        ({ time, offset, duration, source }) =>
+          time >= fixture.context.currentTime &&
+          offset >= 0 &&
+          duration > 0 &&
+          offset + duration <= source.buffer.duration,
+      ),
+    );
+    assert.ok(
+      starts.some((left, index) =>
+        starts.slice(index + 1).some((right) => Math.abs(right.time - left.time) < left.duration),
+      ),
+    );
+    const pans = fixture.context.panners.flatMap((panner) =>
+      panner.pan.values.map(({ value }) => value),
+    );
+    assert.ok(pans.some((pan) => pan < 0) && pans.some((pan) => pan > 0));
+    assert.ok(
+      fixture.context.gains.some((gain) => {
+        const values = gain.gain.values.map(({ value }) => value);
+        return values.includes(0.18) && values.includes(0.52);
+      }),
+      "attack onset ducks the independent body route",
+    );
+    for (let index = 1; index <= 10; index += 1) {
+      audio.record_impact({
+        source_simulation_time_ms: 100 + index * 50,
+        first_contact: false,
+        ball_pin: { contact_count: 0, impulse: 0, pan: 0 },
+        pin_pin: { contact_count: 3, impulse: 0.5, pan: index % 2 ? -0.4 : 0.5 },
+        deck: { contact_count: 0, impulse: 0, pan: 0 },
+      });
+    }
+    assert.ok(
+      fixture.context.buffer_sources.filter((source) => !source.loop).length <= 4,
+      "the controller never admits more live collision sources than its public cap",
+    );
+    fixture.context.currentTime += 1;
+    audio.record_impact({
+      source_simulation_time_ms: 1_000,
+      first_contact: false,
+      ball_pin: { contact_count: 0, impulse: 0, pan: 0 },
+      pin_pin: { contact_count: 1, impulse: 0.4, pan: 0.7 },
+      deck: { contact_count: 0, impulse: 0, pan: 0 },
+    });
+    assert.ok(collision_sources.every((source) => source.stopped.length > 0));
+    assert.ok(collision_sources.every((source) => source.disconnected));
+    audio.set_muted(true);
+    assert.ok(
+      fixture.context.buffer_sources
+        .filter((source) => !source.loop)
+        .every((source) => source.stopped.length > 0 && source.disconnected),
+    );
+    audio.dispose();
+    assert.equal(fixture.context.close_count, 1);
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
+});
+
+test("short decoded slices clamp before start and expire at their rendered lifetime", async () => {
+  const fixture = create_fake_backend();
+  fixture.context.decodeAudioData = async () => new FakeBuffer(8);
+  const original_fetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  try {
+    const audio = create_audio_controller(fixture.create_backend);
+    audio.preload();
+    audio.activate();
+    await new Promise((resolve) => setImmediate(resolve));
+    audio.start_roll();
+    audio.record_impact({
+      source_simulation_time_ms: 10,
+      first_contact: true,
+      ball_pin: { contact_count: 2, impulse: 0.8, pan: -0.3 },
+      pin_pin: { contact_count: 1, impulse: 0.5, pan: 0.3 },
+      deck: { contact_count: 0, impulse: 0, pan: 0 },
+    });
+    const short_sources = fixture.context.buffer_sources.filter((source) => !source.loop);
+    assert.ok(
+      short_sources.every((source) =>
+        source.started.every(
+          ({ offset, duration }) =>
+            offset >= 0 && duration > 0 && offset + duration <= source.buffer.duration,
+        ),
+      ),
+    );
+    fixture.context.currentTime += 0.05;
+    audio.record_impact({
+      source_simulation_time_ms: 100,
+      first_contact: false,
+      ball_pin: { contact_count: 0, impulse: 0, pan: 0 },
+      pin_pin: { contact_count: 1, impulse: 0.2, pan: 0.2 },
+      deck: { contact_count: 0, impulse: 0, pan: 0 },
+    });
+    assert.ok(short_sources.every((source) => source.stopped.length > 0 && source.disconnected));
+  } finally {
+    globalThis.fetch = original_fetch;
+  }
 });

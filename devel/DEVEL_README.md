@@ -21,10 +21,10 @@ appropriate repo root or package.
 - [capture_screenshots.sh](capture_screenshots.sh) and its capture modules rebuild the locally
   served game,
   reproduce maintained documentation images, and write ignored motion, projection, provenance,
-  and frame-window evidence. They support implementation and human visual review; they are not
+  and frame-window evidence. They support implementation and independent-agent visual review; they are not
   permanent test cases and their measured values are not suite thresholds.
 - [capture_real_gameplay_audio.mjs](capture_real_gameplay_audio.mjs) records a complete real-worker
-  990-pin roll and a hard off-center ten-pin pocket hit as post-master WebM audio/video evidence.
+  990-pin roll and a hard off-center ten-pin strike as post-master WebM audio/video evidence.
   It needs a freshly built local app, Playwright Chromium, and `ffmpeg` plus `ffprobe`:
 
   ```bash
@@ -35,9 +35,10 @@ appropriate repo root or package.
 
   The ignored output directory receives the WebM captures and JSON sidecars with real worker
   milestones, asset/decode provenance, post-master analyser samples, and container checks. This is
-  one-time perceptual evidence, not a permanent test or fixed dB gate: listen to the complete
-  rolls to judge the rolling bed, first impact, secondary collisions, cascade, and result payoff.
-  Human listening remains the authority.
+  diagnostic evidence. The unattended `npm run verify:audio-cascade` command evaluates the
+  production fixture, synthetic transitions, rendered probes, and independent-subagent review;
+  it is the completion gate for the collision-audio work. Captures remain useful for investigating
+  a failed metric, but are not a prerequisite for a milestone to close.
 
 ## Current root scripts
 
@@ -52,7 +53,7 @@ appropriate repo root or package.
 | [rotate_changelog.py](rotate_changelog.py)                         | Move old changelog day blocks into archive files.                                |
 | [flatten_broken_md_links.py](flatten_broken_md_links.py)           | Repair or flatten broken Markdown links.                                         |
 | [dist_clean.sh](dist_clean.sh)                                     | Remove build artifacts, caches, and dependency installs.                         |
-| [capture_real_gameplay_audio.mjs](capture_real_gameplay_audio.mjs) | One-time real-worker, post-master A/V capture for perceptual audio review.       |
+| [capture_real_gameplay_audio.mjs](capture_real_gameplay_audio.mjs) | Real-worker, post-master A/V capture feeding automated cascade evidence.         |
 
 ## Propagated devel scripts
 

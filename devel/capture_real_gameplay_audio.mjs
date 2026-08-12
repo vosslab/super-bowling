@@ -22,7 +22,7 @@ const default_timeout_ms = 45_000;
 
 function usage() {
   console.log(
-    "Usage: node devel/capture_real_gameplay_audio.mjs --base-url URL [--output-directory PATH] [--timeout-seconds SECONDS]",
+    "Usage: node devel/capture_real_gameplay_audio.mjs --base-url URL [--output-directory PATH] [--timeout-seconds SECONDS] [--quiet]",
   );
 }
 
@@ -31,6 +31,7 @@ function parse_arguments(argument_list) {
     base_url: undefined,
     output_directory: default_output_directory,
     timeout_ms: default_timeout_ms,
+    quiet: false,
   };
   for (let index = 0; index < argument_list.length; index += 1) {
     const argument = argument_list[index];
@@ -43,6 +44,8 @@ function parse_arguments(argument_list) {
     } else if (argument === "--timeout-seconds") {
       options.timeout_ms = Number(argument_list[index + 1]) * 1000;
       index += 1;
+    } else if (argument === "--quiet") {
+      options.quiet = true;
     } else if (argument === "-h" || argument === "--help") {
       usage();
       process.exit(0);
@@ -72,6 +75,9 @@ function install_audio_tap(context) {
     const decoded_assets = [];
     const fetches = [];
     let started_buffer_sources = 0;
+    const source_starts = [];
+    const collision_lifecycle = [];
+    const collision_sources = [];
     let recorder;
     let chunks = [];
     let recording_started_at_ms;
@@ -156,9 +162,22 @@ function install_audio_tap(context) {
       ...arguments_list
     ) {
       started_buffer_sources += 1;
+      source_starts.push({
+        context_time_s: this.context.currentTime,
+        requested_start_s: arguments_list[0] ?? this.context.currentTime,
+        observed_at_ms: performance.now(),
+      });
       return native_buffer_source_start.apply(this, arguments_list);
     };
     window.AudioContext = CaptureAudioContext;
+    // This is a capture-only query seam.  Production emits immutable records
+    // only when this optional receiver exists; it does not change scheduling.
+    globalThis.__super_bowling_collision_audio_lifecycle__ = (entry) => {
+      collision_lifecycle.push({ ...entry, observed_at_ms: performance.now() });
+    };
+    globalThis.__super_bowling_collision_audio_source__ = (entry) => {
+      collision_sources.push({ ...entry, observed_at_ms: performance.now() });
+    };
 
     function sample_taps() {
       for (const context_for_capture of contexts) {
@@ -215,6 +234,14 @@ function install_audio_tap(context) {
           }),
           fetches,
           started_buffer_sources,
+          source_starts,
+          collision_lifecycle,
+          collision_sources,
+          // The monitored node is the one whose ordinary destination edge was
+          // observed. In the shipped graph that is the final compressor after
+          // the master gain, so this is the same post-master signal the player
+          // hears, duplicated only for diagnostics.
+          tap_provenance: "post_master_compressor_output",
           trace: contexts.flatMap((context_for_capture) => {
             const tap = tap_by_context.get(context_for_capture);
             return tap?.trace ?? [];
@@ -303,6 +330,8 @@ async function record_state(page, name, launched_at_ms) {
         fallen_pins: shell.getAttribute("data-drawn-fallen-pin-count"),
         impact_windows: shell.getAttribute("data-impact-window-count"),
         first_impact_seen: shell.getAttribute("data-first-impact-seen"),
+        result_message: document.querySelector(".roll_result")?.textContent?.trim(),
+        standing_count: document.querySelector("[data-standing-count]")?.textContent?.trim(),
       };
     },
     { record_name: name, launch_time: launched_at_ms },
@@ -468,6 +497,7 @@ const scenarios = [
     start_label: "Start 1,000 mode - 990 pins for 1 player",
     launch: async (page) => page.keyboard.press("Space"),
     cascade_milestones: [100, 300],
+    minimum_fallen_pins: 400,
     input: {
       launch: "Space",
       power: "default",
@@ -477,13 +507,14 @@ const scenarios = [
     },
   },
   {
-    id: "real_worker_ten_pin_pocket_hit",
+    id: "real_worker_ten_pin_strike",
     pin_count: 10,
     mode_label: "10 mode - 10 pins",
     start_label: "Start 10 mode - 10 pins for 1 player",
     prepare: set_ten_pin_pocket_shot,
     launch: async (page) => page.getByRole("button", { name: "Bowl now" }).click(),
     cascade_milestones: [5],
+    expected_result: "Strike!",
     input: { launch: "Bowl now", power: "18", start_position: "-20", angle: "0", spin: "0" },
   },
 ];
@@ -531,6 +562,21 @@ async function capture_scenario(browser, options, scenario) {
       () => document.querySelector("main.play_shell")?.getAttribute("data-phase") === "result",
     );
     states.push(await record_state(page, "result", launched_at_ms));
+    const result_state = states.at(-1);
+    if (
+      scenario.expected_result !== undefined &&
+      result_state?.result_message !== scenario.expected_result
+    )
+      throw new Error(
+        `${scenario.id} resolved as ${result_state?.result_message ?? "no result"}, not ${scenario.expected_result}.`,
+      );
+    if (
+      scenario.minimum_fallen_pins !== undefined &&
+      Number(result_state?.fallen_pins) < scenario.minimum_fallen_pins
+    )
+      throw new Error(
+        `${scenario.id} finished with ${result_state?.fallen_pins ?? "no"} fallen pins; expected at least ${scenario.minimum_fallen_pins}.`,
+      );
     await page.waitForTimeout(700);
     const recording = await page.evaluate(() =>
       globalThis.__super_bowling_real_audio_capture.stop(),
@@ -577,6 +623,13 @@ async function capture_scenario(browser, options, scenario) {
           destination_edges: recording.audio_diagnostics.destination_edges,
           fetched_assets: recording.audio_diagnostics.fetches,
           started_buffer_sources: recording.audio_diagnostics.started_buffer_sources,
+          source_starts: recording.audio_diagnostics.source_starts,
+          collision_lifecycle: recording.audio_diagnostics.collision_lifecycle,
+          collision_sources: recording.audio_diagnostics.collision_sources,
+          tap_provenance: recording.audio_diagnostics.tap_provenance,
+          // Raw 50 ms post-master samples let the unattended verifier measure
+          // later cascade activity without decoding the optional WebM again.
+          trace: recording.audio_diagnostics.trace,
           trace_sample_count: recording.audio_diagnostics.trace.length,
         },
       },
@@ -617,7 +670,7 @@ async function main() {
     const captures = [];
     for (const scenario of scenarios)
       captures.push(await capture_scenario(browser, options, scenario));
-    console.log(JSON.stringify({ captures }, null, 2));
+    if (!options.quiet) console.log(JSON.stringify({ captures }, null, 2));
   } finally {
     await browser.close();
   }

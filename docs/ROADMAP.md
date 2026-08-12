@@ -16,16 +16,14 @@ The playable build now combines technique-driven bowling with an arcade presenta
 
 ## Next priority
 
-Perform one real-time visual acceptance review of a hard, off-center pocket hit before scheduling
-more presentation work.
+Run the autonomous hard, off-center pocket-hit acceptance fixture before scheduling more
+presentation work.
 
-- Confirm that moving foreground pins neither teleport nor remain implausibly elevated.
-- Confirm that shadows remain connected to plausible ground contact and the afterimage reads as
-  speed rather than a duplicate pin.
-- Confirm that the deck camera preserves meaningful pin action and the result burst follows a
-  readable collision.
-- Record any finding as a bounded follow-up with a reproducible visible scenario; do not turn
-  tuned animation values into brittle timing or pixel tests.
+- Capture the normal visible scenario, exercise synthetic transition probes, and run focused
+  browser behavior tests for foreground pin continuity, ground-connected shadows, and afterimage.
+- Check the deck-camera/result ordering with the captured fixture and an independent subagent.
+- Record an automated failure as a bounded follow-up with a reproducible visible scenario; do not
+  turn tuned animation values into brittle timing or pixel tests.
 
 ## Intentionally not started
 

@@ -940,9 +940,10 @@ payload, calling into the derivation boundary to build it.
   answers the style guide's "Review design questions" list -- specifically
   whether the toast explains a state change or merely asks for attention,
   whether it obscures the lane or the aiming controls, and whether a player can
-  reach another attempt quickly. Captures live outside the repository and are
-  neither required test output nor a golden/pixel-equivalence gate. Human
-  approval remains the final word but is not a milestone dependency.
+  reach another attempt quickly. Captures live outside the repository are diagnostic input to
+  synthetic transitions, focused browser behavior tests, and the fresh independent-subagent
+  review; those unattended artifacts close the milestone. A later player observation starts a new
+  bounded request rather than becoming an external-permission gate.
 - Failure semantics: a red per-patch gate blocks that patch only. A red
   integration gate blocks M4 close-out. A review rejection of a surface returns
   that surface's work package to WS-U and does not reopen WS-P or WS-S.

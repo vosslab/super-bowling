@@ -24,6 +24,9 @@ export type ImpactVisualCue = {
 
 export type ImpactPresentationCues = {
   audio: CollisionSound | undefined;
+  /** Worker-owned time; the audio controller alone anchors it to its clock. */
+  source_simulation_time_ms: number;
+  source_event_sequence?: number;
   visual: ImpactVisualCue | undefined;
 };
 
@@ -160,5 +163,9 @@ export function map_impact_presentation(event: ImpactEvent): ImpactPresentationC
           strength: visual_source.impulse,
           first_contact: event.first_ball_pin_impact && visual_source === ball_pin,
         };
-  return { audio, visual };
+  return {
+    audio,
+    source_simulation_time_ms: event.simulation_time_ms,
+    visual,
+  };
 }

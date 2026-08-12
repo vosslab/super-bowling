@@ -10,10 +10,10 @@ this game. The observations are references, not a visual or mechanical specifica
 
 Super Bowling combines two reference ideas while removing their specialized hardware:
 
-| Reference | Inspiration retained | Hardware removed |
-| --- | --- | --- |
-| Nintendo Wii Bowling | Approachable screen bowling, readable lane play, and familiar frame scoring | No motion controller |
-| UNIS Lane Master | Arcade camera drive, energetic pin action, fantasy scale, and concentrated results | No physical ball, cabinet lane, or sensors |
+| Reference            | Inspiration retained                                                               | Hardware removed                           |
+| -------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------ |
+| Nintendo Wii Bowling | Approachable screen bowling, readable lane play, and familiar frame scoring        | No motion controller                       |
+| UNIS Lane Master     | Arcade camera drive, energetic pin action, fantasy scale, and concentrated results | No physical ball, cabinet lane, or sensors |
 
 Super Bowling's synthesis is a browser bowling game controlled with labeled pointer and
 keyboard inputs for power, start position, angle, and spin. Rapier supplies physical collision
@@ -104,15 +104,15 @@ outcome earns a stronger visual interruption.
 
 ## Super Bowling response
 
-| Reference cue | Super Bowling decision | Status |
-| --- | --- | --- |
-| Camera advances during ball travel | Use one shot-driven projection for lane, ball, and pins | Adopted |
-| Ball keeps visible volume while moving | Add rim shade, fixed gloss, lane reflection, holes, and shadow | Adopted |
-| Fast pins separate in depth | Derive lift, shadow, and one afterimage from snapshot velocity | Adopted |
-| Collision remains physically caused | Keep Rapier snapshots authoritative for every pin pose | Adopted |
-| Large outcome reveal | Use distinct `STRIKE` and `SPARE` bursts with short confetti | Adapted |
-| Full-screen reward sequence | Keep controls available and confine the burst to the lane | Adapted |
-| Cabinet power-ups and ticket rewards | Preserve technique, regulation scoring, and practice records | Not adopted |
+| Reference cue                          | Super Bowling decision                                         | Status      |
+| -------------------------------------- | -------------------------------------------------------------- | ----------- |
+| Camera advances during ball travel     | Use one shot-driven projection for lane, ball, and pins        | Adopted     |
+| Ball keeps visible volume while moving | Add rim shade, fixed gloss, lane reflection, holes, and shadow | Adopted     |
+| Fast pins separate in depth            | Derive lift, shadow, and one afterimage from snapshot velocity | Adopted     |
+| Collision remains physically caused    | Keep Rapier snapshots authoritative for every pin pose         | Adopted     |
+| Large outcome reveal                   | Use distinct `STRIKE` and `SPARE` bursts with short confetti   | Adapted     |
+| Full-screen reward sequence            | Keep controls available and confine the burst to the lane      | Adapted     |
+| Cabinet power-ups and ticket rewards   | Preserve technique, regulation scoring, and practice records   | Not adopted |
 
 The implementation keeps those decisions at existing ownership boundaries:
 
@@ -152,10 +152,12 @@ branding, or hardware interaction.
 - Wide fantasy racks retain a complete, readable deck instead of copying the ten-pin zoom.
 - Shipped assets and layouts remain original to Super Bowling.
 
-## Follow-up review
+## Follow-up evidence
 
-The strongest remaining visual check is a real-time, hard off-center pocket hit. Review the
-complete motion rather than a still image and confirm that:
+The remaining visual follow-up is a captured normal-control hard off-center pocket-hit fixture.
+Run it with a deterministic camera-and-impact transition probe and focused browser behavior
+checks, then retain the machine-readable report. The zero-exit evidence command closes the
+follow-up when it establishes that:
 
 - foreground pins do not teleport or linger at an extreme height;
 - pin shadows remain connected to plausible ground contact;
@@ -163,5 +165,7 @@ complete motion rather than a still image and confirm that:
 - the camera reaches the deck without clipping meaningful pin action; and
 - the result burst starts after the collision is readable.
 
-These are perceptual acceptance questions. Stable behavior tests should verify state and
-projection contracts without freezing tuned animation decimals.
+The probe and browser checks verify state, projection, ordering, and bounded-transition contracts
+without freezing tuned animation decimals. A fresh independent-subagent report reviews the
+captured artifacts and command output; it returns a bounded remediation package when evidence
+fails.
