@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 
-import { create_camera_projection } from "../src/render/game_renderer.ts";
+import { create_camera_projection } from "../src/render/camera_projection.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 
 const closure_seeds = ["src/main.ts", "src/simulation/worker.ts"];

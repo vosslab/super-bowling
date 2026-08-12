@@ -21,11 +21,11 @@ current bowling and presentation work.
 
 ## Motion evidence
 
-- Run the captured normal-control hard off-center pocket-hit fixture, the deterministic
-  camera-and-impact transition probe, and the focused browser behavior checks described in
-  [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md). The generated report must prove
-  grounded pin shadows, restrained lift and afterimages, readable deck framing, and a result
-  burst that begins after the collision transition; a zero-exit command closes this follow-up.
+- If later camera work needs to follow a secondary local cascade, first extend worker evidence with
+  a locality-aware connected subject. Do not use a relative impulse threshold: the current
+  496-pin measurement contains remote later impacts with substantial running-peak ratios. Reuse
+  the reports linked from [LANE_MASTER_VIDEO_FINDINGS.md](LANE_MASTER_VIDEO_FINDINGS.md) for a
+  proposed visual change, and keep dense-mode shadows intentionally omitted.
 
 ## Evidence
 

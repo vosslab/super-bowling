@@ -1,12 +1,10 @@
 import { camera_config } from "../config/camera";
 import { advance_camera_result, get_camera_zoom, show_camera_result } from "./camera";
 import type { CameraResultFrame, CameraState } from "./contracts";
-import {
-  create_camera_projection,
-  create_game_draw_commands,
-  project_world_point,
-} from "./game_renderer";
+import { create_game_draw_commands } from "./game_renderer";
 import { get_pin_screen_bounds, type PinScreenBounds } from "./pins";
+import { create_camera_projection } from "./camera_projection";
+import { project_world_point } from "./projection";
 
 function combine_bounds(bounds: readonly PinScreenBounds[]): PinScreenBounds {
   return {

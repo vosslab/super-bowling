@@ -571,7 +571,7 @@ function play_sample(
   ramp_audio_value(gain.gain, 0, start + rendered_duration_s);
   source.start(start, slice.offset_s, slice.duration_s);
   const end_time_s = start + rendered_duration_s;
-  source.onended = () => {
+  source.onended = (): void => {
     source.disconnect?.();
     filter?.disconnect?.();
     disconnect_output();
@@ -580,7 +580,7 @@ function play_sample(
   source.stop(end_time_s + 0.01);
   return {
     end_time_s,
-    stop: () => {
+    stop: (): void => {
       stop_source(source, context.currentTime);
       source.disconnect?.();
       filter?.disconnect?.();
@@ -634,7 +634,7 @@ function play_directed_collision(
       record_collision_lifecycle({ ...lifecycle, event: "scheduled" });
       return {
         end_time_s: rendered.end_time_s,
-        stop: () => {
+        stop: (): void => {
           rendered.stop();
           record_collision_lifecycle({ ...lifecycle, event: "stopped" });
           record_collision_lifecycle({ ...lifecycle, event: "disconnected" });
@@ -660,7 +660,7 @@ function play_directed_collision(
     oscillator.stop(end_time_s + 0.005);
     return {
       end_time_s,
-      stop: () => {
+      stop: (): void => {
         stop_source(oscillator, context.currentTime);
         oscillator.disconnect?.();
         filter.disconnect?.();
@@ -934,7 +934,7 @@ export function create_audio_controller(
         voice,
         start_time_s,
       );
-      return [{ stop: rendered.stop, end_time_s: rendered.end_time_s }];
+      return [{ stop: (): void => rendered.stop(), end_time_s: rendered.end_time_s }];
     });
     if (scheduled_layers.length === 0) return;
     active_collision_cues.push(...scheduled_layers);

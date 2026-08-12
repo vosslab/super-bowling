@@ -68,6 +68,19 @@ async function wait_for_first_impact(page) {
   );
 }
 
+async function set_control_fraction(page, control, fraction) {
+  const locator = page.locator(`[data-control="${control}"]`);
+  await locator.evaluate((element, next_fraction) => {
+    if (!(element instanceof HTMLInputElement)) throw new Error("Expected range input.");
+    const minimum = Number(element.min);
+    const maximum = Number(element.max);
+    const step = Number(element.step) || 1;
+    const raw = minimum + (maximum - minimum) * next_fraction;
+    element.value = String(Math.round(raw / step) * step);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  }, fraction);
+}
+
 async function finish_animation(locator) {
   await locator.waitFor();
   await locator.evaluate(async (element) => {
@@ -189,6 +202,79 @@ async function capture_hundred_pin_action(browser, base_url) {
       ),
     );
     return captures;
+  } finally {
+    await context.close();
+  }
+}
+
+async function capture_five_hundred_pin_action(browser, base_url) {
+  console.log("==> Capturing the real 496-pin collision sequence");
+  const context = await browser.newContext({ viewport });
+  const page = await context.newPage();
+  page.setDefaultTimeout(documentation_roll_timeout_ms);
+  const captures = [];
+  try {
+    await start_aiming_state(
+      page,
+      base_url,
+      "500 mode - 496 pins",
+      "Start 500 mode - 496 pins for 1 player",
+      496,
+    );
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Space");
+    await wait_for_first_impact(page);
+    captures.push(
+      await capture_documentation_image(
+        page,
+        "five_hundred_pin_first_impact.png",
+        "five_hundred_pin_first_impact",
+        496,
+      ),
+    );
+    // This selects a useful opening-wave frame; it is capture timing, not an
+    // acceptance threshold for how many pins a valid shot must topple.
+    await wait_for_numeric_attribute(page, "data-drawn-fallen-pin-count", 50);
+    captures.push(
+      await capture_documentation_image(
+        page,
+        "five_hundred_pin_cascade.png",
+        "five_hundred_pin_cascade",
+        496,
+      ),
+    );
+    return captures;
+  } finally {
+    await context.close();
+  }
+}
+
+async function capture_dense_outside_impact(
+  browser,
+  base_url,
+  mode_label,
+  start_label,
+  pin_count,
+  filename,
+) {
+  console.log(`==> Capturing the real ${pin_count}-pin outside-entry impact`);
+  const context = await browser.newContext({ viewport });
+  const page = await context.newPage();
+  page.setDefaultTimeout(documentation_roll_timeout_ms);
+  try {
+    await start_aiming_state(page, base_url, mode_label, start_label, pin_count);
+    await set_control_fraction(page, "power", 1);
+    await set_control_fraction(page, "start-position", 0.86);
+    await page.keyboard.press("Space");
+    await wait_for_first_impact(page);
+    const capture = await capture_documentation_image(
+      page,
+      filename,
+      `${pin_count}_pin_outside_impact`,
+      pin_count,
+    );
+    return capture;
   } finally {
     await context.close();
   }
@@ -455,6 +541,27 @@ async function capture_pass_the_keyboard(browser, base_url) {
 export async function capture_documentation_showcase(browser, base_url) {
   const captures = [];
   captures.push(...(await capture_thousand_pin_action(browser, base_url)));
+  captures.push(...(await capture_five_hundred_pin_action(browser, base_url)));
+  captures.push(
+    await capture_dense_outside_impact(
+      browser,
+      base_url,
+      "500 mode - 496 pins",
+      "Start 500 mode - 496 pins for 1 player",
+      496,
+      "five_hundred_pin_outside_impact.png",
+    ),
+  );
+  captures.push(
+    await capture_dense_outside_impact(
+      browser,
+      base_url,
+      "1,000 mode - 990 pins",
+      "Start 1,000 mode - 990 pins for 1 player",
+      990,
+      "thousand_pin_outside_impact.png",
+    ),
+  );
   captures.push(...(await capture_hundred_pin_action(browser, base_url)));
   captures.push(await capture_hundred_pin_animation(browser, base_url));
   captures.push(await verify_hundred_pin_reduced_motion(browser, base_url));

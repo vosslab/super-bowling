@@ -42,13 +42,14 @@ inspection can miss.
 
 ## Choose a test tier
 
-| Change scope | Required evidence |
-| --- | --- |
-| Durable pure game, scoring, rendering, or simulation behavior | Add or update a small deterministic `tests/test_*.mjs` test only when it satisfies the permanent-test checklist, then run `./check_codebase.sh`. |
-| Durable browser-visible journey or interaction | Add or update a behavior-based Playwright `.spec.ts` test under `tests/playwright/`, then run `./run_playwright_tests.sh --build`. |
-| Repository docs, local links, or file hygiene | Run `source source_me.sh && python3 -m pytest tests/`. |
-| Maintained screenshots or GIFs | Run `./devel/capture_screenshots.sh --documentation` against a fresh production build, then inspect the committed assets at original resolution. |
-| Physics scale or settlement performance | Run `npm run benchmark`; inspect the ignored JSON report under `artifacts/benchmark/`. |
+| Change scope                                                  | Required evidence                                                                                                                                                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Durable pure game, scoring, rendering, or simulation behavior | Add or update a small deterministic `tests/test_*.mjs` test only when it satisfies the permanent-test checklist, then run `./check_codebase.sh`.                                                          |
+| Durable browser-visible journey or interaction                | Add or update a behavior-based Playwright `.spec.ts` test under `tests/playwright/`, then run `./run_playwright_tests.sh --build`.                                                                        |
+| Repository docs, local links, or file hygiene                 | Run `source source_me.sh && python3 -m pytest tests/`.                                                                                                                                                    |
+| Maintained screenshots or GIFs                                | Run `./devel/capture_screenshots.sh --documentation` against a fresh production build, then inspect the committed assets at original resolution.                                                          |
+| Physics scale, worker settlement, or snapshot preparation     | Run `npm run benchmark`; inspect the ignored JSON report under `artifacts/benchmark/`.                                                                                                                    |
+| Production Canvas dense-rack raster work                      | Reuse `devel/measure_dense_rack_canvas.mjs` and compare against [active_plans/reports/dense_rack_canvas_baseline.md](active_plans/reports/dense_rack_canvas_baseline.md) in the same browser environment. |
 
 Treat frame timings, visual thresholds, physics outcome matrices, audio-node counts, and
 original-resolution screenshot review as implementation or maintainer evidence. Keep those probes

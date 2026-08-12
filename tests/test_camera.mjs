@@ -12,18 +12,17 @@ import {
   get_camera_focus_x,
   get_camera_focus_y_fraction,
   get_camera_zoom,
-  latch_camera_impact,
   reset_camera_for_roll,
+  set_camera_collision_zone,
   show_camera_result,
   with_reduced_motion,
 } from "../src/render/camera.ts";
-import {
-  create_camera_projection,
-  create_game_draw_commands,
-  project_world_point,
-} from "../src/render/game_renderer.ts";
+import { create_game_draw_commands } from "../src/render/game_renderer.ts";
+import { create_camera_projection } from "../src/render/camera_projection.ts";
 import { get_pin_screen_bounds } from "../src/render/pins.ts";
+import { project_world_point } from "../src/render/projection.ts";
 import { frame_camera_result } from "../src/render/result_camera.ts";
+import { create_collision_zone } from "../src/render/collision_zone.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import {
   ball_snapshot_stride,
@@ -218,6 +217,92 @@ test("keeps rolling zoom and forward camera focus monotonic through noisy ball s
   }
 });
 
+test("extends the monotonic push through the accepted collision neighborhood", () => {
+  const initial = create_camera_state(990);
+  const zone = create_collision_zone({
+    rack_bounds: initial.rack_bounds,
+    committed_path: new Float32Array([
+      0,
+      0,
+      0,
+      initial.rack_bounds.front,
+      0,
+      initial.rack_bounds.back,
+    ]),
+    ball: { x: 0, y: initial.rack_bounds.front / 2 },
+  });
+  const committed = set_camera_collision_zone(initial, zone);
+  const rack_front = advance_camera_for_ball(committed, initial.rack_bounds.front);
+  const collision_edge = advance_camera_for_ball(rack_front, zone.journey_depth);
+
+  assert.ok(
+    rack_front.shot_progress < collision_edge.shot_progress,
+    "the old rack-front sample remains before the accepted collision neighborhood ends",
+  );
+  assert.equal(
+    collision_edge.shot_progress,
+    1,
+    "the push completes only at the local collision neighborhood endpoint",
+  );
+});
+
+test("collision-depth progress ratchets across backward samples and draw cadences", () => {
+  const initial = create_camera_state(496);
+  const zone = create_collision_zone({
+    rack_bounds: initial.rack_bounds,
+    committed_path: new Float32Array([
+      -2,
+      0,
+      -2,
+      initial.rack_bounds.front,
+      -2,
+      initial.rack_bounds.back,
+    ]),
+    ball: { x: -1, y: 0 },
+  });
+  const committed = set_camera_collision_zone(initial, zone);
+  const first = advance_camera_for_ball(committed, zone.journey_depth * 0.7, -1);
+  const backward = advance_camera_for_ball(first, zone.journey_depth * 0.5, -1);
+  const sparse = advance_camera_for_ball(committed, zone.journey_depth * 0.8, -1);
+  const dense = advance_camera_for_ball(first, zone.journey_depth * 0.8, -1);
+
+  assert.ok(
+    backward.shot_progress >= first.shot_progress,
+    "backward worker interpolation cannot reverse collision-depth progress",
+  );
+  assert.equal(
+    sparse.shot_progress,
+    dense.shot_progress,
+    "a shared collision-depth sample remains independent of draw cadence",
+  );
+});
+
+test("a new roll releases the prior collision-depth journey", () => {
+  const initial = create_camera_state(496);
+  const zone = create_collision_zone({
+    rack_bounds: initial.rack_bounds,
+    committed_path: new Float32Array([
+      0,
+      0,
+      0,
+      initial.rack_bounds.front,
+      0,
+      initial.rack_bounds.back,
+    ]),
+    ball: { x: 0, y: 0 },
+  });
+  const completed = advance_camera_for_ball(
+    set_camera_collision_zone(initial, zone),
+    zone.journey_depth,
+  );
+  const reset = reset_camera_for_roll(completed);
+
+  assert.ok(
+    reset.shot_progress < completed.shot_progress,
+    "the next roll starts a fresh journey instead of inheriting the prior collision endpoint",
+  );
+});
+
 test("eases each settled impact view into its readable result composition", () => {
   for (const pin_count of rack_pin_counts) {
     const impact = advance_camera_for_ball(
@@ -336,17 +421,13 @@ test("keeps the live ball and entry-side rack context on the close approach canv
   }
 });
 
-test("recenters a held impact corridor only during the settled result transition", () => {
+test("recenters an impact corridor only during the settled result transition", () => {
   const initial = create_camera_state(990);
-  const impact = latch_camera_impact(
-    advance_camera_for_ball(initial, initial.rack_bounds.back, -8),
-    -8,
-  );
-  const held = advance_camera_for_ball(impact, impact.rack_bounds.back, 8);
-  const result_start = show_camera_result(held);
+  const impact = advance_camera_for_ball(initial, initial.rack_bounds.back, -8);
+  const result_start = show_camera_result(impact);
   const result_middle = advance_camera_result(result_start, 0.5);
   const result_end = advance_camera_result(result_middle, 1);
-  const horizons = [held, result_start, result_middle, result_end].map(
+  const horizons = [impact, result_start, result_middle, result_end].map(
     (camera) => create_camera_projection(camera, canvas.width, canvas.height).horizon.x,
   );
   const neutral_horizon = create_camera_projection(
@@ -354,10 +435,10 @@ test("recenters a held impact corridor only during the settled result transition
     canvas.width,
     canvas.height,
   ).horizon.x;
-  assert.equal(get_camera_focus_x(held), get_camera_focus_x(result_start));
+  assert.equal(get_camera_focus_x(impact), get_camera_focus_x(result_start));
   assert.ok(
     horizons[0] === horizons[1] && horizons[1] >= horizons[2] && horizons[2] >= horizons[3],
-    "the held corridor stays through settlement and then moves monotonically toward center",
+    "the impact corridor stays through settlement and then moves monotonically toward center",
   );
   assert.equal(horizons[3], neutral_horizon, "the finished result composition is centered");
 });
@@ -368,8 +449,9 @@ test("keeps legal left and right gutter entries visible with their entry-side ra
     const gutter_x = lane_width(pin_count) / 2 + gutter_width / 2;
     for (const direction of [-1, 1]) {
       const initial = create_camera_state(pin_count);
-      const impact = latch_camera_impact(
-        advance_camera_for_ball(initial, initial.rack_bounds.back, gutter_x * direction),
+      const impact = advance_camera_for_ball(
+        initial,
+        initial.rack_bounds.back,
         gutter_x * direction,
       );
       const result_start = show_camera_result(impact);
@@ -407,7 +489,7 @@ test("keeps legal left and right gutter entries visible with their entry-side ra
   }
 });
 
-test("keeps the complete real ball inside each held impact corridor", () => {
+test("keeps the complete real ball inside each close collision corridor", () => {
   const initial = create_camera_state(990);
   const contact_depths = [
     initial.rack_bounds.front,
@@ -416,11 +498,7 @@ test("keeps the complete real ball inside each held impact corridor", () => {
   for (const direction of [-1, 0, 1]) {
     const impact_x = direction * (lane_width(990) / 3);
     for (const impact_y of contact_depths) {
-      const impact = latch_camera_impact(
-        advance_camera_for_ball(initial, impact_y, impact_x),
-        impact_x,
-        impact_y,
-      );
+      const impact = advance_camera_for_ball(initial, impact_y, impact_x);
       const commands = draw_rolling(990, impact, impact_x, impact_y);
       const ball = commands.find((command) => command.kind === "ball");
       assert.ok(ball, "a held physical impact continues to draw its real ball");
@@ -429,23 +507,28 @@ test("keeps the complete real ball inside each held impact corridor", () => {
   }
 });
 
-test("holds the first physical impact corridor until the next roll", () => {
+test("continues to advance through authoritative post-contact ball samples", () => {
   const approaching = advance_camera_for_ball(
     create_camera_state(990),
     create_camera_state(990).rack_bounds.front,
     -5,
   );
-  const held = latch_camera_impact(approaching, -7, approaching.rack_bounds.front + 0.2);
-  const cascade = advance_camera_for_ball(held, held.rack_bounds.back, 8);
-  assert.equal(cascade.focus_x, held.focus_x, "secondary motion cannot make the camera chase pins");
-  assert.equal(cascade.focus_y, held.focus_y, "secondary motion cannot move the impact depth");
+  const cascade = advance_camera_for_ball(approaching, approaching.rack_bounds.back, 8);
+  assert.ok(
+    cascade.focus_y > approaching.focus_y,
+    "post-contact ball motion advances camera depth",
+  );
+  assert.ok(
+    cascade.shot_progress >= approaching.shot_progress,
+    "post-contact samples preserve monotonic physical progress",
+  );
   assert.equal(
     reset_camera_for_roll(cascade).focus_x,
     0,
     "the next roll restores the neutral view",
   );
   assert.equal(
-    get_camera_focus_y_fraction(advance_camera_result(show_camera_result(held), 1)),
+    get_camera_focus_y_fraction(advance_camera_result(show_camera_result(cascade), 1)),
     get_camera_focus_y_fraction(create_camera_state(990)),
     "the settled result releases the impact depth back to the neutral composition",
   );
@@ -475,10 +558,7 @@ test("fits every visible fallen pin inside the settled result frame", () => {
       snapshot[offset + snapshot_fallen_axis_angle_offset] = (pin_index * Math.PI) / 9;
     }
     const initial = create_camera_state(pin_count);
-    const impact = latch_camera_impact(
-      advance_camera_for_ball(initial, initial.rack_bounds.front, 0),
-      0,
-    );
+    const impact = advance_camera_for_ball(initial, initial.rack_bounds.front, 0);
     const result_start = frame_camera_result(impact, snapshot, canvas.width, canvas.height);
     const result_end = advance_camera_result(result_start, 1);
     const commands = create_game_draw_commands(

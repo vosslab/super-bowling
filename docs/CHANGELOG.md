@@ -1,6 +1,119 @@
+## 2026-08-12
+
+### Behavior or Interface Changes
+
+- The one-time live collision subject now anchors to the first authoritative ball-pin centroid,
+  keeping the locally predicted 496- and 990-pin neighborhood through the cascade while the
+  pre-impact prediction, monotonic motion, reduced-motion presentation, and settled-result
+  handoff contracts remain intact.
+
+### Fixes and Maintenance
+
+- Simplified the audited camera and evidence path by removing fragile cache, timing, request-ID,
+  and magic-threshold tests and test hooks; deleted dead configuration, state, and projection
+  facade code; localized the generated-artifact ESLint ignore; and clarified launch-effect control
+  flow.
+
+### Decisions and Failures
+
+- Refreshed evidence citations, reproduction guidance, the source file map, and M10 wording. The
+  impulse-only dense-rack cascade expansion remains a measured evidence blocker, not a shipped
+  camera behavior or an unverified locality claim.
+
+### Developer Tests and Notes
+
+- Refreshed all 19 managed documentation visuals from the built production app after the
+  authoritative collision-zone correction. The updated 990-pin travel, first-impact, opening-wave,
+  cascade, and settled-result sequence keeps the ball and local collision readable. New 496-pin
+  first-contact and opening-cascade frames cover the intermediate dense deck, while outside-entry
+  496- and 990-pin frames show the camera following each collision away from the rack center. The
+  105-pin sequence includes a separately verified reduced-motion outcome and a five-second one-play
+  GIF. Reproduce the set with `./devel/capture_screenshots.sh --documentation`.
+
+- Fresh built-browser 496- and 990-pin captures and focused independent reviews passed. The
+  retained evidence checks ball readability through renderable travel and impact, local collision
+  framing, deterministic camera contracts, and stable dense-deck raster work without imposing an
+  arbitrary pixel-equivalence or fixed frame-time gate.
+
 ## 2026-08-11
 
 ### Fixes and Maintenance
+
+- Corrected durable camera documentation to distinguish complete-rack establish
+  and settled-result context from normal-motion local collision-zone framing.
+  The records now state the authoritative in-pit ball omission, neutral
+  reduced-motion presentation, dense-mode shadow scope, adapted pin-silhouette
+  provenance, and simulation-versus-production-Canvas benchmark boundaries.
+  Archived the shot-camera tracker with the M10 impulse-only-expansion blocker,
+  M11 baseline, retained M12/M14 raster decision, and M13 no-change correction.
+
+- Repaired the real-browser audio-cascade shot setup to use the visible, source-valid ten-pin
+  pocket controls (a -2.5-board start and maximum regular power). The test now waits for the
+  matching worker preview before bowling and verifies its real ball-pin cascade rather than
+  relying on a one-board keyboard nudge that could miss the head-pin neighborhood.
+
+- Kept the shipped dense-rack raster path after an interleaved production-Canvas comparison.
+  The optional development profiler finds repeated 496/990 pin-body composition, not a missing
+  pin-size floor, as the material cost center. Medium/high image smoothing merely trades local
+  detail for a lower motion residual and higher capture-inclusive work, so no coverage alpha,
+  supersampling, or raster-asset change ships without an observed readability defect. Prefiltered
+  assets and supersampling remain technically credible minification experiments, but this evidence
+  does not establish a visual benefit case worth their additional runtime or memory complexity.
+
+- Preserved the first-ball-pin local collision hold and the authoritative settled-result handoff.
+  Collision-zone capture projection is now an explicit `camera-diagnostics` query opt-in, keeping
+  its per-frame projection and DOM-string work out of ordinary production Canvas draws.
+  Production-worker measurements show an impulse-only expansion would include remote dense-rack
+  contacts, so it is not a valid substitute for a locality-aware collision subject.
+
+- Fixed the live launch handoff so the camera consumes the exact accepted public-worker preview
+  path before reactive aiming-preview churn can clear it. Production browser evidence now observes
+  a fully on-canvas, locally centered collision zone at first impact in 105-, 496-, and 990-pin
+  shots. The M9 probe also records continuous readable Canvas ball bodies only while the
+  authoritative ball remains renderable (before pit omission), a renderer-derived collision-zone
+  polygon, and the actual visible foreground below the foul line. It does not impose a false
+  monotonic screen-diameter requirement on the deliberately large release frame.
+
+- Replaced the live camera's instantaneous ball-to-entry-pin zoom limiter with a pure forward
+  envelope derived from the committed public-worker path still ahead of the authoritative ball and
+  closed by the accepted local collision shell. The rolling camera now commits its zoom against the
+  remaining local shot rather than a rack-count scale, so 105-, 496-, and 990-pin center, hook, and
+  edge corridors can advance without a later zoom retreat. Reduced motion and the authoritative
+  settled-result handoff remain unchanged; real-browser perceptual and dense-raster evidence stays
+  scoped to later milestones.
+
+- Reframed the live camera around the accepted collision-zone center instead of the complete-rack
+  anchor. The vertical destination is solved from the shared deck-aware projection at the current
+  zoom, and lateral focus follows the same local world-space center through the existing progress
+  ramp. This preserves monotonic/cadence behavior, neutral reduced motion, authoritative physics,
+  and the settled-result handoff; envelope zoom and dense-raster work remain separate milestones.
+
+- Extended the live camera's monotonic journey through the accepted local collision zone rather
+  than saturating at the rack front. The zone now supplies an explicit world-space journey depth:
+  its trailing boundary remains beyond M4's measured first-contact region for contacting shots,
+  while gutter/no-contact paths retain only their clipped edge-deck context. Physics ownership,
+  reduced-motion neutrality, and the settled-result handoff remain unchanged.
+
+- A Bowl now requests and retains the exact matching public-worker free path before the match enters
+  rolling. This closes the initial/debounced-preview gap that could start a camera shot without a
+  collision zone, including deterministic auto-run launches; stale preview IDs and repeat activations
+  cannot launch or replace the queued shot.
+
+- Wired the measured collision-zone predictor into the live shot lifecycle. A launch now retains its
+  accepted public worker preview before aim-preview churn, authoritative ball samples refine its
+  local deck subject, and the first authoritative ball-pin summary holds that subject through the
+  cascade. The former point latch no longer prevents post-contact camera travel; pin-pin-only
+  summaries cannot retarget the shot, reduced motion remains a neutral presentation adapter, and
+  the settled-result handoff remains unchanged. Focused deterministic driver tests cover reset,
+  dense-rack refinement, post-contact advance, and the result-phase boundary.
+
+- Moved the shared lane projection, deck-framing solve, and depth-scale math into
+  `src/render/projection.ts`. Camera focus, live rendering, and settled-result framing now use
+  that one source without changing the established camera or projection behavior.
+
+- Memoized the complete-rack deck calibration by immutable rack and canvas geometry. Live camera
+  focus and zoom now reuse the solved bisection without caching per-frame presentation state;
+  focused projection tests and the M2 timing probe cover reuse, invalidation, and measured savings.
 
 - Replaced the remaining motion-review completion wording with captured fixture, synthetic
   transition, browser-probe, and independent-subagent evidence contracts; the autonomous-policy
@@ -12,6 +125,19 @@
   and autonomous completion policy; the remaining verification task stays documented.
 
 ### Additions and New Features
+
+- Added a pure collision-zone prediction module for the shot camera. It follows the committed
+  pins-free Rapier curve, chooses the earliest physically reachable immutable pin, contracts its
+  local uncertainty envelope as authoritative ball travel reaches the deck, and clips that
+  rectangle to the exact ball-radius reachable-contact shell. The 3.4584 by 3.4641 ft neighborhood
+  is derived from 39 regulation ten-pin board widths and four row spacings: it contains the full
+  ten-pin rack while remaining local for the 496- and 990-pin decks.
+- Measured the collision-zone predictor through the built production worker. At the existing 0.5
+  focus-ramp start, its zone contained the eventual first-contact centroid through contact for all
+  9 of 9 ball-pin-contacting center, strong-hook, and off-center archetypes in 105-, 496-, and
+  990-pin racks. Gutter cases remain edge/no-contact observations. The public worker preview has
+  no committed-assist option, and deck assist requires a real pin hit, so this evidence records
+  post-contact free/live divergence rather than claiming pre-contact deck-assist parity.
 
 - Added [docs/active_plans/active/collision_audio_excitement.md](active_plans/active/collision_audio_excitement.md),
   the execution-ready plan for a physics-driven articulated collision field and unattended

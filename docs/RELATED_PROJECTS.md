@@ -27,7 +27,8 @@
   Wii Bowling as an inspiration for approachable screen bowling, readable lane play, and frame
   scoring.
 - Notes: Super Bowling keeps keyboard and pointer technique controls rather than motion control,
-  and uses original visual assets and interface design.
+  and uses its own interface, layout, and presentation. Its pin silhouette is an adapted
+  public-domain OpenClipart source, not Wii artwork.
 
 ### UNIS Lane Master
 

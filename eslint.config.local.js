@@ -17,5 +17,20 @@
 //     },
 //   ];
 //
-// Default: no local overrides.
-export default [];
+import globals from "globals";
+
+// Production-browser probes intentionally run page.evaluate callbacks. Keep the
+// browser globals scoped to those probes; Node-only diagnostics retain no-undef.
+export default [
+  // Benchmark and visual-probe output is local evidence, not source. This
+  // repository-owned ignore belongs beside the other consumer-owned overrides.
+  { ignores: ["artifacts/**"] },
+  {
+    files: [
+      "devel/capture_camera_archetypes.mjs",
+      "devel/measure_impact_window_distribution.mjs",
+      "devel/verify_audio_cascade.mjs",
+    ],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+];

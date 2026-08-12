@@ -15,7 +15,6 @@ import { cascade_trace_fixtures } from "../src/audio/cascade_traces.ts";
 import {
   collision_mix_levels,
   collision_render_instruction,
-  collision_sample_paths,
 } from "../src/audio/collision_render_contract.ts";
 import {
   audio_cascade_evidence_contract as contract,
@@ -81,7 +80,7 @@ function direct_trace(trace) {
 
 function planned_metrics(voices) {
   const attacks = voices.filter((voice) => voice.role !== "body");
-  const finite = voices.every(
+  let finite = voices.every(
     (voice) =>
       Number.isFinite(voice.source_simulation_time_ms) &&
       voice.source_simulation_time_ms >= 0 &&

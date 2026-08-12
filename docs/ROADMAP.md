@@ -9,21 +9,20 @@ milestones remain in [docs/active_plans/active/practice_records_and_earned_momen
 
 The playable build now combines technique-driven bowling with an arcade presentation layer.
 
-- The camera advances from ball release to the pin deck through one shared projection.
+- The normal-motion camera advances monotonically from release toward a local worker-path collision
+  zone, holds the first ball-pin neighborhood, and hands off to the authoritative settled result.
 - The ball has lighting, surface rotation, finger holes, contact shadow, and lane reflection.
-- Pin presentation derives lift, shadows, and a short afterimage from physical snapshots.
+- Pin presentation derives lift and a short afterimage from physical snapshots; grounded shadows
+  are intentionally omitted in 496- and 990-pin dense modes.
 - Strike and spare results use distinct, short celebration bursts while ordinary rolls stay quiet.
 
 ## Next priority
 
-Run the autonomous hard, off-center pocket-hit acceptance fixture before scheduling more
-presentation work.
-
-- Capture the normal visible scenario, exercise synthetic transition probes, and run focused
-  browser behavior tests for foreground pin continuity, ground-connected shadows, and afterimage.
-- Check the deck-camera/result ordering with the captured fixture and an independent subagent.
-- Record an automated failure as a bounded follow-up with a reproducible visible scenario; do not
-  turn tuned animation values into brittle timing or pixel tests.
+If a future camera change needs to follow a later local cascade, extend the worker with an
+authoritative locality signal rather than inferring it from impulse magnitude. The current evidence
+shows that a relative-to-running-peak rule admits remote 496-pin impacts. Reuse the existing
+production-browser and Canvas probes for any proposed change; do not turn their current pixels,
+frame counts, or timings into universal gates.
 
 ## Intentionally not started
 

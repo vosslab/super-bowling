@@ -1,12 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  create_camera_projection,
-  create_game_draw_commands,
-  create_lane_geometry,
-} from "../src/render/game_renderer.ts";
+import { create_game_draw_commands, create_lane_geometry } from "../src/render/game_renderer.ts";
 import { create_camera_state } from "../src/render/camera.ts";
+import { create_camera_projection } from "../src/render/camera_projection.ts";
 import {
   ball_snapshot_stride,
   pin_snapshot_stride,

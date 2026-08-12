@@ -5,15 +5,15 @@ import { normalize_ball_design } from "../src/designer/ball_design.ts";
 import { ball_radius, pin_radius } from "../src/config/lane.ts";
 import { get_ball_hole_commands } from "../src/render/ball.ts";
 import { advance_camera_for_ball, create_camera_state } from "../src/render/camera.ts";
+import { create_camera_projection } from "../src/render/camera_projection.ts";
 import {
-  create_camera_projection,
   create_impact_accent_command,
   derive_ball_roll_angle,
   derive_ball_surface_offset,
   create_game_draw_commands,
-  project_world_point,
 } from "../src/render/game_renderer.ts";
 import { derive_fallen_pin_presentation } from "../src/render/fallen_pin_presentation.ts";
+import { project_world_point } from "../src/render/projection.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import {
   canonical_fallen_pin_angle,

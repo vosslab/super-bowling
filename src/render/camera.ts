@@ -2,7 +2,20 @@ import { camera_config, get_camera_composition } from "../config/camera";
 import { gutter_width, lane_width } from "../config/lane";
 import type { RackPinCount } from "../config/pin_counts";
 import { create_rack } from "../simulation/rack";
-import type { CameraResultFrame, CameraState, RackBounds } from "./contracts";
+import type {
+  CameraResultFrame,
+  CameraState,
+  CollisionZone,
+  RackBounds,
+  ShotZoomEnvelope,
+} from "./contracts";
+import { get_depth_scale } from "./projection";
+import {
+  get_collision_zone_center,
+  get_shot_zoom_envelope_ceiling,
+  get_zone_focus_y_fraction,
+  type ShotFramingGeometry,
+} from "./shot_framing";
 
 function create_bounds_from_rack(pin_count: RackPinCount): RackBounds {
   const rack = create_rack(pin_count);
@@ -32,17 +45,35 @@ export function create_rack_bounds(pin_count: RackPinCount): RackBounds {
 export function create_camera_state(pin_count: RackPinCount): CameraState {
   return {
     rack_bounds: create_rack_bounds(pin_count),
+    collision_zone: undefined,
+    collision_zone_held: false,
+    shot_zoom_envelope: undefined,
     shot_progress: 0,
     rolling_zoom: 1,
     focus_x: 0,
-    focus_subject_x: 0,
     focus_y: 0,
-    focus_subject_y: 0,
-    focus_latched: false,
     shot_phase: "rolling",
     result_transition_progress: 0,
     result_frame: undefined,
   };
+}
+
+/**
+ * Stores the current prediction without interpreting it as camera framing.
+ * The first ball-pin contact may freeze this local subject; pin-pin cascade
+ * summaries deliberately do not redirect a shot that has already entered it.
+ */
+export function set_camera_collision_zone(
+  camera: CameraState,
+  collision_zone: CollisionZone,
+  shot_zoom_envelope: ShotZoomEnvelope | undefined = camera.shot_zoom_envelope,
+): CameraState {
+  return camera.collision_zone_held ? camera : { ...camera, collision_zone, shot_zoom_envelope };
+}
+
+/** Holds the last authoritative ball-pin-confirmed collision neighborhood. */
+export function hold_camera_collision_zone(camera: CameraState): CameraState {
+  return camera.collision_zone === undefined ? camera : { ...camera, collision_zone_held: true };
 }
 
 export function get_camera_depth_distance(camera: CameraState): number {
@@ -50,12 +81,6 @@ export function get_camera_depth_distance(camera: CameraState): number {
 }
 
 type FocusInterval = { minimum: number; maximum: number };
-
-function get_depth_scale(camera: CameraState, y: number): number {
-  const depth_distance = get_camera_depth_distance(camera);
-  const depth = depth_distance + y + camera_config.launch_platform_depth;
-  return Number.isFinite(depth) && depth > 0 ? depth_distance / depth : 1;
-}
 
 function intersect_focus_intervals(first: FocusInterval, second: FocusInterval): FocusInterval {
   const minimum = Math.max(first.minimum, second.minimum);
@@ -123,12 +148,10 @@ export function get_camera_horizon_x(
   full_half_width: number,
 ): number {
   const presentation_zoom = get_camera_zoom(camera);
-  const depth_distance = get_camera_depth_distance(camera);
   const head_pin_y = camera.rack_bounds.front;
   const pixels_per_world_unit =
     ((width * camera_config.near_rail_half_width_fraction) / full_half_width) * presentation_zoom;
-  const depth_scale =
-    depth_distance / (depth_distance + head_pin_y + camera_config.launch_platform_depth);
+  const depth_scale = get_depth_scale(camera, head_pin_y);
   return width / 2 - get_camera_focus_x(camera) * pixels_per_world_unit * depth_scale;
 }
 
@@ -145,33 +168,21 @@ export function get_camera_focus_x(camera: CameraState): number {
   return camera.focus_x + (target_focus_x - camera.focus_x) * transition;
 }
 
-function get_vertical_focus_progress(progress: number): number {
-  const focus_progress = smoothstep(
-    (progress - camera_config.shot_vertical_focus_start_progress) /
-      (camera_config.shot_vertical_focus_full_progress -
-        camera_config.shot_vertical_focus_start_progress),
-  );
-  return focus_progress;
-}
-
 /**
  * Returns the bounded screen-space zoom anchor for the live ball-plus-deck
  * composition. The anchor is state-derived rather than recursively smoothed,
  * so equal worker snapshots retain the same framing at every draw cadence.
  */
-export function get_camera_focus_y_fraction(camera: CameraState): number {
-  const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
-  const focused_progress = Math.min(1, Math.max(0, camera.focus_y / head_pin_y));
-  const forward_progress = get_vertical_focus_progress(focused_progress);
-  const large_rack_weight = get_large_rack_weight(camera.rack_bounds.pin_count);
-  const impact_fraction =
-    camera_config.shot_zoom_focus_y_fraction +
-    (camera_config.shot_vertical_impact_focus_fraction - camera_config.shot_zoom_focus_y_fraction) *
-      large_rack_weight *
-      large_rack_weight;
-  const approach_fraction =
-    camera_config.shot_zoom_focus_y_fraction +
-    (impact_fraction - camera_config.shot_zoom_focus_y_fraction) * forward_progress;
+export function get_camera_focus_y_fraction(
+  camera: CameraState,
+  geometry: ShotFramingGeometry | undefined = undefined,
+): number {
+  const approach_fraction = get_zone_focus_y_fraction(
+    camera.collision_zone,
+    camera.shot_progress,
+    get_camera_zoom(camera),
+    geometry,
+  );
   if (camera.shot_phase !== "result") return approach_fraction;
   const transition = smoothstep(camera.result_transition_progress);
   const result_fraction =
@@ -179,44 +190,12 @@ export function get_camera_focus_y_fraction(camera: CameraState): number {
   return approach_fraction + (result_fraction - approach_fraction) * transition;
 }
 
-function get_large_rack_weight(pin_count: RackPinCount): number {
-  const rack_scale = Math.sqrt(10 / pin_count);
-  return 1 - rack_scale;
-}
-
-function get_mode_impact_zoom_ceiling(pin_count: RackPinCount): number {
-  const large_rack_weight = get_large_rack_weight(pin_count);
-  return (
-    camera_config.ten_pin_shot_zoom +
-    (camera_config.large_rack_impact_zoom - camera_config.ten_pin_shot_zoom) * large_rack_weight
-  );
-}
-
 function get_mode_result_zoom(pin_count: RackPinCount): number {
-  const large_rack_weight = get_large_rack_weight(pin_count);
+  const large_rack_weight = 1 - Math.sqrt(10 / pin_count);
   return (
     camera_config.ten_pin_result_zoom +
     (camera_config.large_rack_result_zoom - camera_config.ten_pin_result_zoom) * large_rack_weight
   );
-}
-
-function get_corridor_zoom_limit(camera: CameraState): number {
-  if (camera.shot_progress < camera_config.shot_focus_start_progress)
-    return Number.POSITIVE_INFINITY;
-  const subject_x = camera.focus_subject_x;
-  const subject_y = camera.focus_subject_y;
-  if (!Number.isFinite(subject_x) || !Number.isFinite(subject_y)) return Number.POSITIVE_INFINITY;
-  const entry = get_entry_side_rack_point(camera, subject_x);
-  const full_half_width = lane_width(camera.rack_bounds.pin_count) / 2 + gutter_width;
-  const transformed_span = Math.abs(
-    subject_x * get_depth_scale(camera, subject_y) - entry.x * get_depth_scale(camera, entry.y),
-  );
-  const unzoomed_span_fraction =
-    (camera_config.near_rail_half_width_fraction / full_half_width) * transformed_span;
-  if (!Number.isFinite(unzoomed_span_fraction) || unzoomed_span_fraction <= 0)
-    return Number.POSITIVE_INFINITY;
-  const available_fraction = 1 - 2 * camera_config.shot_focus_subject_margin_fraction;
-  return Math.max(1, available_fraction / unzoomed_span_fraction);
 }
 
 /** Returns the shared projection scale for the ball's physical lane progress. */
@@ -236,8 +215,21 @@ function get_rolling_camera_zoom(camera: CameraState): number {
     camera_config.shot_zoom_full_progress - camera_config.shot_zoom_start_progress;
   const zoom_progress =
     (camera.shot_progress - camera_config.shot_zoom_start_progress) / progress_range;
-  const maximum_zoom = get_mode_impact_zoom_ceiling(camera.rack_bounds.pin_count);
+  const maximum_zoom = camera_config.maximum_shot_zoom;
   return 1 + (maximum_zoom - 1) * smoothstep(zoom_progress);
+}
+
+/**
+ * Uses the accepted local collision subject as the physical journey endpoint.
+ * Before a committed path has produced that subject, retain the established
+ * rack-front fallback. A no-contact edge path still supplies a clipped local
+ * deck neighborhood, rather than inventing a ball-pin impact or following the
+ * ball into the pit.
+ */
+function get_shot_progress_depth(camera: CameraState): number {
+  const collision_depth = camera.collision_zone?.journey_depth ?? camera.rack_bounds.front;
+  const depth = Math.max(collision_depth, 0.001);
+  return depth;
 }
 
 /** Records monotonic physical travel that drives the deck-focused projection. */
@@ -246,79 +238,49 @@ export function advance_camera_for_ball(
   ball_y: number,
   ball_x = 0,
 ): CameraState {
-  const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
-  const sampled_progress = Math.min(1, Math.max(0, ball_y / head_pin_y));
+  const journey_depth = get_shot_progress_depth(camera);
+  const sampled_progress = Math.min(1, Math.max(0, ball_y / journey_depth));
   const shot_progress = Math.max(camera.shot_progress, sampled_progress);
   const progressed_camera = { ...camera, shot_progress };
-  if (camera.focus_latched) return progressed_camera;
   const sampled_y = Number.isFinite(ball_y) ? ball_y : 0;
   const focus_y = Math.max(camera.focus_y, sampled_y);
   const focused_camera = { ...progressed_camera, focus_y };
   const focus_progress = get_focus_progress(focused_camera);
-  const target_x = Number.isFinite(ball_x) ? ball_x : 0;
-  const subject_camera = {
+  const ball_target_x = Number.isFinite(ball_x) ? ball_x : 0;
+  const zone_center =
+    focused_camera.collision_zone === undefined
+      ? undefined
+      : get_collision_zone_center(focused_camera.collision_zone);
+  const target_x = zone_center?.x ?? ball_target_x;
+  const target_y = zone_center?.y ?? sampled_y;
+  const requested_zoom = Math.min(
+    get_rolling_camera_zoom(focused_camera),
+    get_shot_zoom_envelope_ceiling(
+      focused_camera.shot_zoom_envelope,
+      focused_camera.collision_zone,
+      focused_camera.rack_bounds,
+    ),
+  );
+  const zoomed_camera = {
     ...focused_camera,
-    focus_subject_x: target_x,
-    focus_subject_y: sampled_y,
-  };
-  const requested_zoom = Math.min(
-    get_rolling_camera_zoom(subject_camera),
-    get_corridor_zoom_limit(subject_camera),
-  );
-  const zoomed_camera = {
-    ...subject_camera,
     rolling_zoom: Math.max(camera.rolling_zoom, requested_zoom),
   };
   return {
     ...zoomed_camera,
-    focus_x: clamp_focus_x(zoomed_camera, target_x * focus_progress, sampled_y),
-  };
-}
-
-/** Holds the real first-contact corridor while secondary impacts propagate around it. */
-export function latch_camera_impact(
-  camera: CameraState,
-  impact_x: number,
-  impact_y = camera.rack_bounds.front,
-): CameraState {
-  if (camera.focus_latched) return camera;
-  const subject_x = Number.isFinite(impact_x) ? impact_x : 0;
-  const sampled_y = Number.isFinite(impact_y) ? impact_y : camera.rack_bounds.front;
-  const subject_y = Math.max(camera.focus_y, sampled_y);
-  const head_pin_y = Math.max(camera.rack_bounds.front, 0.001);
-  const sampled_progress = Math.min(1, Math.max(0, subject_y / head_pin_y));
-  const subject_camera = {
-    ...camera,
-    shot_progress: Math.max(camera.shot_progress, sampled_progress),
-    focus_subject_x: subject_x,
-    focus_y: subject_y,
-    focus_subject_y: sampled_y,
-  };
-  const requested_zoom = Math.min(
-    get_rolling_camera_zoom(subject_camera),
-    get_corridor_zoom_limit(subject_camera),
-  );
-  const zoomed_camera = {
-    ...subject_camera,
-    rolling_zoom: Math.max(camera.rolling_zoom, requested_zoom),
-  };
-  return {
-    ...zoomed_camera,
-    focus_x: clamp_focus_x(zoomed_camera, subject_x, sampled_y),
-    focus_latched: true,
+    focus_x: clamp_focus_x(zoomed_camera, target_x * focus_progress, target_y),
   };
 }
 
 export function reset_camera_for_roll(camera: CameraState): CameraState {
   return {
     ...camera,
+    collision_zone: undefined,
+    collision_zone_held: false,
+    shot_zoom_envelope: undefined,
     shot_progress: 0,
     rolling_zoom: 1,
     focus_x: 0,
-    focus_subject_x: 0,
     focus_y: 0,
-    focus_subject_y: 0,
-    focus_latched: false,
     shot_phase: "rolling",
     result_transition_progress: 0,
     result_frame: undefined,
@@ -360,13 +322,13 @@ export function with_reduced_motion(camera: CameraState, reduced_motion: boolean
   return reduced_motion
     ? {
         ...camera,
+        collision_zone: undefined,
+        collision_zone_held: false,
+        shot_zoom_envelope: undefined,
         shot_progress: 0,
         rolling_zoom: 1,
         focus_x: 0,
-        focus_subject_x: 0,
         focus_y: 0,
-        focus_subject_y: 0,
-        focus_latched: false,
         shot_phase: "rolling",
         result_transition_progress: 0,
         result_frame: undefined,

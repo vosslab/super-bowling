@@ -2,7 +2,7 @@
 // the live bowl button comes from src/app/game_controls.tsx:263; game-state attributes come from
 // src/app/game.tsx:751-771. Instrument native Web Audio before the app loads, then bowl through
 // those visible controls. This is intentionally a graph observation, not a source-level mock.
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 type AudioStart = {
   arity: number;
@@ -39,10 +39,10 @@ function install_audio_graph_trace(): void {
   window.__super_bowling_audio_graph__ = trace;
   let next_source_id = 0;
 
-  const create_source = AudioContext.prototype.createBufferSource;
+  const create_source = Reflect.get(AudioContext.prototype, "createBufferSource");
   AudioContext.prototype.createBufferSource =
     function traced_create_buffer_source(): AudioBufferSourceNode {
-      const source = create_source.call(this);
+      const source = Reflect.apply(create_source, this, []);
       const entry: AudioSource = {
         disconnect_count: 0,
         id: next_source_id++,
@@ -69,17 +69,17 @@ function install_audio_graph_trace(): void {
         stop(when_s);
       };
       const disconnect = source.disconnect.bind(source);
-      source.disconnect = (...arguments_: Parameters<AudioNode["disconnect"]>): void => {
+      source.disconnect = ((...arguments_: Parameters<AudioNode["disconnect"]>): void => {
         entry.disconnect_count += 1;
         disconnect(...arguments_);
-      };
+      }) as AudioNode["disconnect"];
       return source;
     };
 
-  const create_panner = AudioContext.prototype.createStereoPanner;
+  const create_panner = Reflect.get(AudioContext.prototype, "createStereoPanner");
   AudioContext.prototype.createStereoPanner =
     function traced_create_stereo_panner(): StereoPannerNode {
-      const panner = create_panner.call(this);
+      const panner = Reflect.apply(create_panner, this, []);
       const entry: AudioPanner = { values: [] };
       trace.panners.push(entry);
       const set_value_at_time = panner.pan.setValueAtTime.bind(panner.pan);
@@ -143,6 +143,14 @@ function has_overlapping_collision_intervals(
   );
 }
 
+async function set_ten_pin_pocket_shot(page: Page): Promise<void> {
+  // The range has ten ticks per player-facing board. -25 ticks is the
+  // deterministic -2.5-board physical pocket line, and max regular power is
+  // the source-valid ten-pin cascade from tests/test_pin_cascade.mjs.
+  await page.locator('[data-control="start-position"]').fill("-25");
+  await page.locator('[data-control="power"]').fill("24");
+}
+
 test.use({ viewport: { width: 1600, height: 1000 } });
 
 test("audio-cascade: a real roll schedules bounded spatial collision slices and cleans them up", async ({
@@ -157,8 +165,10 @@ test("audio-cascade: a real roll schedules bounded spatial collision slices and 
   const play_shell = page.locator("main.play_shell");
   await expect(play_shell).toHaveAttribute("data-phase", "aiming");
   await expect(play_shell).toHaveAttribute("data-aim-guide", "visible");
+  await set_ten_pin_pocket_shot(page);
+  await expect(play_shell).toHaveAttribute("data-preview-status", "ready");
   await page.getByRole("button", { name: "Bowl now", exact: true }).click();
-
+  await expect(play_shell).toHaveAttribute("data-phase", "rolling");
   await expect(play_shell).toHaveAttribute("data-first-impact-seen", "true", { timeout: 15_000 });
   await expect(play_shell).toHaveAttribute("data-phase", "result", { timeout: 15_000 });
 

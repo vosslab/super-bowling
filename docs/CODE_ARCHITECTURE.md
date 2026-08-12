@@ -79,12 +79,12 @@ state. [SOLID_MODEL.md](SOLID_MODEL.md) records the Solid ownership and lifecycl
 
 ## Presentation boundaries
 
-- [../src/render/camera.ts](../src/render/camera.ts) derives normal-motion zoom and focus from
-  physical ball progress and lateral position. Its shared projection bounds retain the active ball
-  corridor and nearest edge pin for hooks and gutter shots. The first real ball-pin centroid
-  latches the collision corridor through the cascade, then result presentation eases focus and zoom
-  back to neutral. Lower motion returns a neutral projection; neither path changes physics, impact
-  events, scoring, or results.
+- [../src/render/camera.ts](../src/render/camera.ts) derives normal-motion focus and monotonic zoom
+  from physical ball progress. The committed worker preview predicts a local collision zone; live
+  ball samples refine it, and the first real ball-pin event holds it through the cascade. The result
+  camera starts only from the authoritative settled snapshot. Lower motion returns a neutral
+  projection; no presentation path changes physics, impact events, scoring, or results. A ball in
+  the authoritative pit is intentionally omitted from Canvas.
 - [../src/app/impact_presentation.ts](../src/app/impact_presentation.ts) maps worker-owned physical
   summaries into normalized sound and accent cues while preserving `ImpactEvent.simulation_time_ms`.
   It contains the perceptual curve; audio and render modules do not reinterpret raw physics
@@ -159,8 +159,10 @@ builds then serves the same artifact for local review.
   check that active-plan terminal language retains an unattended manager-and-subagent completion
   path.
 - [../src/simulation/benchmark.ts](../src/simulation/benchmark.ts) and
-  [../devel/run_simulation_benchmark.mjs](../devel/run_simulation_benchmark.mjs) measure fixed-step
-  and emitted-frame behavior for the supported rack fixtures.
+  [../devel/run_simulation_benchmark.mjs](../devel/run_simulation_benchmark.mjs) measure fixed-step,
+  snapshot, and command-preparation behavior for supported rack fixtures. They do not create a
+  production Canvas or measure rasterization. The maintained dense-rack Canvas comparison is
+  [active_plans/reports/dense_rack_canvas_baseline.md](active_plans/reports/dense_rack_canvas_baseline.md).
 - Repository hygiene and Markdown-link checks are Python tests under [../tests/](../tests/).
   [PYTEST_STYLE.md](PYTEST_STYLE.md) documents the required Python invocation and fast-lane rules.
 

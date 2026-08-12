@@ -1,21 +1,25 @@
 import { normalize_ball_design, type BallDesign } from "../designer/ball_design";
-import { camera_config, get_camera_composition } from "../config/camera";
-import { ball_radius, board_count, gutter_width, lane_width, pin_radius } from "../config/lane";
+import { camera_config } from "../config/camera";
+import { ball_radius, board_count, pin_radius } from "../config/lane";
 import type { RackPinCount } from "../config/pin_counts";
 import { pin_snapshot_stride, read_snapshot_ball, read_snapshot_pin } from "../simulation/protocol";
-import { create_rack } from "../simulation/rack";
 import { create_aim_guide_command, draw_aim_guide } from "./aim_guide";
 import { draw_ball, type BallDrawState } from "./ball";
-import {
-  create_camera_state,
-  get_camera_focus_y_fraction,
-  get_camera_horizon_x,
-  get_camera_zoom,
-} from "./camera";
+import { create_camera_state } from "./camera";
+import { create_camera_projection } from "./camera_projection";
 import type { CameraState } from "./contracts";
 import { derive_fallen_pin_presentation } from "./fallen_pin_presentation";
 import { load_game_assets, type AssetLoadState, type GameAssets } from "./game_assets";
 import { interpolate_shortest_angle } from "./interpolation";
+import { get_collision_zone_screen_diagnostic } from "./shot_framing";
+import {
+  get_aiming_ball_world_y,
+  get_depth_scale,
+  project_world_point,
+  type LaneProjection,
+  type ScreenPoint,
+  type WorldPoint,
+} from "./projection";
 import {
   create_impact_accent_command as create_projected_impact_accent_command,
   draw_impact_accent,
@@ -39,7 +43,6 @@ export {
   type ImpactAccentState,
   type ImpactPresentation,
 } from "./impact_accent";
-export type ScreenPoint = { x: number; y: number };
 /** A compact worker-derived contact location, projected with the shared camera. */
 export type GameDrawCommand =
   | { kind: "lane"; width: number; height: number; geometry: LaneGeometry }
@@ -74,43 +77,12 @@ export type GameRenderer = {
   draw(alpha: number, timestamp_ms?: number): GameDrawCommand[];
 };
 
+export type GameRendererOptions = { capture_diagnostics?: boolean };
+
 export type AimGuideState = { lateral_offset: number; preview_path: Float32Array };
 export type LaneArrow = { x: number; y: number; size: number; tip_y: number; base_y: number };
-/** A rational, one-point perspective definition shared by lane and bodies. */
-export type LaneProjection = {
-  x_extent: number;
-  near_y: number;
-  far_y: number;
-  lane_half_width: number;
-  gutter_width: number;
-  camera: {
-    depth_distance: number;
-    target_reveal_fraction: number;
-    achieved_median_reveal_fraction: number;
-    row_reveal_fractions: ReadonlyArray<number>;
-    depth_exaggeration: number;
-    calibration_clamped: boolean;
-    calibration_reason: "solved" | "unsolved" | "lower_bound" | "upper_bound";
-    head_pin_y: number;
-    rack_top_target_fraction: number;
-    achieved_rack_top_fraction: number;
-    achieved_aiming_ball_bottom_fraction: number;
-    maximum_launch_platform_screen_fraction: number;
-    achieved_launch_platform_screen_fraction: number;
-    occupied_vertical_span_fraction: number;
-    unused_top_fraction: number;
-    unused_bottom_fraction: number;
-    reveal_residual_fraction: number;
-    horizon_fraction: number;
-    framing_clamped: boolean;
-    framing_reason: "solved" | "unsolved" | "lower_bound" | "upper_bound";
-    presentation_zoom: number;
-    presentation_focus_y_fraction: number;
-  };
-  pixels_per_world_unit: number;
-  horizon: ScreenPoint;
-  near_screen_y: number;
-};
+export type RenderPhase = "lane_and_accents" | "pin_shadows" | "pin_bodies_and_overlays";
+export type RenderPhaseObserver = (phase: RenderPhase, elapsed_ms: number) => void;
 
 export type LaneGeometry = {
   horizon: ScreenPoint;
@@ -126,10 +98,7 @@ export type LaneGeometry = {
   gutter_world_width: number;
 };
 
-export type WorldPoint = { x: number; y: number; z: number };
 type ProjectedBody = { base: ScreenPoint; crown: ScreenPoint; width: number; base_depth: number };
-// This finite interval solves the deck reveal target without rack-specific factors.
-const deck_exaggeration_bounds = { minimum: 0.02, maximum: 12 } as const;
 
 const default_ball_design = normalize_ball_design({});
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -139,300 +108,6 @@ function clamp(value: number, minimum: number, maximum: number): number {
 function interpolate(first: number, second: number, alpha: number): number {
   const result = first + (second - first) * clamp(alpha, 0, 1);
   return Number.isFinite(result) ? result : 0;
-}
-
-/**
- * Maps forward world distance through one monotonic perspective denominator.
- * `y = near_y` is the foreground and every larger y recedes toward the one
- * fixed horizon. This deliberately has no camera follow, pitch basis, or
- * pixel-space warp.
- */
-function exaggerate_deck_y(projection: LaneProjection, y: number): number | undefined {
-  const { head_pin_y, depth_exaggeration } = projection.camera;
-  if (!Number.isFinite(y) || !Number.isFinite(head_pin_y) || !Number.isFinite(depth_exaggeration))
-    return undefined;
-  if (y < head_pin_y) return y;
-  const exaggerated = head_pin_y + (y - head_pin_y) * depth_exaggeration;
-  return Number.isFinite(exaggerated) ? exaggerated : undefined;
-}
-
-function get_depth_scale(projection: LaneProjection, y: number): number | undefined {
-  if (
-    !Number.isFinite(projection.camera.depth_distance) ||
-    projection.camera.depth_distance <= 0 ||
-    !Number.isFinite(projection.near_y) ||
-    !Number.isFinite(y)
-  )
-    return undefined;
-  const projected_y = exaggerate_deck_y(projection, y);
-  if (projected_y === undefined) return undefined;
-  const depth = projection.camera.depth_distance + projected_y - projection.near_y;
-  if (!Number.isFinite(depth) || depth <= 0) return undefined;
-  return projection.camera.depth_distance / depth;
-}
-
-function get_aiming_ball_world_y(): number {
-  return -camera_config.launch_platform_depth * camera_config.aiming_ball_platform_fraction;
-}
-
-function projected_row_reveals(projection: LaneProjection, row_y_positions: number[]): number[] {
-  const rows = row_y_positions.map((y) => {
-    const base = project_world_point(projection, { x: 0, y, z: 0 });
-    const crown = project_world_point(projection, { x: 0, y, z: 1.25 });
-    if (base === undefined || crown === undefined) return undefined;
-    const height = Math.abs(base.y - crown.y);
-    return Number.isFinite(height) && height > 0 ? { crown_y: crown.y, height } : undefined;
-  });
-  const reveals: number[] = [];
-  for (let index = 1; index < rows.length; index += 1) {
-    const near = rows[index - 1];
-    const rear = rows[index];
-    if (near === undefined || rear === undefined) return [];
-    const reveal = (near.crown_y - rear.crown_y) / rear.height;
-    if (!Number.isFinite(reveal)) return [];
-    reveals.push(reveal);
-  }
-  return reveals;
-}
-function median(values: ReadonlyArray<number>): number {
-  if (values.length === 0 || values.some((value) => !Number.isFinite(value))) return 0;
-  const sorted = [...values].sort((first, second) => first - second);
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[middle] ?? 0;
-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
-}
-
-function create_projection(
-  camera: CameraState,
-  width: number,
-  height: number,
-  depth_distance: number,
-  target_reveal_fraction: number,
-  head_pin_y: number,
-  depth_exaggeration: number,
-  horizon_fraction: number = camera_config.horizon_fraction,
-  near_screen_fraction: number = camera_config.near_lane_y_fraction,
-  presentation_zoom = 1,
-): LaneProjection {
-  const bounds = camera.rack_bounds;
-  const lane_half_width = lane_width(bounds.pin_count) / 2;
-  const full_half_width = lane_half_width + gutter_width;
-  const focus_y = height * get_camera_focus_y_fraction(camera);
-  const unzoomed_horizon_y = height * horizon_fraction;
-  const unzoomed_near_screen_y = height * near_screen_fraction;
-  return {
-    x_extent: full_half_width + camera_config.horizontal_padding,
-    near_y: -camera_config.launch_platform_depth,
-    far_y: bounds.back + camera_config.lane_back_padding,
-    lane_half_width,
-    gutter_width,
-    camera: {
-      depth_distance,
-      target_reveal_fraction,
-      achieved_median_reveal_fraction: 0,
-      row_reveal_fractions: [],
-      depth_exaggeration,
-      calibration_clamped: false,
-      calibration_reason: "unsolved",
-      head_pin_y,
-      rack_top_target_fraction: camera_config.rack_top_fraction,
-      achieved_rack_top_fraction: 0,
-      achieved_aiming_ball_bottom_fraction: 0,
-      maximum_launch_platform_screen_fraction:
-        camera_config.maximum_launch_platform_screen_fraction,
-      achieved_launch_platform_screen_fraction: 0,
-      occupied_vertical_span_fraction: 0,
-      unused_top_fraction: 0,
-      unused_bottom_fraction: 0,
-      reveal_residual_fraction: 0,
-      horizon_fraction,
-      framing_clamped: false,
-      framing_reason: "unsolved",
-      presentation_zoom,
-      presentation_focus_y_fraction: get_camera_focus_y_fraction(camera),
-    },
-    pixels_per_world_unit:
-      ((width * camera_config.near_rail_half_width_fraction) / full_half_width) * presentation_zoom,
-    horizon: {
-      x: get_camera_horizon_x(camera, width, full_half_width),
-      y: focus_y + (unzoomed_horizon_y - focus_y) * presentation_zoom,
-    },
-    near_screen_y: focus_y + (unzoomed_near_screen_y - focus_y) * presentation_zoom,
-  };
-}
-
-type DeckFraming = {
-  horizon_fraction: number;
-  near_screen_fraction: number;
-  rack_top_fraction: number;
-  framing_clamped: boolean;
-  framing_reason: LaneProjection["camera"]["framing_reason"];
-};
-
-/**
- * Solves the complete rack crown and compact launch-platform endpoints from
- * the shared world-space projection. The authoritative rack, never a survivor
- * snapshot, supplies the rear row; this makes framing stable through every
- * game state.
- */
-function solve_rack_framing(
-  camera: CameraState,
-  width: number,
-  height: number,
-  depth_distance: number,
-  target_reveal_fraction: number,
-  head_pin_y: number,
-  depth_exaggeration: number,
-  row_y_positions: number[],
-): DeckFraming {
-  const rear_y = row_y_positions[row_y_positions.length - 1];
-  if (rear_y === undefined) throw new Error("Rack framing requires a rear rack row.");
-  const unframed = create_projection(
-    camera,
-    width,
-    height,
-    depth_distance,
-    target_reveal_fraction,
-    head_pin_y,
-    depth_exaggeration,
-  );
-  const scale = get_depth_scale(unframed, rear_y);
-  if (scale === undefined || scale >= 1) throw new Error("Rack framing requires a receding scale.");
-
-  // Solve the horizon from the rear crown while the near lane edge stays at the canvas foot.
-  const crown_target_y = height * camera_config.rack_top_fraction;
-  const rear_horizon_weight = 1 - scale;
-  const rear_target_with_crown = crown_target_y + 1.25 * unframed.pixels_per_world_unit * scale;
-  const required_near_screen_y = height * camera_config.near_lane_y_fraction;
-  const required_horizon_y =
-    (rear_target_with_crown - required_near_screen_y * scale) / rear_horizon_weight;
-  const requested_fraction = required_horizon_y / height;
-  if (
-    requested_fraction < camera_config.horizon_fraction_bounds.minimum ||
-    requested_fraction > camera_config.horizon_fraction_bounds.maximum
-  )
-    throw new Error(
-      `Camera framing is infeasible: required horizon ${requested_fraction.toFixed(4)} is outside ` +
-        `[${camera_config.horizon_fraction_bounds.minimum}, ` +
-        `${camera_config.horizon_fraction_bounds.maximum}].`,
-    );
-  const horizon_fraction = requested_fraction;
-  const framed = create_projection(
-    camera,
-    width,
-    height,
-    depth_distance,
-    target_reveal_fraction,
-    head_pin_y,
-    depth_exaggeration,
-    horizon_fraction,
-    required_near_screen_y / height,
-  );
-  const crown = project_world_point(framed, { x: 0, y: rear_y, z: 1.25 });
-  if (crown === undefined) throw new Error("Rack crown must be drawable.");
-  return {
-    horizon_fraction,
-    near_screen_fraction: required_near_screen_y / height,
-    rack_top_fraction: crown.y / height,
-    framing_clamped: false,
-    framing_reason: "solved",
-  };
-}
-
-function solve_deck_exaggeration(
-  camera: CameraState,
-  width: number,
-  height: number,
-  depth_distance: number,
-  target_reveal_fraction: number,
-  head_pin_y: number,
-  row_y_positions: number[],
-): {
-  depth_exaggeration: number;
-  row_reveal_fractions: number[];
-  calibration_clamped: boolean;
-  calibration_reason: LaneProjection["camera"]["calibration_reason"];
-  framing: DeckFraming;
-} {
-  const measure = (depth_exaggeration: number): { reveals: number[]; framing: DeckFraming } => {
-    const framing = solve_rack_framing(
-      camera,
-      width,
-      height,
-      depth_distance,
-      target_reveal_fraction,
-      head_pin_y,
-      depth_exaggeration,
-      row_y_positions,
-    );
-    const projection = create_projection(
-      camera,
-      width,
-      height,
-      depth_distance,
-      target_reveal_fraction,
-      head_pin_y,
-      depth_exaggeration,
-      framing.horizon_fraction,
-      framing.near_screen_fraction,
-    );
-    return { reveals: projected_row_reveals(projection, row_y_positions), framing };
-  };
-  const low_measurement = measure(deck_exaggeration_bounds.minimum);
-  const high_measurement = measure(deck_exaggeration_bounds.maximum);
-  const low = median(low_measurement.reveals);
-  const high = median(high_measurement.reveals);
-  if (target_reveal_fraction <= low)
-    return {
-      depth_exaggeration: deck_exaggeration_bounds.minimum,
-      row_reveal_fractions: low_measurement.reveals,
-      calibration_clamped: target_reveal_fraction < low,
-      calibration_reason: target_reveal_fraction < low ? "lower_bound" : "solved",
-      framing: low_measurement.framing,
-    };
-  if (target_reveal_fraction >= high)
-    return {
-      depth_exaggeration: deck_exaggeration_bounds.maximum,
-      row_reveal_fractions: high_measurement.reveals,
-      calibration_clamped: target_reveal_fraction > high,
-      calibration_reason: target_reveal_fraction > high ? "upper_bound" : "solved",
-      framing: high_measurement.framing,
-    };
-  let minimum: number = deck_exaggeration_bounds.minimum;
-  let maximum: number = deck_exaggeration_bounds.maximum;
-  for (let iteration = 0; iteration < 32; iteration += 1) {
-    const midpoint = (minimum + maximum) / 2;
-    const achieved = median(measure(midpoint).reveals);
-    if (achieved < target_reveal_fraction) minimum = midpoint;
-    else maximum = midpoint;
-  }
-  const depth_exaggeration = (minimum + maximum) / 2;
-  const final_measurement = measure(depth_exaggeration);
-  return {
-    depth_exaggeration,
-    row_reveal_fractions: final_measurement.reveals,
-    calibration_clamped: false,
-    calibration_reason: "solved",
-    framing: final_measurement.framing,
-  };
-}
-
-/**
- * Projects one finite world point through the renderer's shared lane/body
- * transform. Points on or behind the near-depth boundary are not drawable.
- */
-export function project_world_point(
-  projection: LaneProjection,
-  point: WorldPoint,
-): ScreenPoint | undefined {
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z))
-    return undefined;
-  const scale = get_depth_scale(projection, point.y);
-  if (scale === undefined) return undefined;
-  const x = projection.horizon.x + point.x * projection.pixels_per_world_unit * scale;
-  const ground_y = projection.horizon.y + (projection.near_screen_y - projection.horizon.y) * scale;
-  const y = ground_y - point.z * projection.pixels_per_world_unit * scale;
-  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
 }
 
 export function create_impact_accent_command(
@@ -464,91 +139,6 @@ function project_body(
     crown: crown_point,
     width: width * projection.pixels_per_world_unit * scale,
     base_depth: 1 / scale,
-  };
-}
-
-export function create_camera_projection(
-  camera: CameraState,
-  width = 1600,
-  height = 1000,
-): LaneProjection {
-  if (!Number.isFinite(width) || width <= 0)
-    throw new Error("Camera projection requires a finite positive canvas width.");
-  if (!Number.isFinite(height) || height <= 0)
-    throw new Error("Camera projection requires a finite positive canvas height.");
-  const composition = get_camera_composition(camera.rack_bounds.pin_count);
-  const depth_distance = composition.depth_distance;
-  if (!Number.isFinite(depth_distance) || depth_distance <= 0)
-    throw new Error("Camera projection requires a finite positive depth distance.");
-  const rack = create_rack(camera.rack_bounds.pin_count);
-  const row_y_positions = [...new Set(rack.slots.map((slot) => slot.y))].sort(
-    (first, second) => first - second,
-  );
-  const head_pin_y = row_y_positions[0];
-  if (head_pin_y === undefined)
-    throw new Error("Camera projection requires a rack head-pin plane.");
-  const solved = solve_deck_exaggeration(
-    camera,
-    width,
-    height,
-    depth_distance,
-    composition.target_reveal_fraction,
-    head_pin_y,
-    row_y_positions,
-  );
-  const projection = create_projection(
-    camera,
-    width,
-    height,
-    depth_distance,
-    composition.target_reveal_fraction,
-    head_pin_y,
-    solved.depth_exaggeration,
-    solved.framing.horizon_fraction,
-    solved.framing.near_screen_fraction,
-    get_camera_zoom(camera),
-  );
-  const row_reveal_fractions = solved.row_reveal_fractions;
-  const rear_y = row_y_positions[row_y_positions.length - 1];
-  if (rear_y === undefined) throw new Error("Camera projection requires a rear rack row.");
-  const rear_crown = project_world_point(projection, { x: 0, y: rear_y, z: 1.25 });
-  const aiming_ball_bottom = project_world_point(projection, {
-    x: 0,
-    y: get_aiming_ball_world_y(),
-    z: 0,
-  });
-  const foul_line = project_world_point(projection, { x: 0, y: 0, z: 0 });
-  if (rear_crown === undefined || aiming_ball_bottom === undefined || foul_line === undefined)
-    throw new Error("Camera projection requires finite framing anchors.");
-  const achieved_rack_top_fraction = rear_crown.y / height;
-  const achieved_aiming_ball_bottom_fraction = aiming_ball_bottom.y / height;
-  const achieved_launch_platform_screen_fraction =
-    (projection.near_screen_y - foul_line.y) / height;
-  return {
-    ...projection,
-    camera: {
-      ...projection.camera,
-      achieved_median_reveal_fraction: median(row_reveal_fractions),
-      row_reveal_fractions,
-      calibration_clamped: solved.calibration_clamped,
-      calibration_reason: solved.calibration_reason,
-      rack_top_target_fraction: camera_config.rack_top_fraction,
-      achieved_rack_top_fraction,
-      achieved_aiming_ball_bottom_fraction,
-      maximum_launch_platform_screen_fraction:
-        camera_config.maximum_launch_platform_screen_fraction,
-      achieved_launch_platform_screen_fraction,
-      occupied_vertical_span_fraction:
-        achieved_aiming_ball_bottom_fraction - achieved_rack_top_fraction,
-      unused_top_fraction: achieved_rack_top_fraction,
-      unused_bottom_fraction: 1 - achieved_aiming_ball_bottom_fraction,
-      reveal_residual_fraction: median(row_reveal_fractions) - composition.target_reveal_fraction,
-      horizon_fraction: solved.framing.horizon_fraction,
-      framing_clamped: solved.framing.framing_clamped,
-      framing_reason: solved.framing.framing_reason,
-      presentation_zoom: get_camera_zoom(camera),
-      presentation_focus_y_fraction: get_camera_focus_y_fraction(camera),
-    },
   };
 }
 
@@ -889,28 +479,63 @@ function draw_lane(
   }
 }
 
-function draw_commands(
+export function draw_game_commands(
   context: CanvasRenderingContext2D,
   commands: GameDrawCommand[],
   assets: GameAssets,
   shadows: boolean,
+  observe_phase: RenderPhaseObserver | undefined = undefined,
 ): void {
-  for (const command of commands) {
-    if (command.kind === "lane")
-      draw_lane(context, command.width, command.height, command.geometry);
-    else if (command.kind === "impact_accent") draw_impact_accent(context, command);
-    else if (shadows && (command.kind === "standing_pin" || command.kind === "fallen_pin"))
-      draw_pin_shadow(context, command);
+  if (observe_phase === undefined) {
+    for (const command of commands) {
+      if (command.kind === "lane")
+        draw_lane(context, command.width, command.height, command.geometry);
+      else if (command.kind === "impact_accent") draw_impact_accent(context, command);
+    }
+    if (shadows)
+      for (const command of commands)
+        if (command.kind === "standing_pin" || command.kind === "fallen_pin")
+          draw_pin_shadow(context, command);
+    for (const command of commands) {
+      if (command.kind === "ball") draw_ball(context, command, assets.ball);
+      else if (command.kind === "aim_guide") draw_aim_guide(context, command);
+      else if (command.kind === "standing_pin" || command.kind === "fallen_pin")
+        draw_pin_body(context, assets, command);
+    }
+    return;
   }
-  for (const command of commands) {
-    if (command.kind === "ball") draw_ball(context, command, assets.ball);
-    else if (command.kind === "aim_guide") draw_aim_guide(context, command);
-    else if (command.kind === "standing_pin" || command.kind === "fallen_pin")
-      draw_pin_body(context, assets, command);
-  }
+  const draw_profiled_phase = (phase: RenderPhase, operation: () => void): void => {
+    const started_at = performance.now();
+    operation();
+    observe_phase(phase, performance.now() - started_at);
+  };
+  draw_profiled_phase("lane_and_accents", () => {
+    for (const command of commands) {
+      if (command.kind === "lane")
+        draw_lane(context, command.width, command.height, command.geometry);
+      else if (command.kind === "impact_accent") draw_impact_accent(context, command);
+    }
+  });
+  draw_profiled_phase("pin_shadows", () => {
+    if (!shadows) return;
+    for (const command of commands)
+      if (command.kind === "standing_pin" || command.kind === "fallen_pin")
+        draw_pin_shadow(context, command);
+  });
+  draw_profiled_phase("pin_bodies_and_overlays", () => {
+    for (const command of commands) {
+      if (command.kind === "ball") draw_ball(context, command, assets.ball);
+      else if (command.kind === "aim_guide") draw_aim_guide(context, command);
+      else if (command.kind === "standing_pin" || command.kind === "fallen_pin")
+        draw_pin_body(context, assets, command);
+    }
+  });
 }
 
-export function create_game_renderer(context: CanvasRenderingContext2D): GameRenderer {
+export function create_game_renderer(
+  context: CanvasRenderingContext2D,
+  options: GameRendererOptions = {},
+): GameRenderer {
   let asset_state: AssetLoadState = { status: "loading" };
   let snapshot_pair: SnapshotPair | undefined;
   let camera: CameraState | undefined;
@@ -992,7 +617,32 @@ export function create_game_renderer(context: CanvasRenderingContext2D): GameRen
         }
       }
       if (asset_state.status === "ready")
-        draw_commands(context, commands, asset_state.assets, snapshot_pair.pin_count <= 105);
+        draw_game_commands(context, commands, asset_state.assets, snapshot_pair.pin_count <= 105);
+      if (options.capture_diagnostics && context.canvas instanceof HTMLCanvasElement) {
+        const canvas = context.canvas;
+        const projection = create_camera_projection(
+          camera ?? create_camera_state(snapshot_pair.pin_count),
+          canvas.width,
+          canvas.height,
+        );
+        const zone = get_collision_zone_screen_diagnostic(
+          camera?.collision_zone,
+          projection,
+          canvas.width,
+          canvas.height,
+        );
+        canvas.dataset.collisionZoneWorldPresent =
+          camera?.collision_zone === undefined ? "false" : "true";
+        canvas.dataset.collisionZoneVisible = zone === undefined ? "false" : "true";
+        canvas.dataset.collisionZoneCoverage = zone?.coverage_fraction.toFixed(6) ?? "";
+        canvas.dataset.collisionZoneCenterX = zone?.center_x_fraction.toFixed(6) ?? "";
+        canvas.dataset.collisionZoneCenterY = zone?.center_y_fraction.toFixed(6) ?? "";
+        canvas.dataset.collisionZoneFullyOnCanvas = zone?.fully_on_canvas ? "true" : "false";
+        const lane = commands.find((command) => command.kind === "lane");
+        const foul_line = lane?.kind === "lane" ? lane.geometry.foul_line : undefined;
+        canvas.dataset.foulLineScreenY =
+          foul_line === undefined ? "" : ((foul_line[0].y + foul_line[1].y) / 2).toFixed(3);
+      }
       return commands;
     },
   };

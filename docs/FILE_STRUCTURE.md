@@ -30,7 +30,8 @@ super-bowling/
   [../src/app/game.tsx](../src/app/game.tsx) for active-play ownership,
   [../src/app/game_controls.tsx](../src/app/game_controls.tsx) for its view-only control deck,
   [../src/app/impact_presentation.ts](../src/app/impact_presentation.ts) for physical-to-perceptual
-  cues, and
+  cues, [../src/app/launch_preview.ts](../src/app/launch_preview.ts) for exact accepted-preview
+  ownership, [../src/app/camera_driver.ts](../src/app/camera_driver.ts) for camera-event routing, and
   [../src/app/simulation_client.ts](../src/app/simulation_client.ts) for worker communication.
 - [../src/game/](../src/game/) contains pure match, scoring, aim, display, and player-stat logic.
 - [../src/simulation/](../src/simulation/) contains the Rapier world, rack generation, physics
@@ -39,9 +40,12 @@ super-bowling/
   `world_factories.ts`, and `world_snapshot.ts` keep world types, body factories, and serialization
   separately reviewable.
 - [../src/render/](../src/render/) contains Canvas projection, interpolation, and the dynamic
-  physical-shot camera. `camera.ts` follows the ball corridor before first contact, latches the
-  real ball-pin impact centroid through the cascade, while `result_camera.ts` fits the settled
-  frame around every visible fallen pin.
+  physical-shot camera. `projection.ts` provides projection math, `camera_projection.ts` creates
+  its renderer-facing instance, and `shot_framing.ts` composes the collision subject. `collision_zone.ts`
+  predicts the local first-contact neighborhood from the committed worker path; `camera.ts` follows
+  it with monotonic motion and holds it after the first ball-pin event, while `result_camera.ts`
+  fits the authoritative settled frame around visible fallen pins. The renderer omits an
+  authoritative in-pit ball.
 - [../src/audio/](../src/audio/) contains gesture-gated Web Audio playback, sample prefetch/decode,
   physics-time scheduling, bounded mix buses, compression, and procedural fallback voices.
   `audio_backend.ts` provides the browser-audio seam; `cascade_director.ts` turns ordered physical
@@ -73,9 +77,10 @@ super-bowling/
   `test_autonomous_completion_policy.mjs`. Run Python checks with the environment described in
   [PYTEST_STYLE.md](PYTEST_STYLE.md).
 - [../tests/playwright/](../tests/playwright/) contains browser smoke tests and full interaction
-  journeys; its `e2e/` subtree holds the full paths. `e2e/audio_cascade.spec.ts` instruments the
-  live Web Audio graph during visible play to check overlapping source slices, signed spatial pans,
-  the voice bound, and cleanup.
+  journeys; its `e2e/` subtree holds the full paths. `e2e/live_collision_camera.spec.ts` verifies
+  the visible local collision zone, monotonic rolling zoom, and settled-result handoff.
+  `e2e/audio_cascade.spec.ts` instruments the live Web Audio graph during visible play to check
+  overlapping source slices, signed spatial pans, the voice bound, and cleanup.
 - [../playwright.config.ts](../playwright.config.ts) configures the browser runner and its local
   server boundary.
 - [screenshots/](screenshots/) contains intentional documentation screenshots.
@@ -88,7 +93,12 @@ super-bowling/
 - [../devel/setup_typescript.sh](../devel/setup_typescript.sh) installs the local Node toolchain;
   [../devel/setup_playwright.sh](../devel/setup_playwright.sh) prepares browser-test prerequisites.
 - [../devel/run_simulation_benchmark.mjs](../devel/run_simulation_benchmark.mjs) produces a local
-  simulation benchmark report.
+  simulation benchmark report; it is not a Canvas raster benchmark.
+- [../devel/measure_dense_rack_canvas.mjs](../devel/measure_dense_rack_canvas.mjs) is the
+  production-renderer dense-rack comparison probe. Its durable same-environment baseline and
+  retained-raster decision live in
+  [active_plans/reports/dense_rack_canvas_baseline.md](active_plans/reports/dense_rack_canvas_baseline.md)
+  and [active_plans/reports/dense_raster_decision.md](active_plans/reports/dense_raster_decision.md).
 - [../devel/capture_screenshots.mjs](../devel/capture_screenshots.mjs) captures milestone and
   documentation evidence. It delegates maintained action-gallery assets to
   [../devel/capture_documentation_showcase.mjs](../devel/capture_documentation_showcase.mjs).

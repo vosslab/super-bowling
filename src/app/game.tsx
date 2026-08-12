@@ -8,7 +8,6 @@ import {
   onMount,
   type JSX,
 } from "solid-js";
-
 import { get_rack_pin_count } from "../config/pin_counts";
 import type {
   FrameScore,
@@ -31,11 +30,8 @@ import {
 } from "../game/aim";
 import {
   advance_camera_result,
-  advance_camera_for_ball,
   create_camera_state,
   get_camera_zoom,
-  latch_camera_impact,
-  reset_camera_for_roll,
   with_reduced_motion,
 } from "../render/camera";
 import { camera_config } from "../config/camera";
@@ -58,13 +54,25 @@ import { GameControlDeck, GameDialogs } from "./game_controls";
 import type { SimulationClient } from "./simulation_client";
 import { roll_celebration, type RollCelebration } from "./roll_celebration";
 import { map_impact_presentation, normalize_ball_roll_speed } from "./impact_presentation";
-
+import {
+  advance_camera_driver,
+  begin_camera_shot,
+  confirm_camera_impact,
+  create_camera_driver,
+  reset_camera_driver,
+} from "./camera_driver";
+import {
+  accept_launch_preview,
+  create_launch_preview_lifecycle,
+  launch_preview_pending,
+  queue_launch_preview,
+  request_aim_preview,
+} from "./launch_preview";
 type SnapshotHolder = {
   previous: Float32Array | undefined;
   current: Float32Array | undefined;
   received_at: number;
 };
-
 export type GameProps = {
   client: SimulationClient;
   setup: MatchSetup;
@@ -78,7 +86,6 @@ export type GameProps = {
   on_replay: () => void;
   previous_record: () => ModeRecord | undefined;
 };
-
 const result_minimum_hold_ms = 900;
 const result_auto_advance_ms = 2200;
 const celebration_confetti = [
@@ -99,25 +106,21 @@ const celebration_confetti = [
 function score_text(score: number | undefined): string {
   return score === undefined ? "-" : String(score);
 }
-
 function earned_moment_label(moment: EarnedMoment): string {
   if (moment.kind === "high_game") return scoreboard_labels.high_game;
   if (moment.kind === "best_frame") return scoreboard_labels.best_frame;
   return moment.term.toUpperCase();
 }
-
 function earned_moment_support_text(moment: EarnedMoment): string | undefined {
   if (moment.kind === "high_game") return `New high score: ${moment.score}`;
   if (moment.kind === "best_frame") return `New best frame: ${moment.score}`;
   return undefined;
 }
-
 function find_player(state: MatchState, player_id: number): PlayerSetup {
   const player = state.players.find((candidate) => candidate.player_id === player_id);
   if (player === undefined) throw new Error("Every match player must remain available.");
   return player;
 }
-
 function match_has_score_progress(state: MatchState): boolean {
   const cards = Object.values(state.score_cards);
   return cards.some((card) => card.frames.some((frame) => frame.rolls.length > 0));
@@ -168,14 +171,16 @@ export function Game(props: GameProps): JSX.Element {
   let renderer: GameRenderer | undefined;
   let audio: AudioController | undefined;
   let camera: CameraState | undefined;
+  const camera_driver = create_camera_driver();
   let camera_result_transition_started_at: number | undefined;
   let animation_frame = 0;
   let result_timer: number | undefined;
   let result_available_at = 0;
   let earned_moment_timer: number | undefined;
   let preview_timer: number | undefined;
-  let preview_request_id = 0;
   let expected_preview_request_id: number | undefined;
+  let launch_camera_path: Float32Array | undefined;
+  const launch_preview = create_launch_preview_lifecycle();
   let input_controller: InputController | undefined;
   let unsubscribe: (() => void) | undefined;
   let high_game_already_fired = false;
@@ -207,15 +212,18 @@ export function Game(props: GameProps): JSX.Element {
     if (effect.type === "reset_rack") {
       if (camera !== undefined && renderer !== undefined) {
         camera_result_transition_started_at = undefined;
-        apply_camera(reset_camera_for_roll(camera));
+        apply_camera(reset_camera_driver(camera_driver, camera));
       }
       props.client.send({ type: "reset_rack", pin_count: effect.pin_count });
-    }
-    if (effect.type === "launch") {
+      return;
+    } else if (effect.type === "launch") {
       reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
         camera_result_transition_started_at = undefined;
-        apply_camera(reset_camera_for_roll(camera));
+        // Capture the accepted public worker preview synchronously, before the
+        // aiming effect clears it or starts the next preview lifecycle.
+        apply_camera(begin_camera_shot(camera_driver, camera, launch_camera_path));
+        launch_camera_path = undefined;
       }
       props.client.send({
         type: "launch",
@@ -224,20 +232,23 @@ export function Game(props: GameProps): JSX.Element {
         angle: effect.angle,
         spin: effect.spin,
       });
-    }
-    if (effect.type === "sweep_deadwood") props.client.send({ type: "sweep_deadwood" });
-    if (effect.type === "prepare_next_roll") {
+      audio?.start_roll();
+      return;
+    } else if (effect.type === "sweep_deadwood") {
+      props.client.send({ type: "sweep_deadwood" });
+      return;
+    } else if (effect.type === "prepare_next_roll") {
       reset_impact_diagnostics();
       if (camera !== undefined && renderer !== undefined) {
         camera_result_transition_started_at = undefined;
-        apply_camera(reset_camera_for_roll(camera));
+        apply_camera(reset_camera_driver(camera_driver, camera));
       }
       props.client.send({ type: "prepare_next_roll" });
-    }
-    if (effect.type === "launch") audio?.start_roll();
-    if (effect.type === "match_complete") {
+      return;
+    } else if (effect.type === "match_complete") {
       set_final_record(fold_match_summaries(effect.summaries));
       props.on_match_complete(effect.summaries);
+      return;
     }
   }
 
@@ -333,12 +344,12 @@ export function Game(props: GameProps): JSX.Element {
       // animation frame can interpolate the terminal snapshot. Latch that
       // physical endpoint so the result holds the roll's final framing.
       if (camera !== undefined && match_state().phase === "rolling" && ball.in_pit) {
-        apply_camera(advance_camera_for_ball(camera, ball.y, ball.x));
+        apply_camera(advance_camera_driver(camera_driver, camera, ball));
       }
     }
     if (match_state().phase !== "rack_resetting") return;
     const ready_state = dispatch({ type: "rack_ready" });
-    if (auto_running() && ready_state.phase === "aiming") dispatch({ type: "launch" });
+    if (auto_running() && ready_state.phase === "aiming") launch();
   }
 
   function accept_event(event: SimulationEvent): void {
@@ -359,11 +370,8 @@ export function Game(props: GameProps): JSX.Element {
       if (!props.reduced_motion() && cues.visual !== undefined) {
         renderer?.record_impact(cues.visual, timestamp);
       }
-      if (camera !== undefined && event.first_ball_pin_impact && event.ball_pin !== undefined) {
-        apply_camera(
-          latch_camera_impact(camera, event.ball_pin.centroid_x, event.ball_pin.centroid_y),
-        );
-      }
+      if (camera !== undefined && event.first_ball_pin_impact)
+        apply_camera(confirm_camera_impact(camera_driver, camera, event.ball_pin));
       set_impact_window_count((count) => count + 1);
       if (event.first_ball_pin_impact) set_first_impact_seen(true);
       const audio_strength =
@@ -390,6 +398,15 @@ export function Game(props: GameProps): JSX.Element {
         event.request_id === expected_preview_request_id
       ) {
         set_preview_path(event.points);
+      }
+      const accepted_launch = accept_launch_preview(launch_preview, event);
+      if (accepted_launch !== undefined && match_state().phase === "aiming") {
+        // The aim cannot drift while this short request is pending. Restoring it
+        // here keeps the match launch and camera path on the same worker request.
+        launch_camera_path = accepted_launch.path;
+        dispatch({ type: "set_aim", aim: accepted_launch.aim });
+        set_preview_path(accepted_launch.path);
+        dispatch({ type: "launch" });
       }
       return;
     }
@@ -490,7 +507,12 @@ export function Game(props: GameProps): JSX.Element {
         const current_ball = read_snapshot_ball(snapshot_holder.current, ball_offset);
         const interpolated_y = previous_ball.y + (current_ball.y - previous_ball.y) * alpha;
         const interpolated_x = previous_ball.x + (current_ball.x - previous_ball.x) * alpha;
-        apply_camera(advance_camera_for_ball(camera, interpolated_y, interpolated_x));
+        apply_camera(
+          advance_camera_driver(camera_driver, camera, {
+            x: interpolated_x,
+            y: interpolated_y,
+          }),
+        );
       }
       const commands = renderer.draw(alpha, timestamp);
       const pin_count = commands.filter(
@@ -529,26 +551,34 @@ export function Game(props: GameProps): JSX.Element {
   }
 
   function update_aim(aim: MatchState["aim"]): void {
+    if (launch_preview_pending(launch_preview)) return;
     dispatch({ type: "set_aim", aim });
   }
 
   function request_preview(state: MatchState): void {
     if (preview_timer !== undefined) window.clearTimeout(preview_timer);
-    const request_id = preview_request_id + 1;
-    preview_request_id = request_id;
+    const request = request_aim_preview(launch_preview, state.pin_count, state.aim);
+    const { request_id } = request;
     expected_preview_request_id = undefined;
     set_preview_path(undefined);
     if (state.phase !== "aiming") return;
-    const { pin_count, aim } = state;
     preview_timer = window.setTimeout(() => {
       preview_timer = undefined;
       expected_preview_request_id = request_id;
-      props.client.send({ type: "preview_path", request_id, pin_count, ...aim });
+      props.client.send(request);
     }, 80);
   }
   function launch(): void {
     audio?.activate();
-    dispatch({ type: "launch" });
+    const state = match_state();
+    if (state.phase !== "aiming") return;
+    const request = queue_launch_preview(launch_preview, state.pin_count, state.aim);
+    if (request === undefined) return;
+    if (preview_timer !== undefined) window.clearTimeout(preview_timer);
+    preview_timer = undefined;
+    expected_preview_request_id = request.request_id;
+    set_preview_path(undefined);
+    props.client.send(request);
   }
   function continue_turn(): void {
     dispatch({ type: "continue_turn" });
@@ -570,7 +600,7 @@ export function Game(props: GameProps): JSX.Element {
   }
   function run_deterministic_game(): void {
     set_auto_running(true);
-    if (match_state().phase === "aiming") dispatch({ type: "launch" });
+    if (match_state().phase === "aiming") launch();
   }
 
   onMount(() => {
@@ -578,7 +608,9 @@ export function Game(props: GameProps): JSX.Element {
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("Canvas rendering is unavailable in this browser.");
     resize_canvas();
-    renderer = create_game_renderer(context);
+    renderer = create_game_renderer(context, {
+      capture_diagnostics: new URLSearchParams(location.search).has("camera-diagnostics"),
+    });
     audio = create_audio_controller();
     audio.set_muted(props.mute_enabled());
     audio.preload();
@@ -590,7 +622,7 @@ export function Game(props: GameProps): JSX.Element {
     input_controller = create_input_controller(window, {
       get_phase: () => {
         const phase = match_state().phase;
-        return phase === "aiming" ? phase : "other";
+        return phase === "aiming" && !launch_preview_pending(launch_preview) ? phase : "other";
       },
       get_pin_count: () => match_state().pin_count,
       get_aim: () => match_state().aim,
@@ -740,9 +772,7 @@ export function Game(props: GameProps): JSX.Element {
   };
   const current_roll_celebration = (): RollCelebration | undefined =>
     roll_celebration(match_state());
-  const current_camera_zoom = (): number => {
-    return camera_presentation_zoom();
-  };
+  const current_camera_zoom = (): number => camera_presentation_zoom();
 
   return (
     <main

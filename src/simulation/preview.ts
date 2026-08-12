@@ -75,6 +75,8 @@ export async function create_preview_path(
       timestep_seconds: physics_config.fixed_step_seconds,
       damping: physics_config.ball_linear_damping,
       spin_decay: physics_config.ball_spin_decay,
+      // A free path has no physical pin contact, so it intentionally remains
+      // assist-free; post-contact divergence belongs to the measured live path.
       deck_assist_enabled: false,
       capture_ball(body: RAPIER.RigidBody): void {
         body.setLinvel({ x: 0, y: 0 }, true);

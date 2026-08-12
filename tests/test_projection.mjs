@@ -4,11 +4,9 @@ import test from "node:test";
 import { foul_to_head_pin } from "../src/config/lane.ts";
 import { get_rack_pin_count, supported_pin_counts } from "../src/config/pin_counts.ts";
 import { create_camera_state } from "../src/render/camera.ts";
-import {
-  create_camera_projection,
-  create_game_draw_commands,
-  project_world_point,
-} from "../src/render/game_renderer.ts";
+import { create_camera_projection } from "../src/render/camera_projection.ts";
+import { create_game_draw_commands } from "../src/render/game_renderer.ts";
+import { project_world_point } from "../src/render/projection.ts";
 import { create_rack } from "../src/simulation/rack.ts";
 import {
   ball_snapshot_stride,

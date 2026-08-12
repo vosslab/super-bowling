@@ -68,11 +68,11 @@ composition solves for 10% of a rear pin showing above the row ahead of it
 and 6%, respectively, so future visual tuning is data-driven rather than a
 new projection implementation.
 
-## Fixed complete-rack framing
+## Complete-rack and shot framing
 
-Camera framing uses the complete authoritative rack, never the currently
-standing survivors. Once the rack and canvas size are known, the renderer
-solves two projection anchors together:
+The neutral establishing projection uses the complete authoritative rack,
+never the currently standing survivors. Once the rack and canvas size are
+known, the renderer solves two projection anchors together:
 
 - the rear complete-rack crown is at 4% of the lane canvas height;
 - the aiming ball bottom is at 95% of the lane canvas height.
@@ -82,10 +82,18 @@ canvas. The resulting horizon may be above the canvas, but it remains finite
 and bounded. This is a valid one-point composition for a very deep rack, not
 a crop or a second camera.
 
-The immutable complete-rack solve applies to aiming, mid-roll, partial-rack,
-and settled states in every supported mode. The ball moves through the fixed
-composition; the renderer does not zoom, follow, or reframe during a shot.
-Physical scale remains unchanged across camera profiles and game states.
+The immutable complete-rack solve establishes aiming and supplies the neutral
+input for the authoritative settled-result fit. During normal motion, the
+camera follows monotonic physical ball progress toward the local collision
+zone predicted from the committed worker path. The first authoritative
+ball-pin event holds that local zone through the cascade; pin-pin summaries do
+not retarget it. The settled snapshot then starts the separate result fit.
+
+This is presentation only: the shared projection never changes lane or
+collision geometry, and the worker remains the collision authority. Reduced
+motion uses the neutral presentation instead of live follow or zoom. A ball
+already in the authoritative pit is omitted from draw commands, so the camera
+does not pretend to follow it into the pit.
 
 ## Lane marks and aim preview
 

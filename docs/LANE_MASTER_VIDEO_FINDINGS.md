@@ -104,22 +104,24 @@ outcome earns a stronger visual interruption.
 
 ## Super Bowling response
 
-| Reference cue                          | Super Bowling decision                                         | Status      |
-| -------------------------------------- | -------------------------------------------------------------- | ----------- |
-| Camera advances during ball travel     | Use one shot-driven projection for lane, ball, and pins        | Adopted     |
-| Ball keeps visible volume while moving | Add rim shade, fixed gloss, lane reflection, holes, and shadow | Adopted     |
-| Fast pins separate in depth            | Derive lift, shadow, and one afterimage from snapshot velocity | Adopted     |
-| Collision remains physically caused    | Keep Rapier snapshots authoritative for every pin pose         | Adopted     |
-| Large outcome reveal                   | Use distinct `STRIKE` and `SPARE` bursts with short confetti   | Adapted     |
-| Full-screen reward sequence            | Keep controls available and confine the burst to the lane      | Adapted     |
-| Cabinet power-ups and ticket rewards   | Preserve technique, regulation scoring, and practice records   | Not adopted |
+| Reference cue                          | Super Bowling decision                                                              | Status      |
+| -------------------------------------- | ----------------------------------------------------------------------------------- | ----------- |
+| Camera advances during ball travel     | Use one shot-driven projection for lane, ball, and pins                             | Adopted     |
+| Ball keeps visible volume while moving | Add rim shade, fixed gloss, lane reflection, holes, and shadow                      | Adopted     |
+| Fast pins separate in depth            | Derive lift and one afterimage from snapshot velocity; shadow only through 105 pins | Adopted     |
+| Collision remains physically caused    | Keep Rapier snapshots authoritative for every pin pose                              | Adopted     |
+| Large outcome reveal                   | Use distinct `STRIKE` and `SPARE` bursts with short confetti                        | Adapted     |
+| Full-screen reward sequence            | Keep controls available and confine the burst to the lane                           | Adapted     |
+| Cabinet power-ups and ticket rewards   | Preserve technique, regulation scoring, and practice records                        | Not adopted |
 
 The implementation keeps those decisions at existing ownership boundaries:
 
 - [src/config/camera.ts](../src/config/camera.ts) defines mode-sensitive camera tuning.
 - [src/render/camera.ts](../src/render/camera.ts) derives shot progress from physical ball travel.
 - [src/render/ball.ts](../src/render/ball.ts) paints ball depth and surface rotation.
-- [src/render/pins.ts](../src/render/pins.ts) paints grounded pin shadows and motion emphasis.
+- [src/render/pins.ts](../src/render/pins.ts) paints velocity-derived lift and a restrained trail;
+  [src/render/game_renderer.ts](../src/render/game_renderer.ts) enables grounded pin shadows only
+  through 105 pins and omits them for the 496- and 990-pin dense path.
 - [src/render/game_renderer.ts](../src/render/game_renderer.ts) applies one coherent projection.
 - [src/app/roll_celebration.ts](../src/app/roll_celebration.ts) derives strike and spare bursts
   from match state.
@@ -133,7 +135,9 @@ branding, or hardware interaction.
 
 - Keep Super Bowling's dark teal lane and geometric interface.
 - Keep amber `STRIKE` and cyan `SPARE` as this game's result language.
-- Keep the illustrated ball and pin family rather than copying the cabinet's rendered assets.
+- Keep the local illustrated ball, layout, and presentation rather than copying cabinet-rendered
+  assets. The pin silhouette adapts public-domain OpenClipart strike artwork; it is not claimed as
+  wholly original art.
 - Keep pointer and keyboard technique controls rather than imitating a Wii Remote or physical
   alley roller.
 - Keep real bowling frames, player-controlled technique, and practice records.
@@ -148,24 +152,31 @@ branding, or hardware interaction.
 - Moving fallen pins may receive lift and a short afterimage; resting pins receive neither.
 - Strike and spare presentations are visually distinct and never appear for an ordinary roll.
 - The existing visible status remains the single accessible result announcement.
-- Ten-pin collisions remain dramatic without obscuring the final standing-pin state.
-- Wide fantasy racks retain a complete, readable deck instead of copying the ten-pin zoom.
-- Shipped assets and layouts remain original to Super Bowling.
+- Production-browser camera evidence keeps a rendered ball body through first ball-pin impact and
+  until authoritative pit omission; the held collision view and settled-result handoff remain
+  separately observable.
+- During travel and impact, 496- and 990-pin racks frame the relevant local collision zone; the
+  complete rack is the establishing and settled-result context, not an impact-frame requirement.
+- Local layouts and authored presentation remain Super Bowling work; the adapted public-domain pin
+  silhouette is credited as such.
 
 ## Follow-up evidence
 
-The remaining visual follow-up is a captured normal-control hard off-center pocket-hit fixture.
-Run it with a deterministic camera-and-impact transition probe and focused browser behavior
-checks, then retain the machine-readable report. The zero-exit evidence command closes the
-follow-up when it establishes that:
+The completed camera evidence uses built-browser 105-, 496-, and 990-pin archetypes, deterministic
+camera relations, production-worker collision prediction, and a production-Canvas dense-rack probe.
+The maintained reports describe the measured relationships without promoting machine-specific frame
+counts, pixels, or milliseconds into permanent gates:
 
-- foreground pins do not teleport or linger at an extreme height;
-- pin shadows remain connected to plausible ground contact;
-- the afterimage reads as speed instead of a duplicate pin;
-- the camera reaches the deck without clipping meaningful pin action; and
-- the result burst starts after the collision is readable.
+- [active_plans/reports/camera_archetype_readability.md](active_plans/reports/camera_archetype_readability.md)
+  records ball residency while renderable, local-zone framing, and foreground progression;
+- [active_plans/reports/zone_prediction_accuracy.md](active_plans/reports/zone_prediction_accuracy.md)
+  records contacting-path containment before first impact;
+- [active_plans/reports/impact_window_distribution.md](active_plans/reports/impact_window_distribution.md)
+  rejects an impulse-only expansion rule because dense-rack tails can be remote; and
+- [active_plans/reports/dense_raster_decision.md](active_plans/reports/dense_raster_decision.md)
+  retains the stable dense raster path after same-environment comparison.
 
-The probe and browser checks verify state, projection, ordering, and bounded-transition contracts
-without freezing tuned animation decimals. A fresh independent-subagent report reviews the
-captured artifacts and command output; it returns a bounded remediation package when evidence
-fails.
+The deterministic and browser checks verify state, projection, ordering, authoritative physics, and
+bounded transitions without freezing tuned animation decimals. The local collision hold remains the
+right shipped behavior: evidence blocks an impulse-only expansion until physics can expose a
+locality-aware connected subject.
